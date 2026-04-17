@@ -49,10 +49,11 @@ def _import_subcommands() -> None:
         onboard,
         playback,
         playlist,
+        rollback,
         taste,
     )
     _ = (auth, basic, context_cmd, curate, director, feedback, flow, history,
-         onboard, playback, playlist, taste)
+         onboard, playback, playlist, rollback, taste)
 
 
 def _build_parser() -> argparse.ArgumentParser:
