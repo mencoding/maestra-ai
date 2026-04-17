@@ -175,6 +175,10 @@ def main(argv: list[str] | None = None) -> int:
             return int(result) if result is not None else 0
         except MaestraError as e:
             err_dict = e.to_human_dict()
+            # Redacta secrets no campo "where" antes de qualquer saida (json ou rich)
+            if "where" in err_dict and isinstance(err_dict["where"], dict):
+                from maestra_ai.core.audit import _redact
+                err_dict["where"] = _redact(err_dict["where"])
             if getattr(args, "json", False):
                 print(json.dumps({"error": err_dict}, indent=2, ensure_ascii=False))
             else:
