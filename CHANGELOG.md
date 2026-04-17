@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-04-16
+
+### Fixed
+- `core/client.py` respeita `MAESTRA_CONFIG_DIR` para localizar `.env` e `.cache`
+  do OAuth (antes lia de `__file__`, que em instalação editable apontava para o
+  repo novo e quebrava autenticação). Reviewer flagou como bloqueio real.
+- `MAESTRA_CONFIG_DIR` no `.bashrc` corrigido para apontar para o próprio
+  `workspace/` (onde vivem `.env` e `.cache`), não para um subdir `config/` que
+  não existia. Subdir vazio removido.
+
+### Added
+- `PROGRESS.md` adicionado ao `.gitignore`.
+
 ## [0.1.0] — 2026-04-16
 
 ### Added

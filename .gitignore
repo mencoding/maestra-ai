@@ -40,6 +40,9 @@ snapshots/
 audit.jsonl
 usage.json
 
+# Progress notes — local only
+PROGRESS.md
+
 # OS
 .DS_Store
 Thumbs.db
