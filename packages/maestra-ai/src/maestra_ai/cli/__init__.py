@@ -10,7 +10,9 @@ Arquitetura (v0.2.0 Task 0):
 from __future__ import annotations
 
 import argparse
+import json
 import sys
+from functools import wraps
 from typing import Callable
 
 from maestra_ai.cli._common import (
@@ -58,18 +60,69 @@ def _import_subcommands() -> None:
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    try:
+        from rich_argparse import RichHelpFormatter
+        formatter_class = RichHelpFormatter
+    except ImportError:
+        formatter_class = argparse.HelpFormatter
+
     parser = argparse.ArgumentParser(
         prog="maestra",
-        description="Spotify Controller para Iris",
+        description="Spotify controller com curadoria contextual para agentes de IA.",
+        formatter_class=formatter_class,
     )
     parser.add_argument("--human", "-H", action="store_true",
                         help="Saída legível em vez de JSON")
+    parser.add_argument("--json", action="store_true",
+                        help="Força saída estruturada em JSON (erros e resultados).")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     _import_subcommands()
     for fn in _REGISTRARS:
         fn(subparsers)
     return parser
+
+
+def handle_errors(fn):
+    """Decorador para handlers: converte MaestraError em saída formatada."""
+    @wraps(fn)
+    def wrapper(args: argparse.Namespace, *a, **kw) -> int:
+        try:
+            return fn(args, *a, **kw)
+        except Exception as e:
+            from maestra_ai.core.errors import MaestraError
+            if isinstance(e, MaestraError):
+                err_dict = e.to_human_dict()
+            else:
+                unexpected = MaestraError(str(e))
+                unexpected.title = f"Erro inesperado ({type(e).__name__})"
+                err_dict = unexpected.to_human_dict()
+            if getattr(args, "json", False):
+                print(json.dumps({"error": err_dict}, indent=2, ensure_ascii=False))
+            else:
+                _print_rich_error(err_dict)
+            return 2
+    return wrapper
+
+
+def _print_rich_error(err: dict) -> None:
+    try:
+        from rich.console import Console
+        from rich.panel import Panel
+        console = Console()
+        body = (
+            f"[bold]O que aconteceu:[/bold]\n   {err['what_happened']}\n\n"
+            f"[bold]Causa provável:[/bold]\n"
+            + "\n".join(f"   • {c}" for c in err["probable_causes"])
+            + "\n\n[bold]O que fazer:[/bold]\n"
+            + "\n".join(
+                f"   {i+1}. {a['command']} — {a['description']}"
+                for i, a in enumerate(err["suggested_actions"])
+            )
+        )
+        console.print(Panel(body, title=f"✗ {err['title']}", border_style="red"))
+    except ImportError:
+        print(f"✗ {err['title']}: {err['what_happened']}")
 
 
 def _build_deps(args: argparse.Namespace) -> dict:
@@ -133,12 +186,21 @@ def main(argv: list[str] | None = None) -> int:
 
         # Subcomandos com short-circuit (stubs v0.1.x) definem
         # args.skip_deps=True via set_defaults para não instanciar deps.
-        if getattr(args, "skip_deps", False):
-            result = args.func(args)
-        else:
-            deps = _build_deps(args)
-            result = args.func(args, **deps)
-        return int(result) if result is not None else 0
+        from maestra_ai.core.errors import MaestraError
+        try:
+            if getattr(args, "skip_deps", False):
+                result = args.func(args)
+            else:
+                deps = _build_deps(args)
+                result = args.func(args, **deps)
+            return int(result) if result is not None else 0
+        except MaestraError as e:
+            err_dict = e.to_human_dict()
+            if getattr(args, "json", False):
+                print(json.dumps({"error": err_dict}, indent=2, ensure_ascii=False))
+            else:
+                _print_rich_error(err_dict)
+            return 2
     finally:
         if old_argv is not None:
             sys.argv = old_argv
