@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from functools import wraps
 from typing import Callable
 
 from maestra_ai.cli._common import (
@@ -80,28 +79,6 @@ def _build_parser() -> argparse.ArgumentParser:
     for fn in _REGISTRARS:
         fn(subparsers)
     return parser
-
-
-def handle_errors(fn):
-    """Decorador para handlers: converte MaestraError em saída formatada."""
-    @wraps(fn)
-    def wrapper(args: argparse.Namespace, *a, **kw) -> int:
-        try:
-            return fn(args, *a, **kw)
-        except Exception as e:
-            from maestra_ai.core.errors import MaestraError
-            if isinstance(e, MaestraError):
-                err_dict = e.to_human_dict()
-            else:
-                unexpected = MaestraError(str(e))
-                unexpected.title = f"Erro inesperado ({type(e).__name__})"
-                err_dict = unexpected.to_human_dict()
-            if getattr(args, "json", False):
-                print(json.dumps({"error": err_dict}, indent=2, ensure_ascii=False))
-            else:
-                _print_rich_error(err_dict)
-            return 2
-    return wrapper
 
 
 def _print_rich_error(err: dict) -> None:

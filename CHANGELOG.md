@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-04-17
+
+Fecha P1 do review de v0.2.0.
+
+### Fixed
+- `core/audit.py::_force_rotate` perde o parâmetro `age_days` (era
+  ignorado silenciosamente); callers já passam sem argumento.
+- `core/snapshot.py::create` usa granularidade de microsegundos no ID
+  para evitar colisão lexicográfica entre snapshots no mesmo segundo
+  (safety-before-rollback era particularmente exposto).
+
+### Removed
+- `cli/__init__.py::handle_errors` (código morto; try/except em
+  `main()` já cobre `MaestraError`). Import de `functools.wraps`
+  removido junto.
+
+### Notes
+- Débito da Fase 1 (`test_parity.py`) fechado por obsolescência:
+  `cli/_monolith.py` foi removido na Fase 2, sem base para comparar.
+
 ## [0.2.1] — 2026-04-16
 
 Hotfix baseado no code review da v0.2.0 — endereça os 4 P0 que bloqueariam a Fase 3.

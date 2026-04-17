@@ -43,3 +43,13 @@ def test_list_last_snapshot(monkeypatch, tmp_path):
     second = snapshot.create("second", {})
     last = snapshot.last()
     assert last == second
+
+
+def test_rapid_snapshots_unique_ids(monkeypatch, tmp_path):
+    """Granularidade de microsegundos evita colisão entre snapshots próximos."""
+    monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+    (tmp_path / "data").mkdir()
+    ids = [snapshot.create("op_z", {"i": i}) for i in range(5)]
+    assert len(set(ids)) == 5
+    # last() deve retornar o mais recente mesmo com operações de nome idêntico
+    assert snapshot.last() == ids[-1]

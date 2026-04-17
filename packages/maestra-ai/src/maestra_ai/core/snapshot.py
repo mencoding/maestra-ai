@@ -26,7 +26,10 @@ def _archive_dir() -> Path:
 
 def create(operation: str, state: dict) -> str:
     """Cria snapshot; retorna ID (nome do arquivo sem extensão)."""
-    ts = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d-%H%M%S")
+    # Granularidade de microsegundos evita colisão lexicográfica em
+    # snapshots criados na mesma segundo (ex.: safety-before-rollback
+    # imediatamente antes do rollback).
+    ts = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d-%H%M%S-%f")
     snap_id = f"{ts}-{operation}"
     path = _snap_dir() / f"{snap_id}.json"
     payload = {

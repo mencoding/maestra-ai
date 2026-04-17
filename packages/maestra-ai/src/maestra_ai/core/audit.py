@@ -68,7 +68,7 @@ def _maybe_rotate() -> None:
         _force_rotate()
 
 
-def _force_rotate(age_days: int | None = None) -> None:
+def _force_rotate() -> None:
     p = _path_active()
     if not p.exists():
         return

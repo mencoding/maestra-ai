@@ -30,6 +30,6 @@ def test_rotate_to_gzip(monkeypatch, tmp_path):
     monkeypatch.setenv("MAESTRA_STATE_DIR", str(tmp_path / "state"))
     (tmp_path / "state").mkdir()
     audit.log("t", {}, {})
-    audit._force_rotate(age_days=16)
+    audit._force_rotate()
     archive = list((tmp_path / "state").glob("audit.*.jsonl.gz"))
     assert len(archive) == 1
