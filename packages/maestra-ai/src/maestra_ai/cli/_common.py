@@ -1,8 +1,4 @@
-"""Helpers e constantes compartilhados entre subcomandos do CLI.
-
-v0.2.0 Task 0: extraído do antigo `_monolith.py`. Nas próximas tasks do Plano 2,
-`BASE_DIR` e afins migram para `maestra_ai.core.storage`.
-"""
+"""Helpers e constantes compartilhados entre subcomandos do CLI."""
 from __future__ import annotations
 
 import json
@@ -11,13 +7,10 @@ import sys
 from collections import Counter
 
 from maestra_ai.core.curator import DEFAULT_CONTEXT
+from maestra_ai.core.storage import data_dir
 
 
-# Diretório de dados — respeita MAESTRA_DATA_DIR (v0.1.0 fallback: workspace antigo do Léo).
-_DEFAULT_DATA_DIR = os.path.expanduser(
-    "~/claude/.iris/projetos/pessoal/spotify-controller/workspace/dados"
-)
-BASE_DIR = os.environ.get("MAESTRA_DATA_DIR", _DEFAULT_DATA_DIR)
+BASE_DIR = str(data_dir())
 os.makedirs(BASE_DIR, exist_ok=True)
 
 TASTE_PATH = os.path.join(BASE_DIR, "taste_profile.json")

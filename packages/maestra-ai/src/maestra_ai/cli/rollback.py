@@ -1,32 +1,53 @@
-"""Subcomando rollback."""
+"""Subcomando rollback.
+
+Usa `skip_deps=True` para evitar exigir auth do Spotify em operações
+puramente locais (list/restore). Instancia taste e context_state
+diretamente, sem passar pelo SpotifyController.
+"""
 from __future__ import annotations
 
 import argparse
 import json
 
 from maestra_ai.cli import register
+from maestra_ai.cli._common import CONTEXT_PATH, TASTE_PATH
 from maestra_ai.core import rollback, snapshot
+from maestra_ai.core.context import ContextState
+from maestra_ai.core.taste import TasteProfile
 
 
 def _handle(args: argparse.Namespace) -> int:
     if args.list:
         print(json.dumps(snapshot.list_snapshots(), indent=2, ensure_ascii=False))
         return 0
-    try:
-        result = rollback.rollback_to(
-            args.snapshot,
-            current_state_fn=_current_state,
-        )
-        print(json.dumps(result, indent=2, ensure_ascii=False))
-        return 0
-    except Exception as e:
-        print(json.dumps({"error": str(e)}, indent=2))
-        return 1
 
+    taste = TasteProfile(TASTE_PATH)
+    context_state = ContextState(CONTEXT_PATH)
 
-def _current_state() -> dict:
-    """Coleta estado atual — evolui conforme os módulos core crescem."""
-    return {}
+    def current_state_fn() -> dict:
+        return {
+            "taste": taste.data,
+            "context": context_state.show(),
+        }
+
+    def apply_state_fn(state: dict) -> None:
+        if "taste" in state and state["taste"] is not None:
+            taste.restore(state["taste"])
+        if "context" in state:
+            ctx = state["context"]
+            if ctx and isinstance(ctx, dict) and ctx.get("context"):
+                ttl = ctx.get("ttl_minutes", 120)
+                context_state.set(ctx["context"], ttl_minutes=ttl)
+            else:
+                context_state.clear()
+
+    result = rollback.rollback_to(
+        args.snapshot,
+        current_state_fn=current_state_fn,
+        apply_state_fn=apply_state_fn,
+    )
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    return 0
 
 
 @register

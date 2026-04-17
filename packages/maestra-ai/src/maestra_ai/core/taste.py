@@ -64,6 +64,19 @@ class TasteProfile:
                 f.write("\n")
             os.replace(tmp_path, self.path)
 
+    def restore(self, data):
+        """Sobrescreve perfil com `data` sem merge (uso: rollback)."""
+        self.data = self._migrate(data)
+        os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
+        lock_path = f"{self.path}.lock"
+        with open(lock_path, "w", encoding="utf-8") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            tmp_path = f"{self.path}.tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(self.data, f, indent=2, ensure_ascii=False)
+                f.write("\n")
+            os.replace(tmp_path, self.path)
+
     def _reload_latest(self):
         """Atualiza memória local com dados já gravados por outros processos."""
         disk_data = self._read_disk_data()

@@ -24,7 +24,6 @@ from maestra_ai.cli._common import (
     PLAYBACK_STATE_PATH,
     PLAYLIST_ID,
     TASTE_PATH,
-    error,
 )
 
 
@@ -138,10 +137,13 @@ def _build_deps(args: argparse.Namespace) -> dict:
     from maestra_ai.core.playback_processor import PlaybackEventProcessor
     from maestra_ai.core.taste import TasteProfile
 
+    from maestra_ai.core.errors import AuthError, MaestraError
     try:
         controller = SpotifyController()
+    except MaestraError:
+        raise
     except Exception as e:
-        error(f"Falha ao conectar com Spotify: {e}", "AUTH_ERROR")
+        raise AuthError(f"Falha ao conectar com Spotify: {e}") from e
 
     taste = TasteProfile(TASTE_PATH)
     context_state = ContextState(CONTEXT_PATH)

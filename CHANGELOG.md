@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-04-16
+
+Hotfix baseado no code review da v0.2.0 — endereça os 4 P0 que bloqueariam a Fase 3.
+
+### Fixed
+- `cli/_common.py` e `core/client.py` agora consomem `core.storage`
+  (`data_dir()`/`config_dir()`) em vez de paths hardcoded no workspace
+  antigo. Usuários que setarem `MAESTRA_DATA_DIR`/`MAESTRA_CONFIG_DIR`
+  deixam de ter estado partido entre módulos novos e antigos.
+- `core/rollback.py::_apply_state` deixa de ser stub vazio: recebe
+  `apply_state_fn` injetado pelo CLI que aplica `taste`/`context` reais
+  (antes `maestra rollback` reportava ok mas não aplicava nada).
+- `cli/rollback.py::_current_state` deixa de retornar `{}` — coleta
+  snapshot vivo de `taste.data` + `context_state.show()` antes de aplicar
+  o rollback (safety snapshot agora é real).
+- `cli/__init__.py::main` encapsula `_build_deps()` no try/except
+  `MaestraError`; `SpotifyController()` falho agora levanta `AuthError`
+  em vez de `sys.exit(1)` direto, permitindo painel rich/JSON consistente.
+
+### Added
+- `TasteProfile.restore(data)` — overwrite sem merge, uso exclusivo de
+  rollback (método regular `save()` mescla com disco, inadequado aqui).
+- 2 testes unitários cobrindo `restore` e caminho sem snapshot.
+
 ## [0.2.0] — 2026-04-16
 
 ### Added

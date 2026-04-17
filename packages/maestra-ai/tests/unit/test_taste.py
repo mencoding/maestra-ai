@@ -125,6 +125,32 @@ class TestPersistence:
         signals = reloaded.data["tracks"]["spotify:track:a"]["context_signals"]
         assert {signal["event_id"] for signal in signals} == {"evt-1", "evt-2"}
 
+    def test_restore_sobrescreve_sem_merge(self, tmp_path):
+        path = tmp_path / "taste_profile.json"
+        p = TasteProfile(str(path))
+        p.record_feedback("spotify:track:novo", "good")
+        p.save()
+
+        snapshot = {
+            "version": 2,
+            "tracks": {
+                "spotify:track:antigo": {
+                    "name": "Antiga",
+                    "artist": "X",
+                    "feedback": "good",
+                    "context_signals": [],
+                }
+            },
+            "context_queries": {},
+            "rejected_artists": [],
+            "preferred_artists": [],
+        }
+        p.restore(snapshot)
+
+        reloaded = TasteProfile(str(path))
+        assert "spotify:track:novo" not in reloaded.data["tracks"]
+        assert "spotify:track:antigo" in reloaded.data["tracks"]
+
 
 class TestMigration:
     def test_migra_v1_para_v2_preservando_campos_legados(self, profile_with_data):

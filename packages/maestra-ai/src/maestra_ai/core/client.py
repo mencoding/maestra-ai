@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 
 from maestra_ai.core.errors import AuthError, RateLimitError, SpotifyAPIError
 from maestra_ai.core.ratelimit import CircuitBreaker, TokenBucket
+from maestra_ai.core.storage import config_dir
 
 
 _bucket = TokenBucket(capacity=60, refill_per_sec=1.0)  # ~60 req/min
@@ -38,13 +39,6 @@ def _call_spotify(fn, *args, **kwargs):
         raise
 
 
-# Diretório de configuração (onde ficam .env e .cache).
-# Respeita MAESTRA_CONFIG_DIR; fallback para o workspace antigo (uso do Léo).
-# v0.2.0 substitui por maestra_ai.core.storage.
-_DEFAULT_CFG_DIR = os.path.expanduser(
-    "~/claude/.iris/projetos/pessoal/spotify-controller/workspace"
-)
-_CFG_DIR = os.environ.get("MAESTRA_CONFIG_DIR", _DEFAULT_CFG_DIR)
 SPOTIFY_SEARCH_PAGE_LIMIT = 10
 
 
@@ -52,7 +46,8 @@ class SpotifyController:
     """Encapsula a API do Spotify. Métodos retornam dicts, sem I/O."""
 
     def __init__(self):
-        load_dotenv(os.path.join(_CFG_DIR, ".env"))
+        cfg = config_dir()
+        load_dotenv(cfg / ".env")
         scopes = [
             "user-read-playback-state",
             "user-modify-playback-state",
@@ -65,7 +60,7 @@ class SpotifyController:
         self.sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
             scope=" ".join(scopes),
             open_browser=False,
-            cache_path=os.path.join(_CFG_DIR, ".cache"),
+            cache_path=str(cfg / ".cache"),
         ))
 
     def ensure_active_device(self):
