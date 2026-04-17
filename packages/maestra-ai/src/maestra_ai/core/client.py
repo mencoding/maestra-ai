@@ -6,6 +6,37 @@ import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 from dotenv import load_dotenv
 
+from maestra_ai.core.errors import AuthError, RateLimitError, SpotifyAPIError
+from maestra_ai.core.ratelimit import CircuitBreaker, TokenBucket
+
+
+_bucket = TokenBucket(capacity=60, refill_per_sec=1.0)  # ~60 req/min
+_breaker = CircuitBreaker(max_failures=3, window_sec=60, cooldown_sec=300)
+
+
+def _call_spotify(fn, *args, **kwargs):
+    """Chama função do spotipy com rate limit + circuit breaker."""
+    if not _breaker.allow():
+        raise RateLimitError("Circuit breaker aberto; tente em ~5min.")
+    if not _bucket.wait_and_acquire(timeout=10.0):
+        raise RateLimitError("Rate bucket esgotado (timeout local).")
+    try:
+        result = fn(*args, **kwargs)
+        _breaker.record_success()
+        return result
+    except Exception as e:
+        status = getattr(e, "http_status", None)
+        if status == 429:
+            retry_after = int(getattr(e, "headers", {}).get("Retry-After", "1"))
+            _breaker.record_failure()
+            raise RateLimitError(str(e), retry_after=retry_after) from e
+        if status in (500, 502, 503, 504):
+            _breaker.record_failure()
+            raise SpotifyAPIError(str(e), status=status) from e
+        if status == 401:
+            raise AuthError(str(e)) from e
+        raise
+
 
 # Diretório de configuração (onde ficam .env e .cache).
 # Respeita MAESTRA_CONFIG_DIR; fallback para o workspace antigo (uso do Léo).
@@ -52,7 +83,7 @@ class SpotifyController:
             raise RuntimeError("Processo do Spotify não encontrado. Abra o Spotify primeiro.")
 
         # 2. Dispositivos disponíveis?
-        devs = self.sp.devices().get("devices", [])
+        devs = _call_spotify(self.sp.devices).get("devices", [])
         if not devs:
             raise RuntimeError("Spotify aberto mas nenhum dispositivo visível na API. Aguarde alguns segundos e tente novamente.")
 
@@ -63,12 +94,12 @@ class SpotifyController:
 
         # 4. Ativa o primeiro dispositivo disponível
         device_id = devs[0]["id"]
-        self.sp.transfer_playback(device_id, force_play=False)
+        _call_spotify(self.sp.transfer_playback, device_id, force_play=False)
 
         # 5. Aguarda o dispositivo aceitar comandos (até 5s)
         for _ in range(5):
             time.sleep(1)
-            devs = self.sp.devices().get("devices", [])
+            devs = _call_spotify(self.sp.devices).get("devices", [])
             active = [d for d in devs if d["is_active"]]
             if active:
                 return active[0]["id"]
@@ -77,7 +108,7 @@ class SpotifyController:
 
     def now(self):
         """Retorna info da faixa atual ou None se nada toca."""
-        pb = self.sp.current_playback()
+        pb = _call_spotify(self.sp.current_playback)
         if not pb or not pb.get("item"):
             return None
         track = pb["item"]
@@ -94,7 +125,7 @@ class SpotifyController:
 
     def devices(self):
         """Retorna lista de dispositivos disponíveis."""
-        result = self.sp.devices()
+        result = _call_spotify(self.sp.devices)
         return [
             {
                 "name": d["name"],
@@ -108,23 +139,23 @@ class SpotifyController:
     def play(self, uri=None):
         """Toca URI (track, album, playlist) ou resume playback atual."""
         if uri is None:
-            self.sp.start_playback()
+            _call_spotify(self.sp.start_playback)
         elif uri.startswith("spotify:track:"):
-            self.sp.start_playback(uris=[uri])
+            _call_spotify(self.sp.start_playback, uris=[uri])
         else:
-            self.sp.start_playback(context_uri=uri)
+            _call_spotify(self.sp.start_playback, context_uri=uri)
 
     def pause(self):
         """Pausa o playback atual."""
-        self.sp.pause_playback()
+        _call_spotify(self.sp.pause_playback)
 
     def next_track(self):
         """Pula pra próxima faixa."""
-        self.sp.next_track()
+        _call_spotify(self.sp.next_track)
 
     def queue_list(self):
         """Retorna faixa atual e fila."""
-        raw = self.sp.queue()
+        raw = _call_spotify(self.sp.queue)
         current = raw.get("currently_playing")
         return {
             "current": self._track_summary(current) if current else None,
@@ -133,7 +164,7 @@ class SpotifyController:
 
     def queue_add(self, uri):
         """Adiciona uma faixa à fila."""
-        self.sp.add_to_queue(uri)
+        _call_spotify(self.sp.add_to_queue, uri)
 
     def search(self, query, type="track", limit=10, offset=0):
         """Busca no Spotify. Retorna lista de resultados formatados."""
@@ -143,7 +174,7 @@ class SpotifyController:
 
         while remaining > 0:
             page_limit = min(remaining, SPOTIFY_SEARCH_PAGE_LIMIT)
-            raw = self.sp.search(q=query, type=type, limit=page_limit, offset=current_offset)
+            raw = _call_spotify(self.sp.search, q=query, type=type, limit=page_limit, offset=current_offset)
             page_items = self._search_items(raw, type)
             if not page_items:
                 break
@@ -196,7 +227,7 @@ class SpotifyController:
 
     def recently_played(self, limit=50):
         """Retorna faixas tocadas recentemente."""
-        raw = self.sp.current_user_recently_played(limit=limit)
+        raw = _call_spotify(self.sp.current_user_recently_played, limit=limit)
         results = []
         for item in raw.get("items", []):
             track = item.get("track")
@@ -208,7 +239,7 @@ class SpotifyController:
 
     def top_tracks(self, time_range="medium_term", limit=20):
         """Retorna top faixas do usuário."""
-        raw = self.sp.current_user_top_tracks(time_range=time_range, limit=limit)
+        raw = _call_spotify(self.sp.current_user_top_tracks, time_range=time_range, limit=limit)
         return [
             {
                 "track": t["name"],
@@ -221,7 +252,7 @@ class SpotifyController:
 
     def top_artists(self, time_range="medium_term", limit=20):
         """Retorna top artistas do usuário."""
-        raw = self.sp.current_user_top_artists(time_range=time_range, limit=limit)
+        raw = _call_spotify(self.sp.current_user_top_artists, time_range=time_range, limit=limit)
         return [
             {
                 "name": a["name"],
@@ -237,7 +268,7 @@ class SpotifyController:
         offset = 0
         limit = 50
         while True:
-            raw = self.sp.playlist_items(playlist_id, offset=offset, limit=limit)
+            raw = _call_spotify(self.sp.playlist_items, playlist_id, offset=offset, limit=limit)
             for item in raw["items"]:
                 # A API retorna o track em "track" ou "item" dependendo da versão
                 track_data = item.get("track") or item.get("item")
@@ -250,11 +281,11 @@ class SpotifyController:
 
     def playlist_add(self, playlist_id, uris):
         """Adiciona faixas a uma playlist."""
-        self.sp.playlist_add_items(playlist_id, uris)
+        _call_spotify(self.sp.playlist_add_items, playlist_id, uris)
 
     def playlist_remove(self, playlist_id, uris):
         """Remove faixas de uma playlist."""
-        self.sp.playlist_remove_all_occurrences_of_items(playlist_id, uris)
+        _call_spotify(self.sp.playlist_remove_all_occurrences_of_items, playlist_id, uris)
 
     @staticmethod
     def _track_summary(track):
