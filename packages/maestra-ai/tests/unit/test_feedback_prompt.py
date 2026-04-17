@@ -98,6 +98,13 @@ def test_cooldown_expirado_permite_prompt(tmp_path):
     assert result["should_prompt"] is True
 
 
+def test_cooldown_ignora_json_corrompido(tmp_path):
+    path = tmp_path / "feedback_state.json"
+    path.write_text("broken json")
+    fp = FeedbackPrompter(str(path))
+    assert not fp._in_cooldown("foco")
+
+
 def test_mark_prompted_registra_cooldown(tmp_path):
     state_path = tmp_path / "prompt_state.json"
     prompter = FeedbackPrompter(str(state_path))

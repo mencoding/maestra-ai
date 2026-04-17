@@ -88,8 +88,14 @@ class FeedbackPrompter:
     def _load_state(self):
         if not os.path.exists(self.state_path):
             return {}
-        with open(self.state_path, "r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(self.state_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if not isinstance(data, dict):
+                return {}
+            return data
+        except (json.JSONDecodeError, OSError):
+            return {}
 
     @staticmethod
     def _weight(signal):

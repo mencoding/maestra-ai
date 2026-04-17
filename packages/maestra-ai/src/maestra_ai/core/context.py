@@ -27,8 +27,13 @@ class ContextState:
         if not os.path.exists(self.path):
             return None
 
-        with open(self.path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        try:
+            with open(self.path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if not isinstance(data, dict) or "set_at" not in data or "context" not in data:
+                return None
+        except (json.JSONDecodeError, OSError):
+            return None
 
         ttl = data.get("ttl_minutes")
         if ttl is None:

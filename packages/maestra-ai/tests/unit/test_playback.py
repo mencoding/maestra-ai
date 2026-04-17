@@ -112,6 +112,15 @@ def test_session_end_enquanto_tocando_registra_evento_neutro(tmp_path):
     assert [e["event"] for e in result["events"]] == ["session_ended_while_playing"]
 
 
+def test_load_state_ignora_json_corrompido(tmp_path):
+    state_path = tmp_path / "playback_state.json"
+    log_path = tmp_path / "playback_events.jsonl"
+    state_path.write_text("broken json {{{")
+    observer = PlaybackObserver(str(state_path), str(log_path))
+    result = observer.observe({"uri": "spotify:track:abc", "is_playing": True})
+    assert result["events"][0]["event"] == "track_started"
+
+
 def test_eventos_sao_gravados_em_jsonl(tmp_path):
     log_path = tmp_path / "events.jsonl"
     observer = PlaybackObserver(str(tmp_path / "state.json"), str(log_path))

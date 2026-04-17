@@ -106,8 +106,14 @@ class PlaybackObserver:
     def _load_state(self):
         if not os.path.exists(self.state_path):
             return None
-        with open(self.state_path, "r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(self.state_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if not isinstance(data, dict):
+                return None
+            return data
+        except (json.JSONDecodeError, OSError):
+            return None
 
     def _save_state(self, current):
         os.makedirs(os.path.dirname(self.state_path) or ".", exist_ok=True)
