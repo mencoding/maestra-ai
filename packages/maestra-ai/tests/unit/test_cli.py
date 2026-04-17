@@ -2,7 +2,7 @@
 from argparse import Namespace
 from unittest.mock import MagicMock
 
-import cli
+from maestra_ai.cli import _monolith as cli
 
 
 def test_playlist_add_aceita_argumentos_extras_do_dispatcher(capsys):
