@@ -1,0 +1,181 @@
+"""Testes do Curator — tradução de contexto em buscas."""
+from unittest.mock import MagicMock
+import pytest
+from maestra_ai.core.curator import Curator
+from maestra_ai.core.taste import TasteProfile
+
+
+@pytest.fixture
+def taste(tmp_path):
+    """TasteProfile vazio temporário."""
+    path = tmp_path / "taste_profile.json"
+    return TasteProfile(str(path))
+
+
+@pytest.fixture
+def mock_controller():
+    """SpotifyController mockado."""
+    ctrl = MagicMock()
+    ctrl.search.return_value = [
+        {"track": "Focus Track 1", "artist": "Artist A", "uri": "spotify:track:a", "album": "Album A"},
+        {"track": "Focus Track 2", "artist": "Artist B", "uri": "spotify:track:b", "album": "Album B"},
+        {"track": "Focus Track 3", "artist": "Artist C", "uri": "spotify:track:c", "album": "Album C"},
+    ]
+    return ctrl
+
+
+@pytest.fixture
+def curator(mock_controller, taste):
+    return Curator(mock_controller, taste)
+
+
+class TestCurate:
+    def test_retorna_uris_para_contexto_semantico(self, curator, mock_controller):
+        result, queries = curator.curate("foco", count=3)
+
+        assert len(result) <= 3
+        assert all(r["uri"].startswith("spotify:track:") for r in result)
+        assert len(queries) > 0
+        mock_controller.search.assert_called()
+
+    def test_retorna_lista_vazia_se_search_falha(self, curator, mock_controller):
+        mock_controller.search.return_value = []
+        result, queries = curator.curate("contexto impossível", count=5)
+        assert result == []
+
+    def test_filtra_faixas_rejeitadas(self, curator, mock_controller, taste):
+        taste.record_feedback("spotify:track:a", "bad")
+        taste.save()
+
+        result, _ = curator.curate("foco", count=5)
+        uris = [r["uri"] for r in result]
+        assert "spotify:track:a" not in uris
+
+    def test_usa_queries_aprendidas_quando_disponiveis(self, curator, mock_controller, taste):
+        taste.data["context_queries"]["energia"] = {
+            "queries_used": ["power metal"],
+            "success_rate": 0.8,
+            "last_used": "2026-04-16",
+        }
+
+        _, queries = curator.curate("energia", count=3)
+
+        assert "power metal" in queries
+        calls = [str(c) for c in mock_controller.search.call_args_list]
+        assert any("power metal" in c for c in calls)
+
+    def test_exclui_uris_ja_presentes(self, curator):
+        result, _ = curator.curate("foco", count=3, exclude_uris={"spotify:track:a"})
+
+        uris = [r["uri"] for r in result]
+        assert "spotify:track:a" not in uris
+
+    def test_busca_mais_resultados_para_compensar_exclusoes(self, curator, mock_controller):
+        first_results = [
+            {"track": "Old 1", "artist": "Artist A", "uri": "spotify:track:a", "album": "Album A"},
+            {"track": "Old 2", "artist": "Artist B", "uri": "spotify:track:b", "album": "Album B"},
+            {"track": "New 1", "artist": "Artist C", "uri": "spotify:track:c", "album": "Album C"},
+            {"track": "New 2", "artist": "Artist D", "uri": "spotify:track:d", "album": "Album D"},
+        ]
+        mock_controller.search.return_value = first_results
+
+        result, _ = curator.curate(
+            "foco",
+            count=2,
+            exclude_uris={"spotify:track:a", "spotify:track:b"},
+        )
+
+        assert [r["uri"] for r in result] == ["spotify:track:c", "spotify:track:d"]
+        assert mock_controller.search.call_args.kwargs["limit"] > 2
+
+    def test_prioriza_faixas_positivas_no_contexto(self, curator, taste):
+        taste.record_context_signal(
+            "spotify:track:c",
+            "positive",
+            context="foco",
+            source="listened_to_end",
+            weight=2,
+        )
+
+        result, _ = curator.curate("foco", count=3)
+
+        assert result[0]["uri"] == "spotify:track:c"
+
+    def test_evita_faixas_negativas_no_contexto(self, curator, taste):
+        taste.record_context_signal(
+            "spotify:track:a",
+            "negative",
+            context="foco",
+            source="skip_candidate",
+            weight=-1,
+        )
+
+        result, _ = curator.curate("foco", count=3)
+        uris = [r["uri"] for r in result]
+
+        assert "spotify:track:a" not in uris
+
+    def test_negativo_em_outro_contexto_nao_bloqueia(self, curator, taste):
+        taste.record_context_signal(
+            "spotify:track:a",
+            "negative",
+            context="energia",
+            source="skip_candidate",
+            weight=-1,
+        )
+
+        result, _ = curator.curate("foco", count=3)
+        uris = [r["uri"] for r in result]
+
+        assert "spotify:track:a" in uris
+
+    def test_exclui_artistas_dominantes(self, curator):
+        result, _ = curator.curate(
+            "foco",
+            count=3,
+            exclude_artists={"Artist A"},
+        )
+
+        artists = [r["artist"] for r in result]
+        assert "Artist A" not in artists
+
+    def test_limita_faixas_por_artista_no_lote(self, curator, mock_controller):
+        mock_controller.search.return_value = [
+            {"track": "A1", "artist": "Artist A", "uri": "spotify:track:a1", "album": "Album"},
+            {"track": "A2", "artist": "Artist A", "uri": "spotify:track:a2", "album": "Album"},
+            {"track": "B1", "artist": "Artist B", "uri": "spotify:track:b1", "album": "Album"},
+        ]
+
+        result, _ = curator.curate("foco", count=2, max_per_artist=1)
+
+        assert [r["uri"] for r in result] == ["spotify:track:a1", "spotify:track:b1"]
+
+
+class TestResolveQueries:
+    def test_referencia_direta_artista(self, curator):
+        queries = curator._resolve_queries("mais The HU")
+        assert "the hu" in queries[0]
+
+    def test_mapeamento_semantico_foco(self, curator):
+        queries = curator._resolve_queries("foco")
+        assert len(queries) > 0
+
+    def test_mapeamento_semantico_energia(self, curator):
+        queries = curator._resolve_queries("energia")
+        assert len(queries) > 0
+
+    def test_fallback_pra_contexto_desconhecido(self, curator):
+        queries = curator._resolve_queries("algo completamente aleatório")
+        assert "algo completamente aleatório" in queries
+
+    def test_contexto_vazio_usa_fallback_foco(self, curator):
+        queries = curator._resolve_queries("")
+        assert queries == ["lo-fi instrumental", "ambient study", "minimal piano", "post-rock instrumental"]
+
+    def test_contexto_composto_preserva_descritores_especificos(self, curator):
+        queries = curator._resolve_queries(
+            "foco analítico, neoclássico minimalista e ambient denso para trabalho concentrado"
+        )
+
+        assert queries[0] == "neoclassical minimal ambient dark study focus"
+        assert "lo-fi instrumental" in queries
