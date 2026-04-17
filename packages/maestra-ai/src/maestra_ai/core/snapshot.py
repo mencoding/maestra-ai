@@ -3,11 +3,16 @@ from __future__ import annotations
 
 import gzip
 import json
+import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
 from maestra_ai.core import storage
+from maestra_ai.core.errors import NotFoundError, UserError
+
+# Somente caracteres alfanuméricos, underline, dois-pontos e hífen são permitidos
+_SNAP_ID_RE = re.compile(r"^[\w:\-]+$")
 
 _MAX_ACTIVE = 20
 
@@ -69,14 +74,19 @@ def list_snapshots() -> list[dict]:
 
 
 def load(snap_id: str) -> dict:
-    path = _snap_dir() / f"{snap_id}.json"
+    if not _SNAP_ID_RE.match(snap_id):
+        raise UserError(f"ID de snapshot inválido: {snap_id}")
+    snap_dir = _snap_dir()
+    path = snap_dir / f"{snap_id}.json"
+    # Defesa em profundidade
+    if not path.resolve().is_relative_to(snap_dir.resolve()):
+        raise UserError(f"ID de snapshot inválido: {snap_id}")
     if not path.exists():
         arch = _archive_dir() / f"{snap_id}.json.gz"
         if arch.exists():
             with gzip.open(arch, "rt", encoding="utf-8") as f:
                 data = json.load(f)
         else:
-            from maestra_ai.core.errors import NotFoundError
             raise NotFoundError(f"Snapshot '{snap_id}' não encontrado.")
     else:
         data = json.loads(path.read_text(encoding="utf-8"))

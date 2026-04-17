@@ -1,7 +1,10 @@
 """Testes de snapshot e rollback."""
 from __future__ import annotations
 
+import pytest
+
 from maestra_ai.core import snapshot
+from maestra_ai.core.errors import UserError
 
 
 def test_create_snapshot(monkeypatch, tmp_path):
@@ -53,3 +56,24 @@ def test_rapid_snapshots_unique_ids(monkeypatch, tmp_path):
     assert len(set(ids)) == 5
     # last() deve retornar o mais recente mesmo com operações de nome idêntico
     assert snapshot.last() == ids[-1]
+
+
+def test_rejects_path_traversal(monkeypatch, tmp_path):
+    monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+    (tmp_path / "data").mkdir()
+    with pytest.raises(UserError, match="ID de snapshot"):
+        snapshot.load("../../../etc/passwd")
+
+
+def test_rejects_snap_id_with_slash(monkeypatch, tmp_path):
+    monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+    (tmp_path / "data").mkdir()
+    with pytest.raises(UserError, match="ID de snapshot"):
+        snapshot.load("foo/bar")
+
+
+def test_rejects_snap_id_with_dotdot(monkeypatch, tmp_path):
+    monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+    (tmp_path / "data").mkdir()
+    with pytest.raises(UserError, match="ID de snapshot"):
+        snapshot.load("..sneaky")
