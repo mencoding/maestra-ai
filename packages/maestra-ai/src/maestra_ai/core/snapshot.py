@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from maestra_ai.core import storage
-from maestra_ai.core.errors import NotFoundError, UserError
+from maestra_ai.core.errors import NotFoundError, StorageError, UserError
 
 # Somente caracteres alfanuméricos, underline, dois-pontos e hífen são permitidos
 _SNAP_ID_RE = re.compile(r"^[\w:\-]+$")
@@ -63,11 +63,16 @@ def _rotate() -> None:
 def list_snapshots() -> list[dict]:
     out = []
     for path in sorted(_snap_dir().glob("*.json"), reverse=True):
-        data = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict) or "id" not in data:
+                continue
+        except (json.JSONDecodeError, OSError):
+            continue
         out.append({
             "id": data["id"],
-            "operation": data["operation"],
-            "created_at": data["created_at"],
+            "operation": data.get("operation", "unknown"),
+            "created_at": data.get("created_at", "unknown"),
             "path": str(path),
         })
     return out
@@ -90,6 +95,10 @@ def load(snap_id: str) -> dict:
             raise NotFoundError(f"Snapshot '{snap_id}' não encontrado.")
     else:
         data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or "state" not in data:
+        raise StorageError(
+            f"Snapshot '{snap_id}' malformado: chave 'state' ausente.",
+        )
     return data["state"]
 
 
