@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-04-16
+
+### Added
+- `core.errors` — hierarquia `MaestraError` com 5 campos humanos + `agent_hint`
+- `core.reporting.format_estimate` — total sempre calculado + `humanize_bytes`
+- `core.storage` — XDG paths, env var overrides, keyring + fallback chmod 600
+- `core.ratelimit` — `TokenBucket` (60 req/min) + `CircuitBreaker` (3 falhas/60s, cooldown 5min)
+- `core.snapshot` — snapshots automáticos pré-operação, 20 ativos + gzip archive
+- `core.rollback` + `maestra rollback --list/--last/--snapshot` com safety snapshot
+- `core.audit` — audit log JSONL com redação de secrets, rotação 15d + 30d gzip
+- `core.doctor` + `maestra doctor` com 6 checks (python, config, keyring, token, disk, director)
+- `rich` e `rich-argparse` integrados no CLI (help colorido, painéis de erro)
+- `--json` global no parser raiz para consumo programático
+- Tratamento central de `MaestraError` em `main()` com painel rich ou JSON
+- Decorador de conveniência `handle_errors` em `cli/__init__.py`
+
+### Changed
+- CLI monolítico (`_monolith.py`, 1211 linhas) decomposto em 12 módulos
+  por subcomando + `_common.py`, com pattern `@register` para agregação.
+- `core.client` — toda chamada à API do Spotify agora passa por
+  `_call_spotify()` com rate limiter + circuit breaker + tradução de erros
+  HTTP (429→`RateLimitError`, 401→`AuthError`, 5xx→`SpotifyAPIError`).
+- CLI agregador usa `RichHelpFormatter` quando `rich-argparse` disponível.
+
+### Infra
+- `dev` deps: `freezegun>=1.4`, `ruff>=0.5`
+- `runtime` deps: `rich>=13`, `rich-argparse>=1.5`, `keyring>=24`
+- Lint config `ruff` (E, F, W, I, B, UP, N, RET; ignore E501)
+
 ## [0.1.1] — 2026-04-16
 
 ### Fixed
