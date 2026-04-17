@@ -47,6 +47,20 @@ def test_show_retorna_none_para_contexto_expirado(tmp_path):
     assert not path.exists()
 
 
+def test_show_retorna_none_para_json_corrompido(tmp_path):
+    path = tmp_path / "context.json"
+    path.write_text("not valid json")
+    ctx = ContextState(str(path))
+    assert ctx.show() is None
+
+
+def test_show_retorna_none_para_json_sem_set_at(tmp_path):
+    path = tmp_path / "context.json"
+    path.write_text('{"context": "foco", "ttl_minutes": 120}')
+    ctx = ContextState(str(path))
+    assert ctx.show() is None
+
+
 def test_show_ignora_ttl_nulo(tmp_path):
     path = tmp_path / "current_context.json"
     data = {

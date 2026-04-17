@@ -125,6 +125,13 @@ class TestPersistence:
         signals = reloaded.data["tracks"]["spotify:track:a"]["context_signals"]
         assert {signal["event_id"] for signal in signals} == {"evt-1", "evt-2"}
 
+    def test_load_ignora_json_corrompido(self, tmp_path):
+        path = tmp_path / "taste.json"
+        path.write_text("not valid json {{{")
+        profile = TasteProfile(str(path))
+        assert profile.data["version"] == 2
+        assert profile.data["tracks"] == {}
+
     def test_restore_sobrescreve_sem_merge(self, tmp_path):
         path = tmp_path / "taste_profile.json"
         p = TasteProfile(str(path))

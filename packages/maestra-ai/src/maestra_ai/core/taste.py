@@ -18,8 +18,17 @@ class TasteProfile:
     def _load(self):
         """Carrega perfil do disco ou cria um vazio."""
         if os.path.exists(self.path):
-            with open(self.path, "r", encoding="utf-8") as f:
-                return self._migrate(json.load(f))
+            try:
+                with open(self.path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if not isinstance(data, dict):
+                    return self._empty_profile()
+                return self._migrate(data)
+            except (json.JSONDecodeError, OSError):
+                return self._empty_profile()
+        return self._empty_profile()
+
+    def _empty_profile(self):
         return {
             "version": 2,
             "tracks": {},
