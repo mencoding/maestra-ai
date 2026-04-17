@@ -3,12 +3,12 @@ from __future__ import annotations
 
 import pytest
 
-from maestra_ai.cli._monolith import main as monolith_main
+from maestra_ai.cli import main as cli_main
 
 
 def _run(argv: list[str], monkeypatch) -> None:
     monkeypatch.setattr("sys.argv", ["maestra", *argv])
-    monolith_main()
+    cli_main()
 
 
 def test_auth_setup_stub(monkeypatch, capsys):
@@ -32,7 +32,7 @@ def test_onboard_stub(monkeypatch, capsys):
 def test_help_sem_subcomando_falha(monkeypatch):
     monkeypatch.setattr("sys.argv", ["maestra"])
     with pytest.raises(SystemExit):
-        monolith_main()
+        cli_main()
 
 
 @pytest.mark.parametrize("sub", [
@@ -45,6 +45,6 @@ def test_subcomando_aparece_no_help(sub, monkeypatch, capsys):
     """Cada subcomando deve estar no --help raiz."""
     monkeypatch.setattr("sys.argv", ["maestra", "--help"])
     with pytest.raises(SystemExit):
-        monolith_main()
+        cli_main()
     out = capsys.readouterr().out
     assert sub in out, f"{sub} não está no help raiz"

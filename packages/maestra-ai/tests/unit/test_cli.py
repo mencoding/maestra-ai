@@ -1,8 +1,22 @@
 """Testes de handlers do CLI."""
 from argparse import Namespace
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from maestra_ai.cli import _monolith as cli
+from maestra_ai.cli import history as _cli_history
+from maestra_ai.cli import playlist as _cli_playlist
+from maestra_ai.cli import taste as _cli_taste
+from maestra_ai.cli._common import PLAYLIST_ID as _PLAYLIST_ID
+
+cli = SimpleNamespace(
+    cmd_playlist_add=_cli_playlist.cmd_playlist_add,
+    cmd_playlist_top_up=_cli_playlist.cmd_playlist_top_up,
+    cmd_playlist_prune=_cli_playlist.cmd_playlist_prune,
+    cmd_playlist_remove=_cli_playlist.cmd_playlist_remove,
+    cmd_taste_review=_cli_taste.cmd_taste_review,
+    cmd_history_import_outside=_cli_history.cmd_history_import_outside,
+    PLAYLIST_ID=_PLAYLIST_ID,
+)
 
 
 def test_playlist_add_aceita_argumentos_extras_do_dispatcher(capsys):
