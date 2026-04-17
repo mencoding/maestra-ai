@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+
+# Venvs
+.venv/
+venv/
+env/
+
+# Build
+build/
+dist/
+*.whl
+*.tar.gz
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Maestra — NEVER COMMIT
+*.env
+.env
+token.json
+config.json
+dados/
+snapshots/
+*.log
+audit.jsonl
+usage.json
+
+# OS
+.DS_Store
+Thumbs.db
