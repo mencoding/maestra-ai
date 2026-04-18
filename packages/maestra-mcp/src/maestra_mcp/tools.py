@@ -232,6 +232,8 @@ def _history_outside(args):
       {"type": "object", "properties": {
           "confirm": {"type": "boolean", "default": False},
           "context": {"type": "string"},
+          "top": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20,
+                  "description": "Limite de candidatos retornados no dry-run"},
       }, "additionalProperties": False})
 def _playlist_prune(args):
     from maestra_mcp.config import resolve_playlist_id
@@ -241,6 +243,7 @@ def _playlist_prune(args):
         playlist_id=resolve_playlist_id(),
         context=ctx,
         confirm=args.get("confirm", False),
+        top=args.get("top", 20),
     )
 
 

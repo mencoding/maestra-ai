@@ -261,6 +261,22 @@ async def test_doctor_chama_run_all():
 
 
 @pytest.mark.asyncio
+async def test_playlist_prune_expoe_top():
+    """Fix H3: schema de playlist_prune deve aceitar e propagar `top`."""
+    from maestra_mcp.tools import call_tool
+    mock_curator = MagicMock()
+    mock_curator.prune.return_value = {"dry_run": True, "candidates": []}
+    mock_ctx = MagicMock()
+    mock_ctx.show.return_value = {"context": "foco"}
+    with patch("maestra_mcp.tools.build_deps",
+               return_value={"curator": mock_curator, "context_state": mock_ctx}), \
+         patch("maestra_mcp.config.resolve_playlist_id", return_value="pl_1"):
+        await call_tool("playlist_prune", {"top": 5})
+    kwargs = mock_curator.prune.call_args.kwargs
+    assert kwargs.get("top") == 5, f"top deveria ser 5, veio {kwargs.get('top')}"
+
+
+@pytest.mark.asyncio
 async def test_total_23_tools():
     from maestra_mcp.tools import iter_tool_defs
     assert len(iter_tool_defs()) == 23
