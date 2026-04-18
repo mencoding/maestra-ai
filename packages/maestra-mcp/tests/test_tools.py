@@ -277,6 +277,25 @@ async def test_playlist_prune_expoe_top():
 
 
 @pytest.mark.asyncio
+async def test_history_outside_playlist_retorna_shape_consistente_sem_playlist_id():
+    """Fix M4: sem playlist_id, retornar shape canônico com zeros em vez
+    de dict divergente `{outside, note}`."""
+    from maestra_mcp.tools import call_tool
+    with patch("maestra_mcp.config.resolve_playlist_id", return_value=None):
+        result = await call_tool("history_outside_playlist", {})
+    expected = {
+        "recent_count", "playlist_count", "outside_count",
+        "outside_play_events", "top_outside_artists", "top_outside_tracks",
+        "tracks", "candidates", "note",
+    }
+    assert expected.issubset(result.keys()), \
+        f"faltam chaves canônicas: {expected - set(result.keys())}"
+    assert result["outside_count"] == 0
+    assert result["tracks"] == []
+    assert result["candidates"] == []
+
+
+@pytest.mark.asyncio
 async def test_total_23_tools():
     from maestra_mcp.tools import iter_tool_defs
     assert len(iter_tool_defs()) == 23
