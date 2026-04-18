@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-04-18
+
+Hotfix baseado em code review do v0.4.0. Corrige um bloqueador no MCP,
+uma regressão de propagação de flags no Director e alinha defaults para
+reduzir risco operacional.
+
+### Fixed
+- **MCP rollback handler** (B1, blocker): `_rollback` chamava `rollback_to`
+  sem `apply_state_fn`, quebrando qualquer rollback real que não fosse
+  `list:true`. Handler agora replica a lógica do subcomando CLI, montando
+  `current_state_fn` e `apply_state_fn` via `deps['taste']` e
+  `deps['context_state']`.
+- **Director `start()` ignorava 4 flags** (C1, critical): CLI aceitava
+  `--count/--outside-min-plays/--outside-count/--outside-recent-limit`
+  via argparse, mas `core.director.start()` descartava-as silenciosamente.
+  Os parâmetros agora fazem parte da assinatura de `start()` e são
+  propagados ao subprocess.
+
+### Changed
+- **MCP `onboard` default agora é `dry_run=True`** (M6): alinhamento com
+  `playlist_prune` e `history_import_outside`. Chamada sem argumentos não
+  cria mais playlist real. Para efetivar, passe `dry_run:false` explícito.
+- **MCP `history_import_outside` defaults alinhados à CLI** (H2):
+  `count=5` (era 10), `min_plays=1` (era 2). Adiciona `recent_limit=50`
+  ao schema. `signal` não exposto (core não suporta; divergência
+  documentada para follow-up).
+
 ## [0.4.0] — 2026-04-18
 
 Fase 4 do roadmap. Transforma a Maestra em ferramenta integrada a agentes
