@@ -211,6 +211,36 @@ class TasteProfile:
             signal.get("at"),
         )
 
+    def record_global_positive(
+        self, uri, *, name=None, artist=None, weight=1,
+    ):
+        """Registra sinal global positivo ponderado (uso: onboard).
+
+        Diferente de `record_feedback(global=True)` que define feedback
+        'good' binário, aqui acumulamos `global_signal` numérico que
+        reflete peso histórico (onboard pondera top_long, top_medium,
+        saved, recent com pesos diferentes). Se a faixa já existe,
+        soma ao valor atual.
+        """
+        self._reload_latest()
+        track = self.data["tracks"].setdefault(uri, {
+            "name": name or "unknown",
+            "artist": artist or "unknown",
+            "added_in_context": None,
+            "added_at": datetime.now().isoformat(timespec="seconds"),
+            "feedback": None,
+            "skip_count": 0,
+            "play_count": 0,
+            "context_signals": [],
+        })
+        if name and track.get("name") in (None, "unknown", ""):
+            track["name"] = name
+        if artist and track.get("artist") in (None, "unknown", ""):
+            track["artist"] = artist
+        current = track.get("global_signal") or 0
+        track["global_signal"] = current + weight
+        self.save()
+
     def record_added(self, tracks_info, context, queries_used):
         """Registra faixas adicionadas à playlist.
 
