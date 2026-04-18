@@ -132,6 +132,23 @@ class TestPersistence:
         assert profile.data["version"] == 2
         assert profile.data["tracks"] == {}
 
+    def test_load_corrompido_preserva_arquivo_original(self, tmp_path, capsys):
+        """P0-N3: perfil corrompido é renomeado para .corrupt.<ts>, não descartado silenciosamente."""
+        path = tmp_path / "taste.json"
+        path.write_text('{"parcialmente": "quebrado"', encoding="utf-8")
+
+        profile = TasteProfile(str(path))
+
+        # Perfil vazio retornado para continuidade operacional
+        assert profile.data["tracks"] == {}
+        # Arquivo original preservado com sufixo .corrupt.<ts>
+        backups = list(tmp_path.glob("taste.json.corrupt.*"))
+        assert len(backups) == 1, f"esperado 1 backup, encontrei {backups}"
+        assert '{"parcialmente": "quebrado"' in backups[0].read_text(encoding="utf-8")
+        # Warning emitido em stderr
+        captured = capsys.readouterr()
+        assert "corrompido" in captured.err.lower() or "corrupt" in captured.err.lower()
+
     def test_restore_sobrescreve_sem_merge(self, tmp_path):
         path = tmp_path / "taste_profile.json"
         p = TasteProfile(str(path))
