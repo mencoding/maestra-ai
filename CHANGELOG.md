@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-04-18
+
+Terceiro hotfix da série v0.4. Fecha H2 do code review pós-v0.4.2:
+refatora `HistoryAnalyzer.import_outside` para aceitar `signal` e
+expõe esse controle via MCP. Centraliza a lógica de sinal contextual
+no core, eliminando divergência silenciosa entre CLI e MCP. Suite
+continua 100% verde.
+
+### Changed
+- **`HistoryAnalyzer.import_outside`** (H2): aceita kwarg
+  `signal: str = "good"` validado contra `{"good", "bad", "skip"}`.
+  Peso derivado de `core.taste._signal_weight(signal)`. Antes, signal
+  era hardcoded `"good"` com peso fixo 1. Resultado ganha campos
+  `signal` e `recorded_signals`.
+- **CLI `history import-outside`** (H2): agora delega ao
+  `core.HistoryAnalyzer.import_outside`, repassando `--signal`.
+  Remove duplicação de `record_context_signal` que existia no CLI.
+  Bookkeeping via `taste.record_added` permanece no CLI (preocupação
+  distinta do sinal contextual).
+- **`history_import_outside` MCP** (H2): schema expõe `signal`
+  (enum `good/bad/skip`, default `good`). Handler propaga ao core.
+  Antes, não era exposto para evitar divergência silenciosa com a
+  constante `"good"` hardcoded no core.
+
+### Tests
+- `+3` em `test_history.py`: signal bad, signal inválido, default good.
+- `+1` em `test_cli.py`: propagação de signal bad via CLI.
+- `+2` em `test_tools.py` (MCP): propagação de signal, rejeição de
+  signal inválido. `+1 assert` no teste de defaults.
+- Total: 308 (maestra-ai) + 33 (maestra-mcp) = 341 passing.
+
 ## [0.4.2] - 2026-04-18
 
 Segundo hotfix da série v0.4. Pendências não-críticas do code review
