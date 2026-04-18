@@ -1,0 +1,39 @@
+[project]
+name = "maestra-mcp"
+version = "0.4.0"
+description = "MCP stdio server for Maestra AI Spotify controller"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+    { name = "Leonardo Menzani Silva" }
+]
+dependencies = [
+    "maestra-ai==0.4.0",
+    "mcp>=1.0,<2.0",
+]
+
+[project.scripts]
+maestra-mcp = "maestra_mcp.server:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-mock>=3.12",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv.sources]
+maestra-ai = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/maestra_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+asyncio_mode = "auto"
