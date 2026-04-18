@@ -396,3 +396,34 @@ class TestSuccessRate:
         # 2 de 2 com good → 1.0
         profile.record_feedback("spotify:track:b", "good")
         assert profile.data["context_queries"]["foco"]["success_rate"] == 1.0
+
+
+class TestTasteReview:
+    def test_review_retorna_dict_com_campos_esperados(self, tmp_path):
+        from maestra_ai.core import taste as taste_mod
+        from maestra_ai.core.taste import TasteProfile
+
+        profile = TasteProfile(str(tmp_path / "taste.json"))
+        # Popular perfil com algumas faixas em contextos
+        profile.record_added(
+            [{"uri": "spotify:track:a", "name": "A", "artist": "ArtA"}],
+            context="foco",
+            queries_used=["ambient foco"],
+        )
+        profile.record_feedback("spotify:track:a", "good", context="foco", source="explicit")
+
+        playlist_tracks = [
+            {"uri": "spotify:track:a", "track": "A", "artist": "ArtA"},
+        ]
+        result = taste_mod.review(profile, playlist_tracks, "foco", top=5)
+
+        assert result["context"] == "foco"
+        assert result["playlist_count"] == 1
+        assert "top_positive" in result
+        assert "top_negative" in result
+        assert "prune_candidates" in result
+        assert "dominant_artists" in result
+        assert "source_contexts" in result
+        assert "tracked_outside_playlist" in result
+        assert "notes" in result
+        assert isinstance(result["notes"], list)
