@@ -3,7 +3,10 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from maestra_ai.core import storage
+from maestra_ai.core.errors import ConfigError
 
 
 def test_config_dir_xdg_default(monkeypatch, tmp_path):
@@ -64,6 +67,40 @@ def test_keyring_save_and_load(monkeypatch):
         mock_keyring.set_password.assert_called_once()
         result = storage.load_refresh_token()
         assert result == "refresh_token_xyz"
+
+
+def test_load_refresh_token_corrupt_returns_none(monkeypatch, tmp_path):
+    """P0-N1: token.json corrompido deve retornar None, não crashar."""
+    monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+    with patch.object(storage, "_keyring_backend_ok", return_value=False):
+        token_file = tmp_path / "token.json"
+        token_file.write_text("{invalid json", encoding="utf-8")
+        assert storage.load_refresh_token() is None
+
+
+def test_load_refresh_token_non_dict_returns_none(monkeypatch, tmp_path):
+    """P0-N1: token.json com JSON válido mas não-dict deve retornar None."""
+    monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+    with patch.object(storage, "_keyring_backend_ok", return_value=False):
+        token_file = tmp_path / "token.json"
+        token_file.write_text("[1, 2, 3]", encoding="utf-8")
+        assert storage.load_refresh_token() is None
+
+
+def test_read_config_corrupt_raises_config_error(monkeypatch, tmp_path):
+    """P0-N1.b: config.json malformado deve levantar ConfigError, não JSONDecodeError."""
+    monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+    (tmp_path / "config.json").write_text("{not json", encoding="utf-8")
+    with pytest.raises(ConfigError):
+        storage.read_config()
+
+
+def test_read_config_non_dict_raises_config_error(monkeypatch, tmp_path):
+    """P0-N1.b: config.json com lista/primitivo deve levantar ConfigError."""
+    monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+    (tmp_path / "config.json").write_text('["not", "a", "dict"]', encoding="utf-8")
+    with pytest.raises(ConfigError):
+        storage.read_config()
 
 
 def test_keyring_fallback_to_file(monkeypatch, tmp_path):

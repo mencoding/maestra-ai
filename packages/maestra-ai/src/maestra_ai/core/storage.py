@@ -52,7 +52,21 @@ def read_config() -> dict:
     p = config_dir() / "config.json"
     if not p.exists():
         return {}
-    return json.loads(p.read_text(encoding="utf-8"))
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as e:
+        from maestra_ai.core.errors import ConfigError
+        raise ConfigError(
+            "config.json malformado ou inacessível.",
+            where={"path": str(p)},
+        ) from e
+    if not isinstance(data, dict):
+        from maestra_ai.core.errors import ConfigError
+        raise ConfigError(
+            "config.json não é um objeto JSON.",
+            where={"path": str(p), "got_type": type(data).__name__},
+        )
+    return data
 
 
 def write_config(data: dict) -> None:
@@ -92,7 +106,12 @@ def load_refresh_token() -> str | None:
     path = config_dir() / "token.json"
     if not path.exists():
         return None
-    data = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    if not isinstance(data, dict):
+        return None
     return data.get("refresh_token")
 
 
