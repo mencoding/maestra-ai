@@ -77,6 +77,14 @@ de IA via MCP stdio server. Segue design em
   notifications em `onboard`/`curate` (SDK MCP-dependente, nice-to-have).
 - Publicação PyPI de `maestra-ai` e `maestra-mcp` é v0.6.0 (Plano 6).
 
+### Notas
+- Refactor R4 (`director.start/stop/status`) introduziu regressão
+  temporária onde os flags
+  `--count/--outside-min-plays/--outside-count/--outside-recent-limit`
+  eram aceitos pelo argparse mas silenciosamente ignorados. Corrigido
+  em v0.4.1. Se você passou esses flags em v0.4.0, verifique que o
+  comportamento esperado foi aplicado.
+
 ## [0.3.2] — 2026-04-18
 
 Segundo hotfix revelado pela validação real (primeira execução de
