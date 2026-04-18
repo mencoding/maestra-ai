@@ -281,12 +281,33 @@ def _rollback(args):
         return {"snapshots": snapshot.list_snapshots()}
 
     deps = build_deps()
-    def current():
+    taste = deps["taste"]
+    ctx = deps["context_state"]
+
+    def current_state_fn():
+        # Captura estado atual para snapshot-de-salvaguarda
         return {
-            "taste": deps["taste"].data,
-            "context": deps["context_state"].show() or {},
+            "taste": taste.data,
+            "context": ctx.show(),
         }
-    return rb.rollback_to(args.get("snapshot_id"), current_state_fn=current)
+
+    def apply_state_fn(state):
+        # Aplica estado do snapshot-alvo aos módulos relevantes
+        if "taste" in state and state["taste"] is not None:
+            taste.restore(state["taste"])
+        if "context" in state:
+            ctx_val = state["context"]
+            if ctx_val and isinstance(ctx_val, dict) and ctx_val.get("context"):
+                ttl = ctx_val.get("ttl_minutes", 120)
+                ctx.set(ctx_val["context"], ttl_minutes=ttl)
+            else:
+                ctx.clear()
+
+    return rb.rollback_to(
+        args.get("snapshot_id"),
+        current_state_fn=current_state_fn,
+        apply_state_fn=apply_state_fn,
+    )
 
 
 # =========================================================================

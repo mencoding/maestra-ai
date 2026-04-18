@@ -114,6 +114,35 @@ async def test_playlist_prune_dry_run():
 
 
 @pytest.mark.asyncio
+async def test_rollback_executa_com_snapshot_id():
+    # Verifica que o handler monta current_state_fn e apply_state_fn
+    # e chama rollback_to com o snapshot_id informado.
+    from maestra_mcp.tools import call_tool
+
+    mock_taste = MagicMock()
+    mock_taste.data = {"tracks": {}}
+    mock_ctx = MagicMock()
+    mock_ctx.show.return_value = {"context": "foco"}
+
+    with patch("maestra_mcp.tools.build_deps",
+               return_value={"taste": mock_taste, "context_state": mock_ctx}), \
+         patch("maestra_ai.core.rollback.rollback_to",
+               return_value={"restored": "abc", "status": "ok"}) as m:
+        result = await call_tool("rollback", {"snapshot_id": "abc"})
+
+    assert m.called, "rollback_to deveria ter sido chamado"
+    kwargs = m.call_args.kwargs
+    positional = m.call_args.args
+    # snapshot_id pode chegar como primeiro posicional ou via kwarg snap_id
+    assert (positional and positional[0] == "abc") or kwargs.get("snap_id") == "abc"
+    assert "current_state_fn" in kwargs
+    assert "apply_state_fn" in kwargs
+    assert callable(kwargs["current_state_fn"])
+    assert callable(kwargs["apply_state_fn"])
+    assert result["status"] == "ok"
+
+
+@pytest.mark.asyncio
 async def test_rollback_list():
     from maestra_mcp.tools import call_tool
     with patch("maestra_ai.core.snapshot.list_snapshots",
