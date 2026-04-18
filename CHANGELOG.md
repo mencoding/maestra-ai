@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] — 2026-04-18
+
+Segundo hotfix revelado pela validação real (primeira execução de
+`maestra auth login` em terminal TTY com credenciais reais).
+
+### Fixed
+- **`_NoopCacheHandler` em `core/auth.py`** não herdava de
+  `spotipy.cache_handler.CacheHandler`. spotipy 2.26+ faz
+  `assert issubclass(cache_handler.__class__, CacheHandler)` no
+  `SpotifyOAuth.__init__` e crasha com `AssertionError` — bloqueando
+  `maestra auth login`. Bug silencioso nas v0.3.0/v0.3.1 porque todos
+  os testes de login mockavam `SpotifyOAuth` e nunca exercitavam o
+  constructor real.
+
+### Tests
+- 2 testes novos em `test_auth.py::TestNoopCacheHandler` validando:
+  (a) `_NoopCacheHandler` é subclasse de `CacheHandler`,
+  (b) `SpotifyOAuth` real instancia sem assertion error. Esse segundo
+  teste previne recorrência — nenhum mock, só o constructor real.
+  Suite: 290 → 292 passed.
+
 ## [0.3.1] — 2026-04-18
 
 Hotfix de dois bugs revelados na primeira validação end-to-end da v0.3.0
