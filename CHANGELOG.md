@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5] — 2026-04-18
+
+Fecha os dois P0 remanescentes do review pós-v0.2.3 (P0-3, P0-5) e os
+dois pré-requisitos arquiteturais de Fase 3 (P1-4, P1-7). Após esta
+versão, Fase 3 (OAuth real, daemon production-ready, MCP server) fica
+desbloqueada.
+
+### Added
+- `core.storage.atomic_write_json(path, data)` — write atômico com
+  `fcntl.LOCK_EX` + tmp + `os.replace`. Substitui padrão repetido em
+  3 módulos.
+- `core.storage.update_json_under_lock(path, mutator, default)` —
+  read-modify-write atômico sob mesmo lock (elimina lost-update).
+- `core.ratelimit.PersistentTokenBucket` — token bucket persistido em
+  SQLite (WAL mode, `BEGIN IMMEDIATE`), usa `time.time()` wallclock
+  para timestamps comparáveis entre processos.
+- `core.ratelimit.PersistentCircuitBreaker` — circuit breaker com
+  estado em SQLite. Failures como JSON array de timestamps.
+- `core.client.SpotifyController(sp=..., auth_manager=...)` — DI via
+  constructor. Backward compat: sem args usa OAuth default.
+- `tests/integration/test_cli_e2e.py` — primeira bateria E2E do
+  projeto. Subprocess real de `uv run maestra ...` com XDG paths
+  isolados em tmp.
+
+### Fixed
+- **P0-3** — rate limit compartilhado entre daemon (`director run`) e
+  CLI manual. Antes: dois processos tinham dois budgets de 60 req/min
+  independentes, total real ultrapassava o limite Spotify.
+- **P0-5 parcial** — writes atômicos em `context.set`,
+  `playback._save_state`, `feedback_prompt.mark_prompted`. Antes:
+  `open("w")` cru permitia corrupção por interleaving + `mark_prompted`
+  tinha TOCTOU read-then-write que perdia marcas de outros contextos.
+
+### Changed
+- `core.client._bucket` e `_breaker` viraram lazy singletons via
+  `_get_bucket()` / `_get_breaker()` — respeitam `MAESTRA_STATE_DIR`
+  setado após import (essencial para testes).
+
+### Tests
+- 18 testes novos: `test_storage.py` (5), `test_ratelimit.py` (6),
+  `test_client.py` (2), `test_cli_e2e.py` (5). Suite: 231 → 249 passed.
+
+### Notes
+- `playback._append_events` (append JSONL) **não** foi convertido: risco
+  de truncamento acima de `PIPE_BUF` (4KB POSIX) é P1 teórico — tratar
+  se surgir evidência empírica.
+- `TokenBucket`/`CircuitBreaker` in-memory preservados para uso
+  single-process e testes isolados.
+- E2E cobre só comandos que não forçam `_build_deps`
+  (`rollback --list`, `doctor`). `taste show`/`context set`/`status`
+  exigem `SpotifyController()` mesmo em read-only — dívida arquitetural
+  separada, não bloqueante.
+
 ## [0.2.4] — 2026-04-17
 
 Fecha 1 P0-regressão e 3 P0-novos identificados no review pós-v0.2.3
