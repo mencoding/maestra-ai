@@ -3,12 +3,12 @@ import os
 import subprocess
 import time
 import spotipy
+from spotipy.cache_handler import CacheHandler
 from spotipy.oauth2 import SpotifyOAuth
-from dotenv import load_dotenv
 
 from maestra_ai.core.errors import AuthError, RateLimitError, SpotifyAPIError
 from maestra_ai.core.ratelimit import PersistentCircuitBreaker, PersistentTokenBucket
-from maestra_ai.core.storage import config_dir, state_dir
+from maestra_ai.core.storage import read_config, state_dir
 
 
 def _ratelimit_db_path() -> str:
@@ -68,6 +68,30 @@ def _call_spotify(fn, *args, **kwargs):
 SPOTIFY_SEARCH_PAGE_LIMIT = 10
 
 
+class _InMemoryCacheHandler(CacheHandler):
+    """CacheHandler que injeta o refresh_token no spotipy sem I/O.
+
+    spotipy usa CacheHandler para ler/escrever token_info (access_token,
+    refresh_token, expires_at). Escrever em disco conflita com a persistência
+    via TokenStore — aqui apenas mantemos em memória, inicializando com o
+    refresh_token que o TokenStore entregou. O spotipy renova access_token
+    via refresh_token quando necessário; o refresh_token atualizado
+    (se o Spotify rotacionar) é refletido em memória mas não persistido —
+    persistência explícita ocorre em `auth.login`.
+    """
+
+    def __init__(self, refresh_token: str | None = None):
+        self._token_info: dict | None = (
+            {"refresh_token": refresh_token} if refresh_token else None
+        )
+
+    def get_cached_token(self):
+        return self._token_info
+
+    def save_token_to_cache(self, token_info):
+        self._token_info = token_info
+
+
 class SpotifyController:
     """Encapsula a API do Spotify. Métodos retornam dicts, sem I/O."""
 
@@ -81,27 +105,30 @@ class SpotifyController:
         "user-library-read",
     )
 
-    def __init__(self, sp=None, auth_manager=None):
+    def __init__(self, sp=None, auth_manager=None, token_store=None):
         """Instancia o controller.
 
-        Argumentos opcionais para injeção de dependência (DI) — caller pode
-        passar um `spotipy.Spotify` pré-configurado (`sp`) ou um
-        `SpotifyOAuth`/outro auth manager (`auth_manager`). Quando ambos são
-        None, instancia o default: OAuth via dashboard + cache em config_dir.
-
-        Pré-requisito para Fase 3 (OAuth real, MCP server) e para testes
-        que precisam mockar o SDK sem patchear globals.
+        DI via `sp` (spotipy.Spotify pré-pronto), `auth_manager` (SpotifyOAuth
+        custom) ou `token_store` (backend de refresh_token). Quando todos são
+        None, lê credenciais via `storage.read_config()` e refresh_token via
+        `default_token_store()`, injetando no spotipy por
+        `_InMemoryCacheHandler` (sem escrever cache em disco).
         """
         if sp is not None:
             self.sp = sp
             return
         if auth_manager is None:
-            cfg = config_dir()
-            load_dotenv(cfg / ".env")
+            cfg = read_config()
+            from maestra_ai.core.token_store import default_token_store
+            store = token_store or default_token_store()
+            refresh_token = store.load()
             auth_manager = SpotifyOAuth(
+                client_id=cfg.get("client_id"),
+                client_secret=cfg.get("client_secret"),
+                redirect_uri=cfg.get("redirect_uri"),
                 scope=" ".join(self.DEFAULT_SCOPES),
                 open_browser=False,
-                cache_path=str(cfg / ".cache"),
+                cache_handler=_InMemoryCacheHandler(refresh_token),
             )
         self.sp = spotipy.Spotify(auth_manager=auth_manager)
 

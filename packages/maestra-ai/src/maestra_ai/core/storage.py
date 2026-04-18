@@ -149,33 +149,19 @@ def _keyring_backend_ok() -> bool:
 
 
 def save_refresh_token(token: str) -> None:
+    """Shim: delega para default_token_store().save().
+
+    Mantido por retrocompat. Nova code path usa token_store direto.
+    """
     ensure_dirs()
-    if _keyring_backend_ok():
-        keyring.set_password(_SERVICE, _USER, token)
-        _flag_keyring_used(True)
-    else:
-        _flag_keyring_used(False)
-        path = config_dir() / "token.json"
-        path.write_text(json.dumps({"refresh_token": token}), encoding="utf-8")
-        path.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 600
+    from maestra_ai.core.token_store import default_token_store
+    default_token_store().save(token)
 
 
 def load_refresh_token() -> str | None:
-    if _keyring_backend_ok() and _flag_keyring_used_get():
-        try:
-            return keyring.get_password(_SERVICE, _USER)
-        except Exception:
-            pass
-    path = config_dir() / "token.json"
-    if not path.exists():
-        return None
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return None
-    if not isinstance(data, dict):
-        return None
-    return data.get("refresh_token")
+    """Shim: delega para default_token_store().load()."""
+    from maestra_ai.core.token_store import default_token_store
+    return default_token_store().load()
 
 
 def _flag_keyring_used(used: bool) -> None:
