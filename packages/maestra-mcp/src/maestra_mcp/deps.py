@@ -6,14 +6,21 @@ rate limit persistente (v0.2.5).
 """
 from __future__ import annotations
 
+import threading
+
 
 _CACHE: dict | None = None
+# Fix M1: lock protege o double-checked assignment quando múltiplas
+# threads chamam build_deps() antes do cache ser populado (ex.: SDKs MCP
+# que despacham tools em thread pool).
+_LOCK = threading.Lock()
 
 
 def _reset() -> None:
     """Invalida o cache (uso: testes, ou após `auth login` rebuildar)."""
     global _CACHE
-    _CACHE = None
+    with _LOCK:
+        _CACHE = None
 
 
 def build_deps() -> dict:
@@ -23,8 +30,19 @@ def build_deps() -> dict:
     os handlers de tool.
     """
     global _CACHE
+    # Double-checked locking: leitura sem lock no caminho quente,
+    # lock só quando for realmente necessário inicializar.
     if _CACHE is not None:
         return _CACHE
+    with _LOCK:
+        if _CACHE is not None:
+            return _CACHE
+        return _build_and_cache()
+
+
+def _build_and_cache() -> dict:
+    """Constrói dependências e armazena em _CACHE. Chamar com _LOCK segurado."""
+    global _CACHE
 
     from maestra_ai.core.client import SpotifyController
     from maestra_ai.core.context import ContextState
