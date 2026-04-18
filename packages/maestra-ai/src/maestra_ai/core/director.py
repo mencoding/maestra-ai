@@ -70,17 +70,24 @@ class MusicDirector:
         needed = max(target - context_count, 1)
 
         if import_outside == "safe" and self.history_analyzer:
-            outside_tracks = self._safe_outside_candidates(
-                context,
-                limit=min(outside_count, needed, 2),
+            # Delega para HistoryAnalyzer.import_outside: em dry_run, apenas
+            # coleta candidatos; caso contrário, efetiva import + sinais.
+            outside_limit = min(outside_count, needed, 2)
+            outside_result = self.history_analyzer.import_outside(
+                playlist_id=self.playlist_id,
+                context=context,
+                confirm=not dry_run,
+                count=outside_limit,
                 min_plays=outside_min_plays,
                 recent_limit=outside_recent_limit,
+                taste=self.taste,
             )
+            outside_tracks = outside_result.get("candidates", [])
             if outside_tracks:
                 if not dry_run:
-                    self.controller.playlist_add(self.playlist_id, [track["uri"] for track in outside_tracks])
+                    # Registra no perfil de gosto como "added" (manteve
+                    # comportamento anterior do Director).
                     self._record_curated_tracks(outside_tracks, context, ["outside-playlist:auto-safe"])
-                    self._record_outside_signals(outside_tracks, context)
 
                 return self._record({
                     "action": "outside_playlist_import",
@@ -175,39 +182,6 @@ class MusicDirector:
         ]
         self.taste.record_added(tracks_info, context=context, queries_used=queries_used)
 
-    def _safe_outside_candidates(self, context, limit, min_plays, recent_limit):
-        if limit <= 0:
-            return []
-        analysis = self.history_analyzer.outside_playlist(
-            self.playlist_id,
-            recent_limit=recent_limit,
-        )
-        candidates = []
-        for track in analysis.get("candidates", []):
-            if track.get("plays", 0) < min_plays:
-                continue
-            if self.taste.context_score(track["uri"], context) < 0:
-                continue
-            candidates.append(track)
-            if len(candidates) >= limit:
-                break
-        return candidates
-
-    def _record_outside_signals(self, tracks, context):
-        recorded = 0
-        for track in tracks:
-            event_id = f"outside-playlist-auto-safe:{context}:{track['uri']}"
-            if self.taste.record_context_signal(
-                track["uri"],
-                "good",
-                context,
-                source="outside_playlist_auto_safe",
-                event_id=event_id,
-                weight=1,
-            ):
-                recorded += 1
-        return recorded
-
     def _record(self, decision):
         decision = {
             "at": datetime.now().isoformat(timespec="seconds"),
@@ -231,3 +205,102 @@ class MusicDirector:
             "progress_ms": track.get("progress_ms"),
             "duration_ms": track.get("duration_ms"),
         }
+
+
+# === Lifecycle do director daemon (funções livres) ===
+import signal
+import subprocess
+import sys
+from pathlib import Path
+
+
+def _pid_file() -> Path:
+    from maestra_ai.core.storage import data_dir
+    return data_dir() / "director.pid"
+
+
+def _pid_running(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def start(
+    *,
+    interval: int = 180,
+    target: int = 100,
+    max_per_artist: int = 1,
+    max_artist_share: float = 0.25,
+    import_outside: str = "off",
+) -> dict:
+    """Inicia o director como subprocess em background (start_new_session).
+
+    Retorna dict com status: "started" (novo processo) ou "already_running"
+    (PID file existente com processo vivo).
+    """
+    pid_path = _pid_file()
+    pid_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if pid_path.exists():
+        try:
+            existing_pid = int(pid_path.read_text(encoding="utf-8").strip())
+        except ValueError:
+            existing_pid = 0
+        if existing_pid and _pid_running(existing_pid):
+            return {"status": "already_running", "pid": existing_pid}
+        # PID obsoleto — remove e segue
+        pid_path.unlink(missing_ok=True)
+
+    cmd = [
+        sys.executable, "-m", "maestra_ai.cli",
+        "director", "run",
+        "--interval", str(interval),
+        "--target", str(target),
+        "--max-per-artist", str(max_per_artist),
+        "--max-artist-share", str(max_artist_share),
+        "--import-outside", import_outside,
+    ]
+    log_path = pid_path.parent / "director.log"
+    log_fd = open(log_path, "a", encoding="utf-8")
+    proc = subprocess.Popen(
+        cmd,
+        stdout=log_fd,
+        stderr=log_fd,
+        start_new_session=True,
+    )
+    pid_path.write_text(str(proc.pid), encoding="utf-8")
+    return {"status": "started", "pid": proc.pid, "log": str(log_path)}
+
+
+def stop() -> dict:
+    """Para o director se estiver rodando. Idempotente."""
+    pid_path = _pid_file()
+    if not pid_path.exists():
+        return {"status": "not_running"}
+    try:
+        pid = int(pid_path.read_text(encoding="utf-8").strip())
+    except ValueError:
+        pid_path.unlink(missing_ok=True)
+        return {"status": "stale_pid_removed"}
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    pid_path.unlink(missing_ok=True)
+    return {"status": "stopped", "pid": pid}
+
+
+def status() -> dict:
+    """Retorna status atual do director."""
+    pid_path = _pid_file()
+    if not pid_path.exists():
+        return {"status": "stopped"}
+    try:
+        pid = int(pid_path.read_text(encoding="utf-8").strip())
+    except ValueError:
+        return {"status": "stale_pid"}
+    if _pid_running(pid):
+        return {"status": "running", "pid": pid}
+    return {"status": "dead_pid", "pid": pid}

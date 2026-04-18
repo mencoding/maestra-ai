@@ -452,3 +452,120 @@ class TasteProfile:
     def get_rejected_artists(self):
         """Retorna lista de artistas rejeitados."""
         return self.data.get("rejected_artists", [])
+
+
+def _signal_weight(signal):
+    if signal == "good":
+        return 1
+    if signal in ("bad", "skip"):
+        return -1
+    return 0
+
+
+def _prune_candidates(tracks, profile, context):
+    from collections import Counter
+    candidates = []
+    for track in tracks:
+        uri = track["uri"]
+        global_bad = profile.should_remove(uri)
+        context_score = profile.context_score(uri, context) if context else 0
+        if not global_bad and context_score >= 0:
+            continue
+        reason = "global_bad" if global_bad else "context_negative"
+        candidates.append({
+            **track,
+            "reason": reason,
+            "context_score": context_score,
+            "context": context,
+        })
+    return candidates
+
+
+def review(profile, playlist_tracks, context, *, prune_candidates=None, top=10):
+    """Review contextual da playlist — top positivos/negativos, candidatos de poda,
+    artistas dominantes, fontes de contexto, faixas fora da playlist com sinal.
+
+    profile: TasteProfile
+    playlist_tracks: list[dict] com uri, track, artist
+    context: str
+    """
+    from collections import Counter
+
+    playlist_uris = {t["uri"] for t in playlist_tracks}
+    rows = []
+    artist_counts = Counter()
+    source_counts = Counter()
+
+    for track in playlist_tracks:
+        uri = track["uri"]
+        artist_counts.update([track["artist"]])
+        profile_track = profile.data.get("tracks", {}).get(uri, {})
+        source_counts.update([profile_track.get("added_in_context") or "unknown"])
+        signals = profile.get_context_signals(uri, context=context)
+        rows.append({
+            **track,
+            "score": profile.context_score(uri, context),
+            "signals": len(signals),
+            "positive": sum(1 for s in signals if s.get("signal") in ("good", "positive")),
+            "negative": sum(1 for s in signals if s.get("signal") in ("bad", "skip", "negative")),
+            "added_in_context": profile_track.get("added_in_context"),
+        })
+
+    tracked_outside = []
+    for uri, profile_track in profile.data.get("tracks", {}).items():
+        if uri in playlist_uris:
+            continue
+        signals = profile.get_context_signals(uri, context=context)
+        if not signals:
+            continue
+        tracked_outside.append({
+            "track": profile_track.get("name", "unknown"),
+            "artist": profile_track.get("artist", "unknown"),
+            "uri": uri,
+            "score": profile.context_score(uri, context),
+            "signals": len(signals),
+            "in_playlist": False,
+        })
+
+    positive_rows = sorted(
+        [row for row in rows if row["score"] > 0],
+        key=lambda row: (row["score"], row["signals"], row["track"]),
+        reverse=True,
+    )
+    negative_rows = sorted(
+        [row for row in rows if row["score"] < 0],
+        key=lambda row: (row["score"], row["track"]),
+    )
+    unscored_rows = [row for row in rows if row["score"] == 0]
+    if prune_candidates is None:
+        prune_candidates = _prune_candidates(playlist_tracks, profile, context)
+
+    return {
+        "context": context,
+        "playlist_count": len(playlist_tracks),
+        "profile_tracks": len(profile.data.get("tracks", {})),
+        "tracked_in_playlist": sum(1 for row in rows if row["signals"] > 0),
+        "unscored_in_playlist": len(unscored_rows),
+        "positive_signals": sum(row["positive"] for row in rows),
+        "negative_signals": sum(row["negative"] for row in rows),
+        "top_positive": positive_rows[:top],
+        "top_negative": negative_rows[:top],
+        "prune_candidates": prune_candidates[:top],
+        "dominant_artists": [
+            {"artist": artist, "count": count}
+            for artist, count in artist_counts.most_common(top)
+        ],
+        "source_contexts": [
+            {"context": source, "count": count}
+            for source, count in source_counts.most_common(top)
+        ],
+        "tracked_outside_playlist": sorted(
+            tracked_outside,
+            key=lambda row: (abs(row["score"]), row["signals"], row["track"]),
+            reverse=True,
+        )[:top],
+        "notes": [
+            "Leitura apenas; nenhuma playlist ou memória foi alterada.",
+            "Use playlist prune para aplicar remoções candidatas.",
+        ],
+    }

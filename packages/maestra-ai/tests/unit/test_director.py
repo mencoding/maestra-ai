@@ -202,7 +202,9 @@ def test_importa_fora_da_playlist_em_modo_seguro(tmp_path):
         "progress_ms": 1000,
     }
     controller.playlist_tracks.return_value = []
-    history_analyzer.outside_playlist.return_value = {
+    history_analyzer.import_outside.return_value = {
+        "dry_run": False,
+        "context": "foco",
         "candidates": [
             {
                 "track": "Track Fora",
@@ -210,16 +212,19 @@ def test_importa_fora_da_playlist_em_modo_seguro(tmp_path):
                 "uri": "spotify:track:outside",
                 "plays": 2,
             }
-        ]
+        ],
+        "imported": 1,
+        "snapshot_id": "snap-1",
+        "uris_imported": ["spotify:track:outside"],
     }
 
     result = director.run_once(target=10, import_outside="safe")
 
     assert result["action"] == "outside_playlist_import"
     assert result["added"] == 1
-    controller.playlist_add.assert_called_once_with("playlist123", ["spotify:track:outside"])
+    # playlist_add agora é feito dentro de HistoryAnalyzer.import_outside
+    history_analyzer.import_outside.assert_called_once()
     taste.record_added.assert_called_once()
-    taste.record_context_signal.assert_called_once()
     curator.curate.assert_not_called()
 
 
@@ -236,7 +241,9 @@ def test_import_outside_dry_run_nao_altera_playlist_ou_gosto(tmp_path):
         "progress_ms": 1000,
     }
     controller.playlist_tracks.return_value = []
-    history_analyzer.outside_playlist.return_value = {
+    history_analyzer.import_outside.return_value = {
+        "dry_run": True,
+        "context": "foco",
         "candidates": [
             {
                 "track": "Track Fora",
@@ -244,7 +251,9 @@ def test_import_outside_dry_run_nao_altera_playlist_ou_gosto(tmp_path):
                 "uri": "spotify:track:outside",
                 "plays": 2,
             }
-        ]
+        ],
+        "total_candidates": 1,
+        "imported": 0,
     }
 
     result = director.run_once(target=10, import_outside="safe", dry_run=True)
@@ -269,15 +278,15 @@ def test_import_outside_seguro_ignora_sinal_contextual_negativo(tmp_path):
         "progress_ms": 1000,
     }
     controller.playlist_tracks.return_value = []
-    history_analyzer.outside_playlist.return_value = {
-        "candidates": [
-            {
-                "track": "Track Ruim",
-                "artist": "Artist Ruim",
-                "uri": "spotify:track:bad",
-                "plays": 3,
-            }
-        ]
+    # HistoryAnalyzer.import_outside já filtra sinais contextuais negativos
+    # internamente — simulamos resultado vazio para cair no fluxo do curator.
+    history_analyzer.import_outside.return_value = {
+        "dry_run": False,
+        "context": "foco",
+        "candidates": [],
+        "imported": 0,
+        "snapshot_id": "snap-x",
+        "uris_imported": [],
     }
     curator.curate.return_value = (
         [{"track": "Track B", "artist": "Artist B", "uri": "spotify:track:b"}],
@@ -302,3 +311,71 @@ def test_registra_decisao_em_jsonl(tmp_path):
     saved = json.loads(lines[0])
     assert saved["action"] == result["action"]
     assert saved["component"] == "maestra-director"
+
+
+class TestDirectorLifecycle:
+    def test_start_cria_pid_file_e_retorna_dict(self, tmp_path, monkeypatch):
+        from unittest.mock import patch, MagicMock
+        from maestra_ai.core import director as director_mod
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+
+        fake_proc = MagicMock()
+        fake_proc.pid = 12345
+        with patch("subprocess.Popen", return_value=fake_proc) as popen:
+            result = director_mod.start(interval=180, target=100)
+
+        assert result["status"] == "started"
+        assert result["pid"] == 12345
+        popen.assert_called_once()
+
+    def test_start_ja_rodando_retorna_already(self, tmp_path, monkeypatch):
+        from unittest.mock import patch
+        from maestra_ai.core import director as director_mod
+        from maestra_ai.core.storage import data_dir
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+        pid_path = data_dir() / "director.pid"
+        pid_path.parent.mkdir(parents=True, exist_ok=True)
+        pid_path.write_text("99999", encoding="utf-8")
+
+        with patch("os.kill") as mock_kill:  # kill(pid, 0) = vivo
+            result = director_mod.start(interval=60)
+
+        assert result["status"] == "already_running"
+
+    def test_stop_mata_processo_e_remove_pid(self, tmp_path, monkeypatch):
+        from unittest.mock import patch
+        from maestra_ai.core import director as director_mod
+        from maestra_ai.core.storage import data_dir
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+        pid_path = data_dir() / "director.pid"
+        pid_path.parent.mkdir(parents=True, exist_ok=True)
+        pid_path.write_text("12345", encoding="utf-8")
+
+        with patch("os.kill") as mock_kill:
+            result = director_mod.stop()
+
+        assert result["status"] == "stopped"
+        assert not pid_path.exists()
+        mock_kill.assert_called()
+
+    def test_stop_sem_pid_retorna_not_running(self, tmp_path, monkeypatch):
+        from maestra_ai.core import director as director_mod
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+
+        result = director_mod.stop()
+        assert result["status"] == "not_running"
+
+    def test_status_running(self, tmp_path, monkeypatch):
+        from unittest.mock import patch
+        from maestra_ai.core import director as director_mod
+        from maestra_ai.core.storage import data_dir
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+        pid_path = data_dir() / "director.pid"
+        pid_path.parent.mkdir(parents=True, exist_ok=True)
+        pid_path.write_text("12345", encoding="utf-8")
+
+        with patch("os.kill"):
+            result = director_mod.status()
+
+        assert result["status"] == "running"
+        assert result["pid"] == 12345

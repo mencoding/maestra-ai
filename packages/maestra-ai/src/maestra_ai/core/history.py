@@ -145,6 +145,88 @@ class HistoryAnalyzer:
             "context_query_candidates": self._context_query_candidates(genre_counts),
         }
 
+    def import_outside(
+        self,
+        *,
+        playlist_id,
+        context,
+        confirm=False,
+        count=10,
+        min_plays=2,
+        recent_limit=50,
+        taste=None,
+    ):
+        """Importa faixas ouvidas recentemente fora da playlist.
+
+        Dry-run por default (confirm=False): retorna apenas candidatos,
+        sem alterar playlist nem gosto. Com confirm=True: cria snapshot,
+        adiciona à playlist e registra sinais contextuais positivos
+        (se `taste` for fornecido).
+
+        Filtros aplicados:
+        - faixa não pode estar na playlist;
+        - mínimo de reproduções recentes (min_plays);
+        - se `taste` for fornecido, `context_score(uri, context)` deve
+          ser não-negativo (ignora faixas com sinal contextual negativo).
+        """
+        from maestra_ai.core import snapshot
+
+        analysis = self.outside_playlist(playlist_id, recent_limit=recent_limit)
+        candidates = []
+        for track in analysis.get("candidates", []):
+            if track.get("plays", 0) < min_plays:
+                continue
+            if taste is not None and taste.context_score(track["uri"], context) < 0:
+                continue
+            candidates.append({
+                "uri": track["uri"],
+                "track": track.get("track", ""),
+                "artist": track.get("artist", ""),
+                "plays": track.get("plays", 0),
+            })
+            if len(candidates) >= count:
+                break
+
+        if not confirm:
+            return {
+                "dry_run": True,
+                "context": context,
+                "candidates": candidates,
+                "total_candidates": len(candidates),
+                "imported": 0,
+            }
+
+        # Snapshot automático antes da mutação
+        playlist_tracks = self.controller.playlist_tracks(playlist_id)
+        snap_id = snapshot.create(
+            "import_outside",
+            {"playlist_id": playlist_id, "context": context, "playlist_tracks": playlist_tracks},
+        )
+
+        uris = [c["uri"] for c in candidates]
+        if uris:
+            self.controller.playlist_add(playlist_id, uris)
+            if taste is not None:
+                for c in candidates:
+                    event_id = f"outside-playlist-auto-safe:{context}:{c['uri']}"
+                    taste.record_context_signal(
+                        c["uri"],
+                        "good",
+                        context,
+                        source="outside_playlist_auto_safe",
+                        event_id=event_id,
+                        weight=1,
+                    )
+
+        return {
+            "dry_run": False,
+            "context": context,
+            "candidates": candidates,
+            "imported": len(uris),
+            "snapshot_id": snap_id,
+            "uris_imported": uris,
+        }
+
     def _context_query_candidates(self, genre_counts):
         genres = [genre for genre, _ in genre_counts.most_common(20)]
         return {

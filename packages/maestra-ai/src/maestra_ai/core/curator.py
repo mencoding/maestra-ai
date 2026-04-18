@@ -164,3 +164,43 @@ class Curator:
             return DEFAULT_CONTEXT
         context = str(context).strip()
         return context or DEFAULT_CONTEXT
+
+    def prune(self, *, playlist_id, context, confirm=False, top=20):
+        """Remove da playlist faixas com sinal contextual negativo ou global bad.
+
+        Dry-run por padrão (confirm=False). Em execução real, cria snapshot
+        automático antes de remover.
+        """
+        from maestra_ai.core import snapshot, taste as taste_mod
+
+        tracks = self.controller.playlist_tracks(playlist_id)
+        candidates = taste_mod._prune_candidates(tracks, self.taste, context)
+
+        if not confirm:
+            return {
+                "dry_run": True,
+                "context": context,
+                "candidates": candidates[:top],
+                "total_candidates": len(candidates),
+                "removed": 0,
+            }
+
+        # Execução real
+        state = {
+            "playlist_tracks": tracks,
+            "context": context,
+            "taste_snapshot": self.taste.data,
+        }
+        snap_id = snapshot.create("prune", state)
+
+        uris = [c["uri"] for c in candidates]
+        if uris:
+            self.controller.playlist_remove(playlist_id, uris)
+
+        return {
+            "dry_run": False,
+            "context": context,
+            "removed": len(uris),
+            "snapshot_id": snap_id,
+            "uris_removed": uris,
+        }

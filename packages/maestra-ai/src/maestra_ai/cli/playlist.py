@@ -7,7 +7,6 @@ from maestra_ai.cli import register
 from maestra_ai.cli._common import (
     PLAYLIST_ID,
     _curation_context,
-    _prune_candidates,
     _record_curated_tracks,
     error,
     output,
@@ -92,41 +91,16 @@ def cmd_playlist_remove(args, controller, **_):
     output({"status": "removed", "removed": len(uris), "uris": uris}, args.human)
 
 
-def cmd_playlist_prune(args, controller, taste, context_state, **_):
-    context, context_source = _curation_context(args, context_state)
-    tracks = controller.playlist_tracks(PLAYLIST_ID)
-    candidates = _prune_candidates(tracks, taste, context)
+def cmd_playlist_prune(args, controller, taste, context_state, curator, **_):
+    context = context_state.show() or {}
+    context_name = context.get("context") if isinstance(context, dict) else None
 
-    if not candidates:
-        output({
-            "status": "unchanged",
-            "removed": 0,
-            "context": context,
-            "context_source": context_source,
-            "message": "Nenhuma faixa candidata à poda.",
-        }, args.human)
-        return
-
-    if not args.confirm:
-        output({
-            "status": "dry_run",
-            "context": context,
-            "context_source": context_source,
-            "would_remove": len(candidates),
-            "tracks": candidates,
-            "note": "Nenhuma faixa removida. Use --confirm para aplicar.",
-        }, args.human)
-        return
-
-    uris = [track["uri"] for track in candidates]
-    controller.playlist_remove(PLAYLIST_ID, uris)
-    output({
-        "status": "pruned",
-        "context": context,
-        "context_source": context_source,
-        "removed": len(candidates),
-        "tracks": candidates,
-    }, args.human)
+    result = curator.prune(
+        playlist_id=PLAYLIST_ID,
+        context=context_name or "",
+        confirm=not args.dry_run,
+    )
+    output(result, args.human)
 
 
 def cmd_playlist_clear(args, controller, **_):
@@ -166,7 +140,8 @@ def _register(subparsers: argparse._SubParsersAction) -> None:
 
     p = sub.add_parser("prune", help="Poda contextual da playlist; dry-run por padrão")
     p.add_argument("--context", help="Contexto para avaliar; usa contexto ativo se omitido")
-    p.add_argument("--confirm", action="store_true", help="Aplica a remoção dos candidatos")
+    p.add_argument("--dry-run", action="store_true", default=True, help="Simula sem remover (padrão)")
+    p.add_argument("--confirm", dest="dry_run", action="store_false", help="Aplica a remoção dos candidatos")
     p.set_defaults(func=cmd_playlist_prune)
 
     p = sub.add_parser("clear", help="Limpa toda a playlist")
