@@ -54,7 +54,20 @@ def _build_call_tool_handler():
                 text=json.dumps({"error": err.to_human_dict()}, ensure_ascii=False),
             )]
 
-        result = await call_tool(name, args or {})
+        # Fix H4: envolve a chamada para garantir auditoria mesmo quando
+        # o handler (ou tools.call_tool) propaga exceção não-tratada. Antes,
+        # qualquer erro fora do try/except do registry pulava o audit.log
+        # e o cliente MCP recebia erro opaco sem trilha forense.
+        try:
+            result = await call_tool(name, args or {})
+        except Exception as e:
+            result = {
+                "error": {
+                    "code": "InternalError",
+                    "title": "Erro não tratado em tool",
+                    "what_happened": str(e),
+                },
+            }
 
         try:
             log_result = result if isinstance(result, dict) else {"raw": str(result)}

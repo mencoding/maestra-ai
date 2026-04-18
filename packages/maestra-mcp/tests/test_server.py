@@ -35,6 +35,50 @@ async def test_disabled_tool_nao_aparece_em_list(monkeypatch, tmp_path):
     assert "doctor" in names  # outras tools continuam
 
 
+@pytest.mark.asyncio
+async def test_server_audita_excecao_nao_tratada(monkeypatch, tmp_path):
+    """Fix H4: se tools.call_tool levanta exceção não-tratada, o server
+    deve ainda assim registrar audit.log com o erro resumido no
+    result_summary, em vez de pular a trilha."""
+    monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setenv("MAESTRA_STATE_DIR", str(tmp_path / "state"))
+    from maestra_ai.core import storage
+    storage.write_config({
+        "client_id": "c", "client_secret": "s",
+        "redirect_uri": "https://x/cb",
+    })
+
+    from unittest.mock import patch
+
+    from maestra_mcp.server import _build_call_tool_handler
+
+    calls = []
+
+    def fake_log(tool, args, result):
+        calls.append({"tool": tool, "args": args, "result": result})
+
+    async def exploding_call_tool(name, args):
+        raise RuntimeError("kaboom")
+
+    handler = _build_call_tool_handler()
+    with patch("maestra_mcp.server.call_tool", side_effect=exploding_call_tool), \
+         patch("maestra_ai.core.audit.log", side_effect=fake_log):
+        out = await handler("now", {"x": 1})
+
+    # Resposta TextContent com error dict serializado
+    assert len(out) == 1
+    payload = json.loads(out[0].text)
+    assert "error" in payload
+    assert payload["error"]["code"] == "InternalError"
+    assert "kaboom" in payload["error"]["what_happened"]
+
+    # Auditoria registrou o evento com erro no result_summary
+    assert len(calls) == 1, "audit.log deveria ter sido chamado mesmo com exceção"
+    assert calls[0]["tool"] == "now"
+    # result passa pelo summarizer, mas a chave 'error' deve estar presente
+    assert "error" in calls[0]["result"]
+
+
 def test_server_subprocess_responde_initialize_e_list_tools(tmp_path, monkeypatch):
     """Integration: inicia maestra-mcp como subprocess e fala JSON-RPC stdio."""
     env = os.environ.copy()
