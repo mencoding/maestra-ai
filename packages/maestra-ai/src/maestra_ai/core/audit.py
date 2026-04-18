@@ -55,6 +55,11 @@ def _redact_result(result: Any) -> Any:
             else:
                 summary[k] = _redact(v)
         return summary
+    # Fix M2: listas top-level viram summary de tamanho. Antes, caíam no
+    # fallback _redact e o payload inteiro (faixas, artistas) ia parar no
+    # audit log, derrotando o propósito do resumo.
+    if isinstance(result, list):
+        return {"items_count": len(result)}
     return _redact(result)
 
 

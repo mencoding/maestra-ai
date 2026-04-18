@@ -216,7 +216,20 @@ def _history_outside(args):
     from maestra_mcp.config import resolve_playlist_id
     playlist_id = resolve_playlist_id()
     if not playlist_id:
-        return {"outside": [], "note": "playlist_id não configurado"}
+        # Fix M4: sem playlist_id, retorna shape canônico com zeros em
+        # vez de {outside, note}. Shape divergente obrigava o consumidor
+        # a branchar sobre tipo de resposta — ruim para tools MCP.
+        return {
+            "recent_count": 0,
+            "playlist_count": 0,
+            "outside_count": 0,
+            "outside_play_events": 0,
+            "top_outside_artists": [],
+            "top_outside_tracks": [],
+            "tracks": [],
+            "candidates": [],
+            "note": "playlist_id não configurado",
+        }
     return build_deps()["history_analyzer"].outside_playlist(
         playlist_id, recent_limit=args.get("limit", 50),
     )
@@ -232,6 +245,8 @@ def _history_outside(args):
       {"type": "object", "properties": {
           "confirm": {"type": "boolean", "default": False},
           "context": {"type": "string"},
+          "top": {"type": "integer", "minimum": 1, "maximum": 100, "default": 20,
+                  "description": "Limite de candidatos retornados no dry-run"},
       }, "additionalProperties": False})
 def _playlist_prune(args):
     from maestra_mcp.config import resolve_playlist_id
@@ -241,6 +256,7 @@ def _playlist_prune(args):
         playlist_id=resolve_playlist_id(),
         context=ctx,
         confirm=args.get("confirm", False),
+        top=args.get("top", 20),
     )
 
 

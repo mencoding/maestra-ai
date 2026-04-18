@@ -26,6 +26,19 @@ def test_redacts_secrets(monkeypatch, tmp_path):
     assert "REDACTED" in content
 
 
+def test_redact_result_trata_lista_top_level():
+    """Fix M2: listas top-level devem virar {items_count: N} em vez de
+    passar o payload inteiro via _redact. Antes, handlers que retornam
+    list (ex.: devices, search) vazavam o payload completo no audit."""
+    out = audit._redact_result([{"uri": "spotify:track:a"}, {"uri": "spotify:track:b"}])
+    assert out == {"items_count": 2}
+    # Lista vazia
+    assert audit._redact_result([]) == {"items_count": 0}
+    # Dicts top-level continuam com comportamento atual
+    out_dict = audit._redact_result({"status": "ok"})
+    assert out_dict == {"status": "ok"}
+
+
 def test_rotate_to_gzip(monkeypatch, tmp_path):
     monkeypatch.setenv("MAESTRA_STATE_DIR", str(tmp_path / "state"))
     (tmp_path / "state").mkdir()

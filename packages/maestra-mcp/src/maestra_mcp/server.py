@@ -16,26 +16,54 @@ from maestra_mcp.tools import call_tool, iter_tool_defs
 logger = logging.getLogger("maestra-mcp")
 
 
+# Fix M3: cache de disabled_tools invalidado por mtime de config.json.
+# Antes, toda chamada MCP relia o arquivo — overhead ínfimo mas contínuo
+# e com risco de jitter sob carga. Cache com mtime mantém a semântica de
+# reload automático quando o usuário edita a config sem restartar o server.
+_DISABLED_CACHE: dict = {"mtime": None, "value": set()}
+
+
 def _disabled_tools() -> set[str]:
     from maestra_ai.core import storage
+    path = storage.config_dir() / "config.json"
+    try:
+        mtime = path.stat().st_mtime
+    except FileNotFoundError:
+        # Sem config: invalida cache e retorna vazio
+        _DISABLED_CACHE["mtime"] = None
+        _DISABLED_CACHE["value"] = set()
+        return set()
+    if _DISABLED_CACHE["mtime"] == mtime:
+        return _DISABLED_CACHE["value"]
     cfg = storage.read_config()
     raw = (cfg.get("mcp") or {}).get("disabled_tools", [])
     if not isinstance(raw, list):
         logger.warning("mcp.disabled_tools deve ser lista; ignorando.")
-        return set()
-    return set(raw)
+        disabled: set[str] = set()
+    else:
+        disabled = set(raw)
+    _DISABLED_CACHE["mtime"] = mtime
+    _DISABLED_CACHE["value"] = disabled
+    return disabled
 
 
 def _build_list_tools_handler():
     async def _list_tools() -> list[types.Tool]:
         disabled = _disabled_tools()
+        defs = iter_tool_defs()
+        # Fix M5: valida nomes em disabled_tools contra o registry. Se o
+        # usuário listar nome inexistente (typo, tool removida), logamos
+        # warning em vez de falhar silenciosamente. Não bloqueia list.
+        known = {t.name for t in defs}
+        for name in disabled - known:
+            logger.warning("Tool desabilitada não reconhecida: %s", name)
         return [
             types.Tool(
                 name=t.name,
                 description=t.description,
                 inputSchema=t.schema,
             )
-            for t in iter_tool_defs()
+            for t in defs
             if t.name not in disabled
         ]
     return _list_tools
@@ -54,7 +82,20 @@ def _build_call_tool_handler():
                 text=json.dumps({"error": err.to_human_dict()}, ensure_ascii=False),
             )]
 
-        result = await call_tool(name, args or {})
+        # Fix H4: envolve a chamada para garantir auditoria mesmo quando
+        # o handler (ou tools.call_tool) propaga exceção não-tratada. Antes,
+        # qualquer erro fora do try/except do registry pulava o audit.log
+        # e o cliente MCP recebia erro opaco sem trilha forense.
+        try:
+            result = await call_tool(name, args or {})
+        except Exception as e:
+            result = {
+                "error": {
+                    "code": "InternalError",
+                    "title": "Erro não tratado em tool",
+                    "what_happened": str(e),
+                },
+            }
 
         try:
             log_result = result if isinstance(result, dict) else {"raw": str(result)}

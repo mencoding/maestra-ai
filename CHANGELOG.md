@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-04-18
+
+Segundo hotfix da série v0.4. Pendências não-críticas do code review
+pós-v0.4.1 — dívidas de consistência, performance e observabilidade
+no stack MCP. Suite continua 100% verde.
+
+### Added
+- **`playlist_prune` MCP** (H3): schema expõe `top` (1..100, default 20)
+  e propaga ao `Curator.prune`. Alinha com o subcomando CLI.
+- **Auditoria de exceção não-tratada** (H4): `server._build_call_tool_handler`
+  envolve `call_tool` em try/except que converte qualquer exceção em
+  dict `{error: {code: InternalError, ...}}` e garante `audit.log` no
+  caminho de falha. Antes, erros fora do registry pulavam a trilha.
+- **Validação de `disabled_tools`** (M5): `list_tools` loga warning
+  quando `config.json::mcp.disabled_tools` contém nomes não presentes
+  no registry (typo, tool removida). Não bloqueia.
+
+### Changed
+- **`history_outside_playlist` MCP** (M4): sem `playlist_id` configurado,
+  retorna shape canônico com contadores em 0 e listas vazias, em vez
+  do dict divergente `{outside, note}`. Elimina branch no consumidor.
+- **`_disabled_tools`** (M3) agora cacheado por mtime de `config.json`.
+  Reloads continuam automáticos quando o usuário edita o arquivo.
+- **`deps._CACHE`** (M1): leitura/escrita protegidas por `threading.Lock`
+  via double-checked locking. Hardening para SDKs MCP que despacham
+  handlers em thread pool.
+- **`audit._redact_result`** (M2): lista top-level vira `{items_count: N}`
+  em vez de serializar payload inteiro. Fecha vazamento teórico em
+  handlers MCP que retornam `list` (ex.: `devices`, `search`).
+
+### Docs
+- **CHANGELOG v0.4.0** (H1): nota retroativa sobre a regressão temporária
+  dos flags `--count/--outside-*` em `director.start`. Corrigido em v0.4.1;
+  nota preserva o registro histórico.
+
+### Tests
+- 6 testes novos: `test_tools.py` (+2 — `top`, shape consistente),
+  `test_server.py` (+3 — audit em exceção, cache mtime, warning de
+  nome inválido), `test_deps.py` (+1 — thread safety), `test_audit.py`
+  (+1 — lista top-level).
+
 ## [0.4.1] — 2026-04-18
 
 Hotfix baseado em code review do v0.4.0. Corrige um bloqueador no MCP,
@@ -76,6 +117,14 @@ de IA via MCP stdio server. Segue design em
 - Fora de escopo: daemon IPC via unix socket (v0.5+), progress
   notifications em `onboard`/`curate` (SDK MCP-dependente, nice-to-have).
 - Publicação PyPI de `maestra-ai` e `maestra-mcp` é v0.6.0 (Plano 6).
+
+### Notas
+- Refactor R4 (`director.start/stop/status`) introduziu regressão
+  temporária onde os flags
+  `--count/--outside-min-plays/--outside-count/--outside-recent-limit`
+  eram aceitos pelo argparse mas silenciosamente ignorados. Corrigido
+  em v0.4.1. Se você passou esses flags em v0.4.0, verifique que o
+  comportamento esperado foi aplicado.
 
 ## [0.3.2] — 2026-04-18
 
