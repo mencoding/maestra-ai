@@ -143,29 +143,37 @@ def test_playlist_top_up_aceita_argumentos_extras_do_dispatcher(capsys):
 
 
 def test_playlist_prune_dry_run_nao_remove_candidatos_contextuais(capsys):
-    args = Namespace(context=None, confirm=False, human=False)
+    # Contrato novo: cmd_playlist_prune delega em curator.prune().
+    args = Namespace(context=None, dry_run=True, human=False)
     controller = MagicMock()
     taste = MagicMock()
     context_state = MagicMock()
     context_state.show.return_value = {"context": "foco"}
-    controller.playlist_tracks.return_value = [
-        {"track": "Ruim no Foco", "artist": "Artist A", "uri": "spotify:track:bad-context"},
-        {"track": "Boa", "artist": "Artist B", "uri": "spotify:track:good"},
-    ]
-    taste.should_remove.return_value = False
-    taste.context_score.side_effect = lambda uri, context: -1 if uri == "spotify:track:bad-context" else 1
+    curator = MagicMock()
+    curator.prune.return_value = {
+        "dry_run": True,
+        "context": "foco",
+        "candidates": [{"uri": "spotify:track:bad-context"}],
+        "total_candidates": 1,
+        "removed": 0,
+    }
 
     cli.cmd_playlist_prune(
         args,
         controller=controller,
         taste=taste,
         context_state=context_state,
+        curator=curator,
     )
 
+    curator.prune.assert_called_once_with(
+        playlist_id=cli.PLAYLIST_ID,
+        context="foco",
+        confirm=False,
+    )
     controller.playlist_remove.assert_not_called()
     output = capsys.readouterr().out
-    assert '"status": "dry_run"' in output
-    assert '"would_remove": 1' in output
+    assert '"dry_run": true' in output
     assert '"spotify:track:bad-context"' in output
 
 
@@ -187,55 +195,65 @@ def test_playlist_remove_remove_uris_unicas(capsys):
 
 
 def test_playlist_prune_confirm_remove_candidatos(capsys):
-    args = Namespace(context="foco", confirm=True, human=False)
+    # Contrato novo: dry_run=False aciona execução real no Curator.
+    args = Namespace(context="foco", dry_run=False, human=False)
     controller = MagicMock()
     taste = MagicMock()
     context_state = MagicMock()
     context_state.show.return_value = None
-    controller.playlist_tracks.return_value = [
-        {"track": "Ruim Global", "artist": "Artist A", "uri": "spotify:track:global-bad"},
-        {"track": "Neutra", "artist": "Artist B", "uri": "spotify:track:neutral"},
-    ]
-    taste.should_remove.side_effect = lambda uri: uri == "spotify:track:global-bad"
-    taste.context_score.return_value = 0
+    curator = MagicMock()
+    curator.prune.return_value = {
+        "dry_run": False,
+        "context": "",
+        "removed": 1,
+        "snapshot_id": "snap_abc",
+        "uris_removed": ["spotify:track:global-bad"],
+    }
 
     cli.cmd_playlist_prune(
         args,
         controller=controller,
         taste=taste,
         context_state=context_state,
+        curator=curator,
     )
 
-    controller.playlist_remove.assert_called_once_with(
-        cli.PLAYLIST_ID,
-        ["spotify:track:global-bad"],
+    curator.prune.assert_called_once_with(
+        playlist_id=cli.PLAYLIST_ID,
+        context="",
+        confirm=True,
     )
     output = capsys.readouterr().out
-    assert '"status": "pruned"' in output
     assert '"removed": 1' in output
+    assert '"snapshot_id": "snap_abc"' in output
 
 
 def test_playlist_prune_sem_candidatos_retorna_unchanged(capsys):
-    args = Namespace(context="foco", confirm=True, human=False)
+    # Sem candidatos: Curator retorna removed=0 em execução real.
+    args = Namespace(context="foco", dry_run=False, human=False)
     controller = MagicMock()
     taste = MagicMock()
     context_state = MagicMock()
     context_state.show.return_value = None
-    controller.playlist_tracks.return_value = [
-        {"track": "Boa", "artist": "Artist B", "uri": "spotify:track:good"},
-    ]
-    taste.should_remove.return_value = False
-    taste.context_score.return_value = 1
+    curator = MagicMock()
+    curator.prune.return_value = {
+        "dry_run": False,
+        "context": "",
+        "removed": 0,
+        "snapshot_id": "snap_empty",
+        "uris_removed": [],
+    }
 
     cli.cmd_playlist_prune(
         args,
         controller=controller,
         taste=taste,
         context_state=context_state,
+        curator=curator,
     )
 
     controller.playlist_remove.assert_not_called()
-    assert '"status": "unchanged"' in capsys.readouterr().out
+    assert '"removed": 0' in capsys.readouterr().out
 
 
 def test_taste_review_resume_contexto_sem_alterar_playlist(capsys):

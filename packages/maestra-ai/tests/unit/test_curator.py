@@ -179,3 +179,54 @@ class TestResolveQueries:
 
         assert queries[0] == "neoclassical minimal ambient dark study focus"
         assert "lo-fi instrumental" in queries
+
+
+class TestCuratorPrune:
+    def test_prune_dry_run_retorna_candidatos_sem_remover(self):
+        from unittest.mock import MagicMock
+        from maestra_ai.core.curator import Curator
+        from maestra_ai.core.taste import TasteProfile
+        import tempfile
+
+        controller = MagicMock()
+        controller.playlist_tracks.return_value = [
+            {"uri": "spotify:track:a", "track": "A", "artist": "ArtA"},
+            {"uri": "spotify:track:b", "track": "B", "artist": "ArtB"},
+        ]
+
+        with tempfile.TemporaryDirectory() as td:
+            taste = TasteProfile(f"{td}/taste.json")
+            # Marca A como ruim globalmente
+            taste.record_feedback("spotify:track:a", "bad", global_feedback=True)
+
+            curator = Curator(controller, taste)
+            result = curator.prune(playlist_id="pl_123", context="foco", confirm=False)
+
+            assert result["dry_run"] is True
+            assert result["removed"] == 0
+            assert len(result["candidates"]) >= 1
+            controller.playlist_remove.assert_not_called()
+
+    def test_prune_confirm_remove_e_cria_snapshot(self, tmp_path, monkeypatch):
+        from unittest.mock import MagicMock
+        from maestra_ai.core.curator import Curator
+        from maestra_ai.core.taste import TasteProfile
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+
+        controller = MagicMock()
+        controller.playlist_tracks.return_value = [
+            {"uri": "spotify:track:bad", "track": "Bad", "artist": "ArtBad"},
+        ]
+
+        taste = TasteProfile(str(tmp_path / "taste.json"))
+        taste.record_feedback("spotify:track:bad", "bad", global_feedback=True)
+
+        curator = Curator(controller, taste)
+        result = curator.prune(
+            playlist_id="pl_xyz", context="foco", confirm=True,
+        )
+
+        assert result["dry_run"] is False
+        assert result["removed"] >= 1
+        controller.playlist_remove.assert_called_once()
+        assert result["snapshot_id"]  # id não-vazio
