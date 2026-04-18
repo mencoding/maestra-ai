@@ -16,14 +16,35 @@ from maestra_mcp.tools import call_tool, iter_tool_defs
 logger = logging.getLogger("maestra-mcp")
 
 
+# Fix M3: cache de disabled_tools invalidado por mtime de config.json.
+# Antes, toda chamada MCP relia o arquivo — overhead ínfimo mas contínuo
+# e com risco de jitter sob carga. Cache com mtime mantém a semântica de
+# reload automático quando o usuário edita a config sem restartar o server.
+_DISABLED_CACHE: dict = {"mtime": None, "value": set()}
+
+
 def _disabled_tools() -> set[str]:
     from maestra_ai.core import storage
+    path = storage.config_dir() / "config.json"
+    try:
+        mtime = path.stat().st_mtime
+    except FileNotFoundError:
+        # Sem config: invalida cache e retorna vazio
+        _DISABLED_CACHE["mtime"] = None
+        _DISABLED_CACHE["value"] = set()
+        return set()
+    if _DISABLED_CACHE["mtime"] == mtime:
+        return _DISABLED_CACHE["value"]
     cfg = storage.read_config()
     raw = (cfg.get("mcp") or {}).get("disabled_tools", [])
     if not isinstance(raw, list):
         logger.warning("mcp.disabled_tools deve ser lista; ignorando.")
-        return set()
-    return set(raw)
+        disabled: set[str] = set()
+    else:
+        disabled = set(raw)
+    _DISABLED_CACHE["mtime"] = mtime
+    _DISABLED_CACHE["value"] = disabled
+    return disabled
 
 
 def _build_list_tools_handler():

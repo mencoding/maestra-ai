@@ -35,6 +35,46 @@ async def test_disabled_tool_nao_aparece_em_list(monkeypatch, tmp_path):
     assert "doctor" in names  # outras tools continuam
 
 
+def test_disabled_tools_cacheia_por_mtime(monkeypatch, tmp_path):
+    """Fix M3: _disabled_tools deve cachear o resultado e só reler
+    config.json quando mtime mudar. Reduz I/O por chamada MCP."""
+    import os
+    import time
+    from unittest.mock import patch as _patch
+
+    monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+    from maestra_ai.core import storage
+    storage.write_config({
+        "client_id": "c", "client_secret": "s",
+        "redirect_uri": "https://x/cb",
+        "mcp": {"disabled_tools": ["now"]},
+    })
+
+    from maestra_mcp import server as server_mod
+    # Limpa cache entre testes
+    server_mod._DISABLED_CACHE["mtime"] = None
+    server_mod._DISABLED_CACHE["value"] = set()
+
+    with _patch("maestra_ai.core.storage.read_config",
+                wraps=storage.read_config) as m:
+        # 3 chamadas seguidas sem mudar o arquivo — só 1 read_config
+        a = server_mod._disabled_tools()
+        b = server_mod._disabled_tools()
+        c = server_mod._disabled_tools()
+        assert a == b == c == {"now"}
+        assert m.call_count == 1, \
+            f"read_config deveria ter sido chamado 1x, veio {m.call_count}"
+
+        # Altera mtime — cache deve invalidar e reler
+        path = storage.config_dir() / "config.json"
+        future = time.time() + 10
+        os.utime(path, (future, future))
+        d = server_mod._disabled_tools()
+        assert d == {"now"}
+        assert m.call_count == 2, \
+            f"após mudar mtime, read_config deveria rodar de novo (veio {m.call_count})"
+
+
 @pytest.mark.asyncio
 async def test_server_audita_excecao_nao_tratada(monkeypatch, tmp_path):
     """Fix H4: se tools.call_tool levanta exceção não-tratada, o server
