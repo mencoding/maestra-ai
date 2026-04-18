@@ -9,7 +9,6 @@ from maestra_ai.cli._common import (
     PLAYLIST_ID,
     _curation_context,
     _record_curated_tracks,
-    _signal_weight,
     output,
 )
 
@@ -48,21 +47,33 @@ def cmd_history_outside_playlist(args, history_analyzer, **_):
 
 def cmd_history_import_outside(args, controller, taste, history_analyzer, context_state, **_):
     context, context_source = _curation_context(args, context_state)
-    analysis = history_analyzer.outside_playlist(PLAYLIST_ID, recent_limit=args.recent_limit)
-    candidates = [
-        track
-        for track in analysis["candidates"]
-        if track["plays"] >= args.min_plays
-    ][:args.count]
+
+    # Delega ao core.HistoryAnalyzer.import_outside — signal é aplicado lá.
+    result = history_analyzer.import_outside(
+        playlist_id=PLAYLIST_ID,
+        context=context,
+        confirm=not args.dry_run,
+        count=args.count,
+        min_plays=args.min_plays,
+        recent_limit=args.recent_limit,
+        taste=taste,
+        signal=args.signal,
+    )
+
+    candidates = result.get("candidates", [])
 
     if not candidates:
+        # Re-obtém contadores do outside_playlist para payload informativo.
+        analysis_info = history_analyzer.outside_playlist(
+            PLAYLIST_ID, recent_limit=args.recent_limit
+        )
         output({
             "status": "unchanged",
             "reason": "no_outside_candidates",
             "context": context,
             "context_source": context_source,
-            "recent_count": analysis["recent_count"],
-            "outside_count": analysis["outside_count"],
+            "recent_count": analysis_info["recent_count"],
+            "outside_count": analysis_info["outside_count"],
         }, args.human)
         return
 
@@ -73,33 +84,23 @@ def cmd_history_import_outside(args, controller, taste, history_analyzer, contex
             "context_source": context_source,
             "would_add": len(candidates),
             "tracks": candidates,
+            "signal": args.signal,
             "note": "Nenhuma playlist ou memória foi alterada.",
         }, args.human)
         return
 
-    controller.playlist_add(PLAYLIST_ID, [track["uri"] for track in candidates])
+    # Registro adicional de bookkeeping (taste.record_added) — distinto do
+    # sinal contextual, já aplicado pelo core.
     _record_curated_tracks(taste, candidates, context, ["outside-playlist"])
-
-    recorded_signals = 0
-    for track in candidates:
-        event_id = f"outside-playlist-import:{context}:{track['uri']}"
-        if taste.record_context_signal(
-            track["uri"],
-            args.signal,
-            context,
-            source="outside_playlist_import",
-            event_id=event_id,
-            weight=_signal_weight(args.signal),
-        ):
-            recorded_signals += 1
 
     output({
         "status": "imported",
         "context": context,
         "context_source": context_source,
-        "added": len(candidates),
-        "signal": args.signal,
-        "recorded_signals": recorded_signals,
+        "added": result.get("imported", len(candidates)),
+        "signal": result.get("signal", args.signal),
+        "recorded_signals": result.get("recorded_signals", 0),
+        "snapshot_id": result.get("snapshot_id"),
         "tracks": candidates,
     }, args.human)
 

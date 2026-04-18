@@ -320,9 +320,11 @@ def test_history_import_outside_dry_run_nao_altera_playlist_ou_gosto(capsys):
     history_analyzer = MagicMock()
     context_state = MagicMock()
     context_state.show.return_value = {"context": "foco"}
-    history_analyzer.outside_playlist.return_value = {
-        "recent_count": 2,
-        "outside_count": 1,
+    history_analyzer.import_outside.return_value = {
+        "dry_run": True,
+        "context": "foco",
+        "imported": 0,
+        "signal": "good",
         "candidates": [
             {
                 "track": "Track Fora",
@@ -341,9 +343,12 @@ def test_history_import_outside_dry_run_nao_altera_playlist_ou_gosto(capsys):
         context_state=context_state,
     )
 
-    controller.playlist_add.assert_not_called()
+    # CLI delega ao core; core não muta nada em dry_run
+    history_analyzer.import_outside.assert_called_once()
+    kwargs = history_analyzer.import_outside.call_args.kwargs
+    assert kwargs["confirm"] is False
+    assert kwargs["signal"] == "good"
     taste.record_added.assert_not_called()
-    taste.record_context_signal.assert_not_called()
     output = capsys.readouterr().out
     assert '"status": "dry_run"' in output
     assert '"would_add": 1' in output
@@ -361,25 +366,23 @@ def test_history_import_outside_adiciona_playlist_e_sinal_contextual(capsys):
     )
     controller = MagicMock()
     taste = MagicMock()
-    taste.record_context_signal.return_value = True
     history_analyzer = MagicMock()
     context_state = MagicMock()
     context_state.show.return_value = None
-    history_analyzer.outside_playlist.return_value = {
-        "recent_count": 3,
-        "outside_count": 2,
+    history_analyzer.import_outside.return_value = {
+        "dry_run": False,
+        "context": "revisao",
+        "imported": 1,
+        "snapshot_id": "snap_1",
+        "signal": "good",
+        "recorded_signals": 1,
+        "uris_imported": ["spotify:track:a"],
         "candidates": [
             {
                 "track": "Track Forte",
                 "artist": "Artist A",
                 "uri": "spotify:track:a",
                 "plays": 2,
-            },
-            {
-                "track": "Track Fraca",
-                "artist": "Artist B",
-                "uri": "spotify:track:b",
-                "plays": 1,
             },
         ],
     }
@@ -392,16 +395,54 @@ def test_history_import_outside_adiciona_playlist_e_sinal_contextual(capsys):
         context_state=context_state,
     )
 
-    controller.playlist_add.assert_called_once_with(
-        cli.PLAYLIST_ID,
-        ["spotify:track:a"],
-    )
+    # Playlist e signal recording acontecem dentro do core; CLI só delega
+    history_analyzer.import_outside.assert_called_once()
+    kwargs = history_analyzer.import_outside.call_args.kwargs
+    assert kwargs["confirm"] is True
+    assert kwargs["signal"] == "good"
+    assert kwargs["context"] == "revisao"
+    assert kwargs["taste"] is taste
+    # CLI ainda faz bookkeeping via taste.record_added (distinto do sinal)
     taste.record_added.assert_called_once_with(
         [{"uri": "spotify:track:a", "name": "Track Forte", "artist": "Artist A"}],
         context="revisao",
         queries_used=["outside-playlist"],
     )
-    taste.record_context_signal.assert_called_once()
     output = capsys.readouterr().out
     assert '"status": "imported"' in output
     assert '"recorded_signals": 1' in output
+
+
+def test_history_import_outside_propaga_signal_bad_ao_core():
+    """CLI com --signal bad repassa ao core.import_outside."""
+    args = Namespace(
+        recent_limit=20,
+        count=1,
+        min_plays=1,
+        context="foco",
+        signal="bad",
+        dry_run=True,
+        human=False,
+    )
+    controller = MagicMock()
+    taste = MagicMock()
+    history_analyzer = MagicMock()
+    history_analyzer.import_outside.return_value = {
+        "dry_run": True,
+        "imported": 0,
+        "signal": "bad",
+        "candidates": [{"uri": "u", "track": "t", "artist": "a", "plays": 1}],
+    }
+    context_state = MagicMock()
+    context_state.show.return_value = None
+
+    cli.cmd_history_import_outside(
+        args,
+        controller=controller,
+        taste=taste,
+        history_analyzer=history_analyzer,
+        context_state=context_state,
+    )
+
+    kwargs = history_analyzer.import_outside.call_args.kwargs
+    assert kwargs["signal"] == "bad"
