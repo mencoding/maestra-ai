@@ -46,8 +46,15 @@ def output(data, human=False):
 
 
 def error(message, code="ERROR"):
-    """Imprime erro em JSON para stderr e sai com código 1."""
-    print(json.dumps({"error": message, "code": code}, ensure_ascii=False), file=sys.stderr)
+    """Imprime erro em JSON para stderr e sai com código 1.
+
+    A mensagem passa por `redact_str` antes da serialização para evitar
+    vazamento de tokens Bearer ou secrets longos embutidos em strings
+    de exceção (spotipy etc.) — ver P0-R1 do review pós-v0.2.3.
+    """
+    from maestra_ai.core.security import redact_str
+    safe_message = redact_str(message)
+    print(json.dumps({"error": safe_message, "code": code}, ensure_ascii=False), file=sys.stderr)
     sys.exit(1)
 
 

@@ -76,6 +76,34 @@ def test_evento_sem_contexto_nao_vira_sinal(tmp_path):
     assert taste.get_context_signals("spotify:track:a") == []
 
 
+def test_linha_malformada_pulada_sem_abortar(tmp_path):
+    """P0-N2: linha com JSON inválido no meio do JSONL não deve abortar o loop."""
+    log_path = tmp_path / "events.jsonl"
+    taste = TasteProfile(str(tmp_path / "taste.json"))
+    append_event(log_path, make_event("listened_to_end_candidate", uri="spotify:track:a"))
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write("{linha quebrada sem fechar\n")
+    append_event(log_path, make_event("listened_to_end_candidate", uri="spotify:track:b"))
+
+    result = PlaybackEventProcessor(str(log_path), taste).process()
+
+    # linha ruim é ignorada; 2 eventos válidos processados
+    assert result["processed"] == 2
+
+
+def test_linha_nao_dict_ignorada(tmp_path):
+    """P0-N2: linha com JSON válido mas não-dict (ex: lista) deve ser ignorada."""
+    log_path = tmp_path / "events.jsonl"
+    taste = TasteProfile(str(tmp_path / "taste.json"))
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write('[1, 2, 3]\n')
+    append_event(log_path, make_event("listened_to_end_candidate"))
+
+    result = PlaybackEventProcessor(str(log_path), taste).process()
+
+    assert result["processed"] == 1
+
+
 def test_processamento_e_idempotente(tmp_path):
     log_path = tmp_path / "events.jsonl"
     taste = TasteProfile(str(tmp_path / "taste.json"))

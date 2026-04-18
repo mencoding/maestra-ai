@@ -2,6 +2,8 @@
 import fcntl
 import json
 import os
+import sys
+import time
 from datetime import datetime
 
 
@@ -22,11 +24,30 @@ class TasteProfile:
                 with open(self.path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 if not isinstance(data, dict):
+                    self._preserve_corrupt("estrutura JSON inválida (não é objeto)")
                     return self._empty_profile()
                 return self._migrate(data)
-            except (json.JSONDecodeError, OSError):
+            except (json.JSONDecodeError, OSError) as e:
+                self._preserve_corrupt(f"falha ao decodificar JSON: {e.__class__.__name__}")
                 return self._empty_profile()
         return self._empty_profile()
+
+    def _preserve_corrupt(self, reason):
+        """Move arquivo corrompido para .corrupt.<ts> em vez de descartar silenciosamente."""
+        backup = f"{self.path}.corrupt.{int(time.time() * 1000)}"
+        try:
+            os.rename(self.path, backup)
+            print(
+                f"AVISO: taste_profile corrompido ({reason}) movido para {backup}",
+                file=sys.stderr,
+            )
+        except OSError:
+            # Se nem o rename funcionar, pelo menos registramos o warning
+            print(
+                f"AVISO: taste_profile corrompido ({reason}) em {self.path} — "
+                "rename falhou, arquivo pode ser sobrescrito na próxima save()",
+                file=sys.stderr,
+            )
 
     def _empty_profile(self):
         return {
