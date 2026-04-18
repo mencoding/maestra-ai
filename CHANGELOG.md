@@ -7,6 +7,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4] — 2026-04-17
+
+Fecha 1 P0-regressão e 3 P0-novos identificados no review pós-v0.2.3
+(`docs/reviews/2026-04-17-pos-v023.md`). Não toca em P0-3/P0-5 (ratelimit
+persistente, locks em context/playback/feedback_prompt) — fica para v0.2.5
+antes da Fase 3.
+
+### Added
+- `core/security.py` — `redact_str` (regex p/ Bearer e tokens opacos) +
+  `redact_error_dict` (cobre `what_happened`, `title`, `where`, `body`).
+
+### Fixed
+- **P0-R1** — bypass do redact do P0-2 em v0.2.3: `cli/_common.py::error()`
+  recebia `str(SpotifyException)` cru de 8 pontos em `basic.py` e
+  `cli/_build_deps` embute `str(e)` em `what_happened` via f-string.
+  Agora `error()` aplica `redact_str` na mensagem e `main()` usa
+  `redact_error_dict` no dict inteiro.
+- **P0-N1** — `core/storage.py::load_refresh_token` retorna `None` em
+  `token.json` corrompido (antes: `JSONDecodeError` cru quebrava reauth).
+- **P0-N1.b** — `core/storage.py::read_config` levanta `ConfigError`
+  estruturado em config malformado (antes: traceback cru em `doctor`,
+  `auth setup`, `_build_deps`).
+- **P0-N2** — `core/playback_processor.py::_read_events` pula linhas
+  com JSON inválido ou não-dict em vez de abortar o loop. Linha
+  corrompida no JSONL não paraliza o pipeline do director.
+- **P0-N3** — `core/taste.py::_load` renomeia perfil corrompido para
+  `.corrupt.<ms>` + warning em stderr antes de retornar vazio. Corrige
+  regressão introduzida em v0.2.3: antes o fix silenciosamente
+  sobrescrevia o arquivo com `{}` na próxima `save()`.
+
+### Tests
+- 15 testes novos: `test_security.py` (8), `test_storage.py` (4),
+  `test_playback_processor.py` (2), `test_taste.py` (1). Suite:
+  216 → 231 passed.
+
+## [0.2.3] — 2026-04-17
+
+Fecha 4 P0 de segurança do code review das Fases 1 e 2
+(`docs/reviews/2026-04-17-fases-1-2.md`).
+
+### Fixed
+- **P0-1** — `core/snapshot.py::load` bloqueia path traversal via
+  regex `_SNAP_ID_RE = r"^[\w:\-]+$"` + check `is_relative_to` pós
+  `path.resolve()`. Vetor: `maestra rollback --snapshot ../../../etc/passwd`.
+- **P0-2** — `cli/__init__.py::main` redacta `err_dict["where"]` via
+  `core.audit._redact` antes de emitir JSON. Evita vazamento de
+  `client_secret`/`access_token` em logs de CI/CD. **Nota:** fechado de
+  forma incompleta nesta versão — o bypass em `cli/_common.py::error()`
+  foi identificado no review seguinte e corrigido em v0.2.4 (P0-R1).
+- **P0-4a** — schema validation em `core/snapshot.py`: `load()` valida
+  `isinstance(data, dict)` + presença de `state`; `list_snapshots()`
+  filtra entradas malformadas.
+- **P0-4b** — schema validation em `taste`, `context`, `feedback_prompt`,
+  `playback`: try/except `(JSONDecodeError, OSError)` + `isinstance dict`
+  degrada para estado vazio em vez de traceback cru. **Nota:** em
+  `taste._load` isto introduziu regressão (destruição silenciosa do
+  perfil); corrigido em v0.2.4 (P0-N3).
+
+### Tests
+- 12 testes novos cobrindo os 4 P0. Suite: 204 → 216 passed.
+
 ## [0.2.2] — 2026-04-17
 
 Fecha P1 do review de v0.2.0.
