@@ -71,23 +71,39 @@ SPOTIFY_SEARCH_PAGE_LIMIT = 10
 class SpotifyController:
     """Encapsula a API do Spotify. Métodos retornam dicts, sem I/O."""
 
-    def __init__(self):
-        cfg = config_dir()
-        load_dotenv(cfg / ".env")
-        scopes = [
-            "user-read-playback-state",
-            "user-modify-playback-state",
-            "playlist-modify-private",
-            "playlist-read-private",
-            "user-top-read",
-            "user-read-recently-played",
-            "user-library-read",
-        ]
-        self.sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
-            scope=" ".join(scopes),
-            open_browser=False,
-            cache_path=str(cfg / ".cache"),
-        ))
+    DEFAULT_SCOPES = (
+        "user-read-playback-state",
+        "user-modify-playback-state",
+        "playlist-modify-private",
+        "playlist-read-private",
+        "user-top-read",
+        "user-read-recently-played",
+        "user-library-read",
+    )
+
+    def __init__(self, sp=None, auth_manager=None):
+        """Instancia o controller.
+
+        Argumentos opcionais para injeção de dependência (DI) — caller pode
+        passar um `spotipy.Spotify` pré-configurado (`sp`) ou um
+        `SpotifyOAuth`/outro auth manager (`auth_manager`). Quando ambos são
+        None, instancia o default: OAuth via dashboard + cache em config_dir.
+
+        Pré-requisito para Fase 3 (OAuth real, MCP server) e para testes
+        que precisam mockar o SDK sem patchear globals.
+        """
+        if sp is not None:
+            self.sp = sp
+            return
+        if auth_manager is None:
+            cfg = config_dir()
+            load_dotenv(cfg / ".env")
+            auth_manager = SpotifyOAuth(
+                scope=" ".join(self.DEFAULT_SCOPES),
+                open_browser=False,
+                cache_path=str(cfg / ".cache"),
+            )
+        self.sp = spotipy.Spotify(auth_manager=auth_manager)
 
     def ensure_active_device(self):
         """Garante que há um dispositivo ativo. Retorna o device_id ou levanta erro.
