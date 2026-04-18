@@ -165,3 +165,78 @@ class TestHistoryImportOutside:
         assert result["imported"] >= 1
         controller.playlist_add.assert_called_once()
         assert result["snapshot_id"]
+
+    def test_import_outside_respeita_signal_bad(self, tmp_path, monkeypatch):
+        """Com signal='bad': registra sinal contextual negativo em taste."""
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+
+        controller = MagicMock()
+        controller.recently_played.return_value = [
+            {"uri": "spotify:track:z", "track": "Z", "artist": "ArtZ", "played_at": "t"},
+        ]
+        controller.playlist_tracks.return_value = []
+
+        taste = MagicMock()
+        taste.context_score.return_value = 0
+        taste.record_context_signal.return_value = True
+
+        analyzer = HistoryAnalyzer(controller)
+        result = analyzer.import_outside(
+            playlist_id="pl_abc",
+            context="foco",
+            confirm=True,
+            count=1,
+            min_plays=1,
+            taste=taste,
+            signal="bad",
+        )
+
+        assert result["dry_run"] is False
+        assert result["imported"] == 1
+        taste.record_context_signal.assert_called_once()
+        kwargs = taste.record_context_signal.call_args.kwargs
+        args_pos = taste.record_context_signal.call_args.args
+        # segundo argumento posicional é o signal
+        assert args_pos[1] == "bad"
+        # weight alinhado com _signal_weight('bad') == -1
+        assert kwargs.get("weight") == -1
+
+    def test_import_outside_rejeita_signal_invalido(self):
+        """Signal fora de {good, bad, skip} levanta ValueError."""
+        import pytest
+
+        controller = MagicMock()
+        analyzer = HistoryAnalyzer(controller)
+        with pytest.raises(ValueError, match="signal"):
+            analyzer.import_outside(
+                playlist_id="pl_abc",
+                context="foco",
+                confirm=False,
+                signal="invalido",
+            )
+
+    def test_import_outside_signal_default_good(self, tmp_path, monkeypatch):
+        """Sem passar signal: usa 'good' (retrocompatível)."""
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+
+        controller = MagicMock()
+        controller.recently_played.return_value = [
+            {"uri": "spotify:track:z", "track": "Z", "artist": "ArtZ", "played_at": "t"},
+        ]
+        controller.playlist_tracks.return_value = []
+
+        taste = MagicMock()
+        taste.context_score.return_value = 0
+
+        analyzer = HistoryAnalyzer(controller)
+        analyzer.import_outside(
+            playlist_id="pl_abc",
+            context="foco",
+            confirm=True,
+            count=1,
+            min_plays=1,
+            taste=taste,
+        )
+
+        args_pos = taste.record_context_signal.call_args.args
+        assert args_pos[1] == "good"
