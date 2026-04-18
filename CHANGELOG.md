@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] — 2026-04-18
+
+Hotfix de dois bugs revelados na primeira validação end-to-end da v0.3.0
+com credenciais reais.
+
+### Fixed
+- **`_InMemoryCacheHandler` em `core/client.py`** — dict do cache agora
+  inclui `expires_at=0` (força refresh imediato) e `scope` (casa com
+  DEFAULT_SCOPES). Em v0.3.0 populava só `{"refresh_token": ...}`,
+  spotipy descartava no `validate_token` e caía em fluxo OAuth
+  interativo que falha em ambiente não-TTY com `EOFError` — silenciando
+  completamente o TokenStore. Controller ficava como se sem token.
+- **`SpotifyOauthError` propagado cru em `_call_spotify`** — não tem
+  atributo `http_status`, então o handler genérico não pegava.
+  Agora capturado especificamente e convertido em `AuthError` com
+  sugestão `maestra auth login`. Casos típicos: refresh token inválido
+  (rotação de client_secret, client_id trocado, revogação remota).
+
+### Tests
+- 2 testes novos em `test_client.py`: validação de `expires_at` e
+  `scope` no cache handler; `SpotifyOauthError` → `AuthError`.
+- Teste existente de DI adaptado (era tautológico ao afirmar dict
+  completo). Suite: 287 → 290 passed.
+
 ## [0.3.0] — 2026-04-18
 
 Fase 3 do roadmap. Transforma o maestra-ai de pré-alpha com stubs de

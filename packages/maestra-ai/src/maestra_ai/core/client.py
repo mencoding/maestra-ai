@@ -4,6 +4,7 @@ import subprocess
 import time
 import spotipy
 from spotipy.cache_handler import CacheHandler
+from spotipy.exceptions import SpotifyOauthError
 from spotipy.oauth2 import SpotifyOAuth
 
 from maestra_ai.core.errors import AuthError, RateLimitError, SpotifyAPIError
@@ -51,6 +52,12 @@ def _call_spotify(fn, *args, **kwargs):
         result = fn(*args, **kwargs)
         breaker.record_success()
         return result
+    except SpotifyOauthError as e:
+        # Refresh token inválido, client_id mismatch, credenciais revogadas:
+        # orientar usuário a re-autenticar em vez de propagar traceback cru.
+        raise AuthError(
+            f"Falha de OAuth: {e}. Rode `maestra auth login` para re-autenticar.",
+        ) from e
     except Exception as e:
         status = getattr(e, "http_status", None)
         if status == 429:
@@ -72,18 +79,25 @@ class _InMemoryCacheHandler(CacheHandler):
     """CacheHandler que injeta o refresh_token no spotipy sem I/O.
 
     spotipy usa CacheHandler para ler/escrever token_info (access_token,
-    refresh_token, expires_at). Escrever em disco conflita com a persistência
-    via TokenStore — aqui apenas mantemos em memória, inicializando com o
-    refresh_token que o TokenStore entregou. O spotipy renova access_token
-    via refresh_token quando necessário; o refresh_token atualizado
-    (se o Spotify rotacionar) é refletido em memória mas não persistido —
-    persistência explícita ocorre em `auth.login`.
+    refresh_token, expires_at, scope). Escrever em disco conflita com a
+    persistência via TokenStore — aqui apenas mantemos em memória.
+
+    O dict precisa incluir `expires_at` (=0 força refresh imediato) e
+    `scope` (casa com DEFAULT_SCOPES para passar `validate_token` do
+    spotipy). Sem esses campos, spotipy descarta o cache e cai em fluxo
+    OAuth interativo — que falha em ambiente não-TTY (EOFError).
     """
 
-    def __init__(self, refresh_token: str | None = None):
-        self._token_info: dict | None = (
-            {"refresh_token": refresh_token} if refresh_token else None
-        )
+    def __init__(self, refresh_token: str | None = None, scope: str = ""):
+        if refresh_token:
+            self._token_info: dict | None = {
+                "refresh_token": refresh_token,
+                "access_token": "",
+                "expires_at": 0,  # força spotipy a chamar refresh_access_token
+                "scope": scope,
+            }
+        else:
+            self._token_info = None
 
     def get_cached_token(self):
         return self._token_info
@@ -122,13 +136,14 @@ class SpotifyController:
             from maestra_ai.core.token_store import default_token_store
             store = token_store or default_token_store()
             refresh_token = store.load()
+            scope = " ".join(self.DEFAULT_SCOPES)
             auth_manager = SpotifyOAuth(
                 client_id=cfg.get("client_id"),
                 client_secret=cfg.get("client_secret"),
                 redirect_uri=cfg.get("redirect_uri"),
-                scope=" ".join(self.DEFAULT_SCOPES),
+                scope=scope,
                 open_browser=False,
-                cache_handler=_InMemoryCacheHandler(refresh_token),
+                cache_handler=_InMemoryCacheHandler(refresh_token, scope=scope),
             )
         self.sp = spotipy.Spotify(auth_manager=auth_manager)
 
