@@ -202,7 +202,9 @@ def test_importa_fora_da_playlist_em_modo_seguro(tmp_path):
         "progress_ms": 1000,
     }
     controller.playlist_tracks.return_value = []
-    history_analyzer.outside_playlist.return_value = {
+    history_analyzer.import_outside.return_value = {
+        "dry_run": False,
+        "context": "foco",
         "candidates": [
             {
                 "track": "Track Fora",
@@ -210,16 +212,19 @@ def test_importa_fora_da_playlist_em_modo_seguro(tmp_path):
                 "uri": "spotify:track:outside",
                 "plays": 2,
             }
-        ]
+        ],
+        "imported": 1,
+        "snapshot_id": "snap-1",
+        "uris_imported": ["spotify:track:outside"],
     }
 
     result = director.run_once(target=10, import_outside="safe")
 
     assert result["action"] == "outside_playlist_import"
     assert result["added"] == 1
-    controller.playlist_add.assert_called_once_with("playlist123", ["spotify:track:outside"])
+    # playlist_add agora é feito dentro de HistoryAnalyzer.import_outside
+    history_analyzer.import_outside.assert_called_once()
     taste.record_added.assert_called_once()
-    taste.record_context_signal.assert_called_once()
     curator.curate.assert_not_called()
 
 
@@ -236,7 +241,9 @@ def test_import_outside_dry_run_nao_altera_playlist_ou_gosto(tmp_path):
         "progress_ms": 1000,
     }
     controller.playlist_tracks.return_value = []
-    history_analyzer.outside_playlist.return_value = {
+    history_analyzer.import_outside.return_value = {
+        "dry_run": True,
+        "context": "foco",
         "candidates": [
             {
                 "track": "Track Fora",
@@ -244,7 +251,9 @@ def test_import_outside_dry_run_nao_altera_playlist_ou_gosto(tmp_path):
                 "uri": "spotify:track:outside",
                 "plays": 2,
             }
-        ]
+        ],
+        "total_candidates": 1,
+        "imported": 0,
     }
 
     result = director.run_once(target=10, import_outside="safe", dry_run=True)
@@ -269,15 +278,15 @@ def test_import_outside_seguro_ignora_sinal_contextual_negativo(tmp_path):
         "progress_ms": 1000,
     }
     controller.playlist_tracks.return_value = []
-    history_analyzer.outside_playlist.return_value = {
-        "candidates": [
-            {
-                "track": "Track Ruim",
-                "artist": "Artist Ruim",
-                "uri": "spotify:track:bad",
-                "plays": 3,
-            }
-        ]
+    # HistoryAnalyzer.import_outside já filtra sinais contextuais negativos
+    # internamente — simulamos resultado vazio para cair no fluxo do curator.
+    history_analyzer.import_outside.return_value = {
+        "dry_run": False,
+        "context": "foco",
+        "candidates": [],
+        "imported": 0,
+        "snapshot_id": "snap-x",
+        "uris_imported": [],
     }
     curator.curate.return_value = (
         [{"track": "Track B", "artist": "Artist B", "uri": "spotify:track:b"}],

@@ -110,3 +110,58 @@ def test_outside_playlist_candidatos_priorizam_repeticao_e_recencia():
         "spotify:track:repeat",
         "spotify:track:recent",
     ]
+
+
+class TestHistoryImportOutside:
+    """Testes do novo método import_outside extraído do Director."""
+
+    def test_import_outside_dry_run_retorna_candidatos(self):
+        """Sem confirm: retorna candidatos sem alterar playlist."""
+        controller = MagicMock()
+        controller.recently_played.return_value = [
+            {"uri": "spotify:track:x", "track": "X", "artist": "ArtX", "played_at": "2026-04-17T10:00:00Z"},
+            {"uri": "spotify:track:y", "track": "Y", "artist": "ArtY", "played_at": "2026-04-17T10:05:00Z"},
+        ]
+        controller.playlist_tracks.return_value = []
+
+        analyzer = HistoryAnalyzer(controller)
+        result = analyzer.import_outside(
+            playlist_id="pl_123",
+            context="foco",
+            confirm=False,
+            count=5,
+            min_plays=1,
+        )
+
+        assert result["dry_run"] is True
+        assert result["imported"] == 0
+        assert len(result["candidates"]) >= 1
+        controller.playlist_add.assert_not_called()
+
+    def test_import_outside_confirm_adiciona_a_playlist(self, tmp_path, monkeypatch):
+        """Com confirm=True: cria snapshot, adiciona à playlist e grava sinais."""
+        from maestra_ai.core.taste import TasteProfile
+
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+
+        controller = MagicMock()
+        controller.recently_played.return_value = [
+            {"uri": "spotify:track:z", "track": "Z", "artist": "ArtZ", "played_at": "t"},
+        ]
+        controller.playlist_tracks.return_value = []
+
+        taste = TasteProfile(str(tmp_path / "taste.json"))
+        analyzer = HistoryAnalyzer(controller)
+        result = analyzer.import_outside(
+            playlist_id="pl_abc",
+            context="foco",
+            confirm=True,
+            count=1,
+            min_plays=1,
+            taste=taste,
+        )
+
+        assert result["dry_run"] is False
+        assert result["imported"] >= 1
+        controller.playlist_add.assert_called_once()
+        assert result["snapshot_id"]

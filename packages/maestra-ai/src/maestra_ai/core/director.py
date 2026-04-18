@@ -70,17 +70,24 @@ class MusicDirector:
         needed = max(target - context_count, 1)
 
         if import_outside == "safe" and self.history_analyzer:
-            outside_tracks = self._safe_outside_candidates(
-                context,
-                limit=min(outside_count, needed, 2),
+            # Delega para HistoryAnalyzer.import_outside: em dry_run, apenas
+            # coleta candidatos; caso contrário, efetiva import + sinais.
+            outside_limit = min(outside_count, needed, 2)
+            outside_result = self.history_analyzer.import_outside(
+                playlist_id=self.playlist_id,
+                context=context,
+                confirm=not dry_run,
+                count=outside_limit,
                 min_plays=outside_min_plays,
                 recent_limit=outside_recent_limit,
+                taste=self.taste,
             )
+            outside_tracks = outside_result.get("candidates", [])
             if outside_tracks:
                 if not dry_run:
-                    self.controller.playlist_add(self.playlist_id, [track["uri"] for track in outside_tracks])
+                    # Registra no perfil de gosto como "added" (manteve
+                    # comportamento anterior do Director).
                     self._record_curated_tracks(outside_tracks, context, ["outside-playlist:auto-safe"])
-                    self._record_outside_signals(outside_tracks, context)
 
                 return self._record({
                     "action": "outside_playlist_import",
@@ -174,39 +181,6 @@ class MusicDirector:
             for track in tracks
         ]
         self.taste.record_added(tracks_info, context=context, queries_used=queries_used)
-
-    def _safe_outside_candidates(self, context, limit, min_plays, recent_limit):
-        if limit <= 0:
-            return []
-        analysis = self.history_analyzer.outside_playlist(
-            self.playlist_id,
-            recent_limit=recent_limit,
-        )
-        candidates = []
-        for track in analysis.get("candidates", []):
-            if track.get("plays", 0) < min_plays:
-                continue
-            if self.taste.context_score(track["uri"], context) < 0:
-                continue
-            candidates.append(track)
-            if len(candidates) >= limit:
-                break
-        return candidates
-
-    def _record_outside_signals(self, tracks, context):
-        recorded = 0
-        for track in tracks:
-            event_id = f"outside-playlist-auto-safe:{context}:{track['uri']}"
-            if self.taste.record_context_signal(
-                track["uri"],
-                "good",
-                context,
-                source="outside_playlist_auto_safe",
-                event_id=event_id,
-                weight=1,
-            ):
-                recorded += 1
-        return recorded
 
     def _record(self, decision):
         decision = {
