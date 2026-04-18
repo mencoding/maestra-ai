@@ -155,13 +155,19 @@ class HistoryAnalyzer:
         min_plays=2,
         recent_limit=50,
         taste=None,
+        signal="good",
     ):
         """Importa faixas ouvidas recentemente fora da playlist.
 
         Dry-run por default (confirm=False): retorna apenas candidatos,
         sem alterar playlist nem gosto. Com confirm=True: cria snapshot,
-        adiciona à playlist e registra sinais contextuais positivos
-        (se `taste` for fornecido).
+        adiciona à playlist e registra sinais contextuais (positivos,
+        negativos ou skip) conforme `signal`, se `taste` for fornecido.
+
+        Parâmetros:
+        - signal: um de {"good", "bad", "skip"}. Default "good". Usado
+          no registro de sinais contextuais via `taste.record_context_signal`.
+          Peso é derivado de `core.taste._signal_weight(signal)`.
 
         Filtros aplicados:
         - faixa não pode estar na playlist;
@@ -170,6 +176,13 @@ class HistoryAnalyzer:
           ser não-negativo (ignora faixas com sinal contextual negativo).
         """
         from maestra_ai.core import snapshot
+        from maestra_ai.core.taste import _signal_weight
+
+        # Validação do signal — evita gravar sinal inválido silenciosamente
+        if signal not in ("good", "bad", "skip"):
+            raise ValueError(
+                f"signal inválido: {signal!r}. Use 'good', 'bad' ou 'skip'."
+            )
 
         analysis = self.outside_playlist(playlist_id, recent_limit=recent_limit)
         candidates = []
@@ -194,6 +207,7 @@ class HistoryAnalyzer:
                 "candidates": candidates,
                 "total_candidates": len(candidates),
                 "imported": 0,
+                "signal": signal,
             }
 
         # Snapshot automático antes da mutação
@@ -204,19 +218,22 @@ class HistoryAnalyzer:
         )
 
         uris = [c["uri"] for c in candidates]
+        recorded_signals = 0
         if uris:
             self.controller.playlist_add(playlist_id, uris)
             if taste is not None:
+                weight = _signal_weight(signal)
                 for c in candidates:
                     event_id = f"outside-playlist-auto-safe:{context}:{c['uri']}"
-                    taste.record_context_signal(
+                    if taste.record_context_signal(
                         c["uri"],
-                        "good",
+                        signal,
                         context,
                         source="outside_playlist_auto_safe",
                         event_id=event_id,
-                        weight=1,
-                    )
+                        weight=weight,
+                    ):
+                        recorded_signals += 1
 
         return {
             "dry_run": False,
@@ -225,6 +242,8 @@ class HistoryAnalyzer:
             "imported": len(uris),
             "snapshot_id": snap_id,
             "uris_imported": uris,
+            "signal": signal,
+            "recorded_signals": recorded_signals,
         }
 
     def _context_query_candidates(self, genre_counts):
