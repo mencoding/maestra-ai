@@ -3,6 +3,8 @@ import json
 import os
 from datetime import datetime, timedelta
 
+from maestra_ai.core.storage import update_json_under_lock
+
 
 class FeedbackPrompter:
     """Decide se há evidência suficiente para pedir feedback ao usuário."""
@@ -58,12 +60,16 @@ class FeedbackPrompter:
         }
 
     def mark_prompted(self, context):
-        """Registra que uma pergunta foi feita para aplicar cooldown."""
-        data = self._load_state()
-        data[context] = {"last_prompt_at": datetime.now().isoformat(timespec="seconds")}
-        os.makedirs(os.path.dirname(self.state_path) or ".", exist_ok=True)
-        with open(self.state_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+        """Registra que uma pergunta foi feita para aplicar cooldown.
+
+        Usa read-modify-write atômico para não perder marcas de outros
+        contextos gravadas por processos concorrentes (daemon + CLI).
+        """
+        now = datetime.now().isoformat(timespec="seconds")
+        update_json_under_lock(
+            self.state_path,
+            lambda d: {**d, context: {"last_prompt_at": now}},
+        )
         return {"status": "recorded", "context": context}
 
     def _signals_for_context(self, taste, context):

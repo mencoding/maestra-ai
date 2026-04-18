@@ -7,32 +7,58 @@ from spotipy.oauth2 import SpotifyOAuth
 from dotenv import load_dotenv
 
 from maestra_ai.core.errors import AuthError, RateLimitError, SpotifyAPIError
-from maestra_ai.core.ratelimit import CircuitBreaker, TokenBucket
-from maestra_ai.core.storage import config_dir
+from maestra_ai.core.ratelimit import PersistentCircuitBreaker, PersistentTokenBucket
+from maestra_ai.core.storage import config_dir, state_dir
 
 
-_bucket = TokenBucket(capacity=60, refill_per_sec=1.0)  # ~60 req/min
-_breaker = CircuitBreaker(max_failures=3, window_sec=60, cooldown_sec=300)
+def _ratelimit_db_path() -> str:
+    return str(state_dir() / "ratelimit.db")
+
+
+# Singletons compartilhados entre daemon (director run) e CLI manual via SQLite.
+# Preguiçosos para respeitar MAESTRA_STATE_DIR setado em testes via monkeypatch.
+_bucket: PersistentTokenBucket | None = None
+_breaker: PersistentCircuitBreaker | None = None
+
+
+def _get_bucket() -> PersistentTokenBucket:
+    global _bucket
+    if _bucket is None:
+        _bucket = PersistentTokenBucket(
+            capacity=60, refill_per_sec=1.0, db_path=_ratelimit_db_path()
+        )
+    return _bucket
+
+
+def _get_breaker() -> PersistentCircuitBreaker:
+    global _breaker
+    if _breaker is None:
+        _breaker = PersistentCircuitBreaker(
+            max_failures=3, window_sec=60, cooldown_sec=300, db_path=_ratelimit_db_path()
+        )
+    return _breaker
 
 
 def _call_spotify(fn, *args, **kwargs):
     """Chama função do spotipy com rate limit + circuit breaker."""
-    if not _breaker.allow():
+    bucket = _get_bucket()
+    breaker = _get_breaker()
+    if not breaker.allow():
         raise RateLimitError("Circuit breaker aberto; tente em ~5min.")
-    if not _bucket.wait_and_acquire(timeout=10.0):
+    if not bucket.wait_and_acquire(timeout=10.0):
         raise RateLimitError("Rate bucket esgotado (timeout local).")
     try:
         result = fn(*args, **kwargs)
-        _breaker.record_success()
+        breaker.record_success()
         return result
     except Exception as e:
         status = getattr(e, "http_status", None)
         if status == 429:
             retry_after = int(getattr(e, "headers", {}).get("Retry-After", "1"))
-            _breaker.record_failure()
+            breaker.record_failure()
             raise RateLimitError(str(e), retry_after=retry_after) from e
         if status in (500, 502, 503, 504):
-            _breaker.record_failure()
+            breaker.record_failure()
             raise SpotifyAPIError(str(e), status=status) from e
         if status == 401:
             raise AuthError(str(e)) from e
@@ -45,23 +71,39 @@ SPOTIFY_SEARCH_PAGE_LIMIT = 10
 class SpotifyController:
     """Encapsula a API do Spotify. Métodos retornam dicts, sem I/O."""
 
-    def __init__(self):
-        cfg = config_dir()
-        load_dotenv(cfg / ".env")
-        scopes = [
-            "user-read-playback-state",
-            "user-modify-playback-state",
-            "playlist-modify-private",
-            "playlist-read-private",
-            "user-top-read",
-            "user-read-recently-played",
-            "user-library-read",
-        ]
-        self.sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
-            scope=" ".join(scopes),
-            open_browser=False,
-            cache_path=str(cfg / ".cache"),
-        ))
+    DEFAULT_SCOPES = (
+        "user-read-playback-state",
+        "user-modify-playback-state",
+        "playlist-modify-private",
+        "playlist-read-private",
+        "user-top-read",
+        "user-read-recently-played",
+        "user-library-read",
+    )
+
+    def __init__(self, sp=None, auth_manager=None):
+        """Instancia o controller.
+
+        Argumentos opcionais para injeção de dependência (DI) — caller pode
+        passar um `spotipy.Spotify` pré-configurado (`sp`) ou um
+        `SpotifyOAuth`/outro auth manager (`auth_manager`). Quando ambos são
+        None, instancia o default: OAuth via dashboard + cache em config_dir.
+
+        Pré-requisito para Fase 3 (OAuth real, MCP server) e para testes
+        que precisam mockar o SDK sem patchear globals.
+        """
+        if sp is not None:
+            self.sp = sp
+            return
+        if auth_manager is None:
+            cfg = config_dir()
+            load_dotenv(cfg / ".env")
+            auth_manager = SpotifyOAuth(
+                scope=" ".join(self.DEFAULT_SCOPES),
+                open_browser=False,
+                cache_path=str(cfg / ".cache"),
+            )
+        self.sp = spotipy.Spotify(auth_manager=auth_manager)
 
     def ensure_active_device(self):
         """Garante que há um dispositivo ativo. Retorna o device_id ou levanta erro.

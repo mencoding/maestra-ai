@@ -3,6 +3,8 @@ import json
 import os
 from datetime import datetime, timedelta
 
+from maestra_ai.core.storage import atomic_write_json
+
 
 class ContextState:
     """Gerencia o contexto musical ativo em arquivo JSON."""
@@ -17,9 +19,7 @@ class ContextState:
             "set_at": datetime.now().isoformat(timespec="seconds"),
             "ttl_minutes": ttl_minutes,
         }
-        os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
-        with open(self.path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+        atomic_write_json(self.path, data)
         return data
 
     def show(self):

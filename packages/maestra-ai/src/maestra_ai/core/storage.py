@@ -1,10 +1,12 @@
 """Armazenamento local com XDG + env overrides + keyring (fallback chmod 600)."""
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import stat
 from pathlib import Path
+from typing import Any
 
 try:
     import keyring  # type: ignore[import-untyped]
@@ -46,6 +48,67 @@ def snapshots_dir() -> Path:
 def ensure_dirs() -> None:
     for d in (config_dir(), data_dir(), state_dir(), snapshots_dir()):
         d.mkdir(parents=True, exist_ok=True)
+
+
+def update_json_under_lock(
+    path: str | os.PathLike,
+    mutator,
+    *,
+    default: Any = None,
+    indent: int = 2,
+) -> Any:
+    """Read-modify-write atômico sob lock exclusivo.
+
+    Adquire `fcntl.LOCK_EX`, relê o arquivo (ou usa `default` se não existir
+    ou estiver corrompido), aplica `mutator(data)` → novo dict, escreve em
+    tmp e faz `os.replace`. Elimina janela de lost-update entre processos
+    concorrentes (daemon + CLI manual).
+
+    Retorna o valor escrito (útil para o caller inspecionar o resultado
+    do merge sem reler o arquivo).
+    """
+    path = os.fspath(path)
+    parent = os.path.dirname(path) or "."
+    os.makedirs(parent, exist_ok=True)
+    if default is None:
+        default = {}
+    lock_path = f"{path}.lock"
+    tmp_path = f"{path}.tmp"
+    with open(lock_path, "w", encoding="utf-8") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    current = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                current = default
+        else:
+            current = default
+        updated = mutator(current)
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(updated, f, indent=indent, ensure_ascii=False)
+        os.replace(tmp_path, path)
+    return updated
+
+
+def atomic_write_json(path: str | os.PathLike, data: Any, *, indent: int = 2) -> None:
+    """Escreve `data` como JSON em `path` com lock exclusivo + rename atômico.
+
+    Fecha P0-5: serializa writes concorrentes entre daemon (director run) e
+    CLI manual. Usa `fcntl.LOCK_EX` em `<path>.lock` durante toda a operação,
+    escreve em `<path>.tmp` e faz `os.replace` (POSIX atomic rename). Leitores
+    concorrentes sempre veem o conteúdo antigo ou o novo — nunca um parcial.
+    """
+    path = os.fspath(path)
+    parent = os.path.dirname(path) or "."
+    os.makedirs(parent, exist_ok=True)
+    lock_path = f"{path}.lock"
+    tmp_path = f"{path}.tmp"
+    with open(lock_path, "w", encoding="utf-8") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=indent, ensure_ascii=False)
+        os.replace(tmp_path, path)
 
 
 def read_config() -> dict:

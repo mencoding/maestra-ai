@@ -3,6 +3,8 @@ import json
 import os
 from datetime import datetime
 
+from maestra_ai.core.storage import atomic_write_json
+
 
 class PlaybackObserver:
     """Detecta transições de playback sem inferir gosto musical."""
@@ -116,12 +118,10 @@ class PlaybackObserver:
             return None
 
     def _save_state(self, current):
-        os.makedirs(os.path.dirname(self.state_path) or ".", exist_ok=True)
         if current is None:
             self._clear_state()
             return
-        with open(self.state_path, "w", encoding="utf-8") as f:
-            json.dump(current, f, indent=2, ensure_ascii=False)
+        atomic_write_json(self.state_path, current)
 
     def _clear_state(self):
         if os.path.exists(self.state_path):
