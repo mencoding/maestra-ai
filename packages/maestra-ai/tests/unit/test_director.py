@@ -328,6 +328,35 @@ class TestDirectorLifecycle:
         assert result["pid"] == 12345
         popen.assert_called_once()
 
+    def test_start_propaga_count_e_outside_flags(self, tmp_path, monkeypatch):
+        # Garante que start() propaga count/outside-* para o subprocess
+        from unittest.mock import patch, MagicMock
+        from maestra_ai.core import director as director_mod
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+
+        fake_proc = MagicMock()
+        fake_proc.pid = 777
+        with patch("subprocess.Popen", return_value=fake_proc) as popen:
+            director_mod.start(
+                interval=60,
+                target=50,
+                count=4,
+                outside_min_plays=3,
+                outside_count=5,
+                outside_recent_limit=80,
+            )
+
+        cmd = popen.call_args.args[0]
+        # Verifica presença de cada flag com o valor correspondente
+        assert "--count" in cmd
+        assert cmd[cmd.index("--count") + 1] == "4"
+        assert "--outside-min-plays" in cmd
+        assert cmd[cmd.index("--outside-min-plays") + 1] == "3"
+        assert "--outside-count" in cmd
+        assert cmd[cmd.index("--outside-count") + 1] == "5"
+        assert "--outside-recent-limit" in cmd
+        assert cmd[cmd.index("--outside-recent-limit") + 1] == "80"
+
     def test_start_ja_rodando_retorna_already(self, tmp_path, monkeypatch):
         from unittest.mock import patch
         from maestra_ai.core import director as director_mod
