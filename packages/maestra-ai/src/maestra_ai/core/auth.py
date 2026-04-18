@@ -11,6 +11,7 @@ from __future__ import annotations
 import webbrowser
 from typing import Callable
 
+from spotipy.cache_handler import CacheHandler
 from spotipy.oauth2 import SpotifyOAuth
 
 from maestra_ai.core import storage
@@ -30,10 +31,12 @@ SCOPES = " ".join([
 ])
 
 
-class _NoopCacheHandler:
+class _NoopCacheHandler(CacheHandler):
     """Impede spotipy de ler/escrever cache em disco durante login.
 
     Persistência é feita via TokenStore depois do get_access_token.
+    Precisa herdar CacheHandler: spotipy 2.26+ faz `issubclass` no
+    `SpotifyOAuth.__init__` e crasha com AssertionError caso contrário.
     """
 
     def get_cached_token(self):

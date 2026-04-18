@@ -32,6 +32,32 @@ class TestAuthSetup:
         assert cfg["client_id"] == "a"
 
 
+class TestNoopCacheHandler:
+    def test_e_subclasse_de_spotipy_cache_handler(self):
+        """v0.3.0/v0.3.1: _NoopCacheHandler não herdava CacheHandler,
+        spotipy 2.26+ falhava com AssertionError em SpotifyOAuth.__init__.
+        """
+        from spotipy.cache_handler import CacheHandler
+        from maestra_ai.core.auth import _NoopCacheHandler
+        assert issubclass(_NoopCacheHandler, CacheHandler)
+
+    def test_spotify_oauth_aceita_noop_handler(self):
+        """Smoke: SpotifyOAuth real aceita o _NoopCacheHandler sem
+        mockar nada. Teste fecha o gap de cobertura da v0.3.0."""
+        from spotipy.oauth2 import SpotifyOAuth
+        from maestra_ai.core.auth import _NoopCacheHandler, SCOPES
+        # Não chama Spotify; só testa que __init__ não crasha no assert.
+        oauth = SpotifyOAuth(
+            client_id="cid",
+            client_secret="sec",
+            redirect_uri="https://example.com/cb",
+            scope=SCOPES,
+            cache_handler=_NoopCacheHandler(),
+            open_browser=False,
+        )
+        assert oauth.cache_handler.get_cached_token() is None
+
+
 class TestAuthLogin:
     def _write_config(self, tmp_path):
         storage.write_config({
