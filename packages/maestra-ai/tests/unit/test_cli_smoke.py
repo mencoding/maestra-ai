@@ -11,16 +11,29 @@ def _run(argv: list[str], monkeypatch) -> None:
     cli_main()
 
 
-def test_auth_setup_stub(monkeypatch, capsys):
-    _run(["auth", "setup"], monkeypatch)
-    out = capsys.readouterr().out
-    assert "stub" in out and "Plano 3" in out
+def test_auth_setup_grava_config(monkeypatch, tmp_path, capsys):
+    """`auth setup --client-id --client-secret --redirect-uri` grava config."""
+    monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+    _run(
+        [
+            "auth", "setup",
+            "--client-id", "cid_smoke",
+            "--client-secret", "sec_smoke",
+            "--redirect-uri", "https://example.com/cb",
+        ],
+        monkeypatch,
+    )
+    from maestra_ai.core import storage
+    cfg = storage.read_config()
+    assert cfg["client_id"] == "cid_smoke"
+    assert cfg["redirect_uri"] == "https://example.com/cb"
 
 
-def test_auth_login_stub(monkeypatch, capsys):
-    _run(["auth", "login"], monkeypatch)
-    out = capsys.readouterr().out
-    assert "stub" in out
+def test_auth_login_sem_config_levanta(monkeypatch, tmp_path, capsys):
+    """`auth login` sem config.json → exit code 2 (MaestraError handled)."""
+    monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+    rc = cli_main(["auth", "login"])
+    assert rc == 2
 
 
 def test_onboard_stub(monkeypatch, capsys):

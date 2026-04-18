@@ -1,0 +1,158 @@
+"""Testes do fluxo auth — setup grava config, login obtém token via paste-back."""
+from __future__ import annotations
+
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from maestra_ai.core import auth, storage
+from maestra_ai.core.errors import AuthError, ConfigError
+
+
+class TestAuthSetup:
+    def test_setup_grava_credenciais_no_config(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        auth.setup(
+            client_id="cid_abc",
+            client_secret="sec_xyz",
+            redirect_uri="https://example.com/callback",
+        )
+        cfg = storage.read_config()
+        assert cfg["client_id"] == "cid_abc"
+        assert cfg["client_secret"] == "sec_xyz"
+        assert cfg["redirect_uri"] == "https://example.com/callback"
+
+    def test_setup_preserva_campos_existentes(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        storage.write_config({"playlist_id": "pl_123", "other": "val"})
+        auth.setup(client_id="a", client_secret="b", redirect_uri="https://x/cb")
+        cfg = storage.read_config()
+        assert cfg["playlist_id"] == "pl_123"
+        assert cfg["other"] == "val"
+        assert cfg["client_id"] == "a"
+
+
+class TestAuthLogin:
+    def _write_config(self, tmp_path):
+        storage.write_config({
+            "client_id": "cid",
+            "client_secret": "sec",
+            "redirect_uri": "https://example.com/cb",
+        })
+
+    def test_login_sem_config_levanta_config_error(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        with pytest.raises(ConfigError):
+            auth.login(pasted_url_getter=lambda url: "dummy")
+
+    def test_login_paste_back_extrai_code_e_persiste(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        self._write_config(tmp_path)
+
+        mock_oauth = MagicMock()
+        mock_oauth.get_authorize_url.return_value = "https://accounts.spotify.com/authorize?state=S1"
+        mock_oauth.parse_response_code.return_value = "CODE_ABC"
+        mock_oauth.get_access_token.return_value = {
+            "access_token": "at_123",
+            "refresh_token": "rt_persisted",
+            "scope": "user-read-playback-state",
+        }
+
+        mock_store = MagicMock()
+
+        with patch("maestra_ai.core.auth.SpotifyOAuth", return_value=mock_oauth), \
+             patch("maestra_ai.core.auth.default_token_store", return_value=mock_store):
+            result = auth.login(
+                pasted_url_getter=lambda url: "https://example.com/cb?code=CODE_ABC&state=S1",
+                browser_opener=lambda url: None,  # noop
+            )
+
+        assert result["status"] == "ok"
+        mock_oauth.parse_response_code.assert_called_once()
+        mock_store.save.assert_called_once_with("rt_persisted")
+
+    def test_login_token_sem_refresh_levanta_auth_error(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        self._write_config(tmp_path)
+
+        mock_oauth = MagicMock()
+        mock_oauth.get_authorize_url.return_value = "https://x/auth"
+        mock_oauth.parse_response_code.return_value = "CODE"
+        mock_oauth.get_access_token.return_value = {
+            "access_token": "at",
+            "scope": "scope",
+        }  # sem refresh_token
+
+        with patch("maestra_ai.core.auth.SpotifyOAuth", return_value=mock_oauth), \
+             patch("maestra_ai.core.auth.default_token_store"):
+            with pytest.raises(AuthError):
+                auth.login(
+                    pasted_url_getter=lambda url: "https://x/cb?code=C",
+                    browser_opener=lambda url: None,
+                )
+
+    def test_login_code_invalido_levanta_auth_error(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        self._write_config(tmp_path)
+
+        mock_oauth = MagicMock()
+        mock_oauth.get_authorize_url.return_value = "https://x/auth"
+        mock_oauth.parse_response_code.return_value = None  # spotipy retorna None em URL sem code
+
+        with patch("maestra_ai.core.auth.SpotifyOAuth", return_value=mock_oauth):
+            with pytest.raises(AuthError):
+                auth.login(
+                    pasted_url_getter=lambda url: "https://x/cb?erro=oops",
+                    browser_opener=lambda url: None,
+                )
+
+    def test_login_aceita_code_puro_sem_url(self, monkeypatch, tmp_path):
+        """Usuário pode colar só o code em vez da URL inteira."""
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        self._write_config(tmp_path)
+
+        mock_oauth = MagicMock()
+        mock_oauth.get_authorize_url.return_value = "https://x/auth"
+        # spotipy parse_response_code retorna URL intacta se não encontrar padrão
+        mock_oauth.parse_response_code.return_value = "CODE_PURO"
+        mock_oauth.get_access_token.return_value = {
+            "access_token": "at",
+            "refresh_token": "rt",
+            "scope": "s",
+        }
+
+        mock_store = MagicMock()
+        with patch("maestra_ai.core.auth.SpotifyOAuth", return_value=mock_oauth), \
+             patch("maestra_ai.core.auth.default_token_store", return_value=mock_store):
+            result = auth.login(
+                pasted_url_getter=lambda url: "CODE_PURO",
+                browser_opener=lambda url: None,
+            )
+        assert result["status"] == "ok"
+
+    def test_login_tenta_abrir_browser_mas_nao_falha_se_nao_conseguir(
+        self, monkeypatch, tmp_path,
+    ):
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        self._write_config(tmp_path)
+
+        mock_oauth = MagicMock()
+        mock_oauth.get_authorize_url.return_value = "https://x/auth"
+        mock_oauth.parse_response_code.return_value = "CODE"
+        mock_oauth.get_access_token.return_value = {
+            "access_token": "at",
+            "refresh_token": "rt",
+            "scope": "s",
+        }
+
+        def failing_opener(url):
+            raise RuntimeError("no display")
+
+        with patch("maestra_ai.core.auth.SpotifyOAuth", return_value=mock_oauth), \
+             patch("maestra_ai.core.auth.default_token_store"):
+            result = auth.login(
+                pasted_url_getter=lambda url: "CODE",
+                browser_opener=failing_opener,
+            )
+        # Browser falhou mas o login foi em frente — URL impressa no stdout.
+        assert result["status"] == "ok"

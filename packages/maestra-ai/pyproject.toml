@@ -25,6 +25,7 @@ dev = [
     "pytest-mock>=3.12",
     "freezegun>=1.4",
     "ruff>=0.5",
+    "responses>=0.25",
 ]
 
 [build-system]

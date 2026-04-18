@@ -83,6 +83,29 @@ class TestRollback:
         assert "inválido" in combined or "invalid" in combined or "traversal" in combined
 
 
+class TestAuth:
+    def test_setup_com_args_grava_config(self, isolated_env, tmp_path):
+        r = run_maestra(
+            [
+                "auth", "setup",
+                "--client-id", "cid_e2e",
+                "--client-secret", "sec_e2e",
+                "--redirect-uri", "https://example.com/callback",
+                "--json",
+            ],
+            isolated_env,
+        )
+        assert r.returncode == 0, f"stderr: {r.stderr}"
+        payload = json.loads(r.stdout)
+        assert payload["status"] == "ok"
+
+        cfg_path = tmp_path / "config" / "config.json"
+        assert cfg_path.exists()
+        cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+        assert cfg["client_id"] == "cid_e2e"
+        assert cfg["redirect_uri"] == "https://example.com/callback"
+
+
 # Nota: comandos `taste show`, `context set/show`, `status`, `play*`, `queue*`
 # e `director run` não estão cobertos por E2E em v0.2.5 porque forçam
 # _build_deps() → SpotifyController() → OAuth real. Fase 3 vai introduzir
