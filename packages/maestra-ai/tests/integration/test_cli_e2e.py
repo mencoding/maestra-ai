@@ -83,6 +83,18 @@ class TestRollback:
         assert "inválido" in combined or "invalid" in combined or "traversal" in combined
 
 
+class TestHelp:
+    def test_help_onboarding_renderiza(self, isolated_env):
+        r = run_maestra(["help", "onboarding"], isolated_env)
+        assert r.returncode == 0, f"stderr: {r.stderr}"
+        assert "Onboarding" in r.stdout
+
+    def test_help_sem_arg_lista_topicos(self, isolated_env):
+        r = run_maestra(["help"], isolated_env)
+        assert r.returncode == 0
+        assert "onboarding" in r.stdout
+
+
 class TestAuth:
     def test_setup_com_args_grava_config(self, isolated_env, tmp_path):
         r = run_maestra(

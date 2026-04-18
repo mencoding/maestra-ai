@@ -46,6 +46,7 @@ def _import_subcommands() -> None:
         doctor,
         feedback,
         flow,
+        help as help_cmd,
         history,
         onboard,
         playback,
@@ -54,7 +55,7 @@ def _import_subcommands() -> None:
         taste,
     )
     _ = (auth, basic, context_cmd, curate, director, doctor, feedback, flow,
-         history, onboard, playback, playlist, rollback, taste)
+         help_cmd, history, onboard, playback, playlist, rollback, taste)
 
 
 def _build_parser() -> argparse.ArgumentParser:
