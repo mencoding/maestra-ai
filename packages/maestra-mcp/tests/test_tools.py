@@ -114,6 +114,34 @@ async def test_playlist_prune_dry_run():
 
 
 @pytest.mark.asyncio
+async def test_history_import_outside_defaults_alinhados_com_cli():
+    # CLI expõe count=5, min_plays=1, recent_limit=50 — MCP deve espelhar.
+    from maestra_mcp.tools import call_tool
+
+    mock_history = MagicMock()
+    mock_history.import_outside.return_value = {"dry_run": True, "candidates": []}
+    mock_taste = MagicMock()
+    mock_ctx = MagicMock()
+    mock_ctx.show.return_value = {"context": "foco"}
+
+    with patch("maestra_mcp.tools.build_deps",
+               return_value={
+                   "history_analyzer": mock_history,
+                   "taste": mock_taste,
+                   "context_state": mock_ctx,
+               }), \
+         patch("maestra_mcp.config.resolve_playlist_id", return_value="pl_1"):
+        await call_tool("history_import_outside", {})
+
+    kwargs = mock_history.import_outside.call_args.kwargs
+    assert kwargs.get("count") == 5, f"count default esperado 5, veio {kwargs.get('count')}"
+    assert kwargs.get("min_plays") == 1, \
+        f"min_plays default esperado 1, veio {kwargs.get('min_plays')}"
+    assert kwargs.get("recent_limit") == 50, \
+        f"recent_limit default esperado 50, veio {kwargs.get('recent_limit')}"
+
+
+@pytest.mark.asyncio
 async def test_rollback_executa_com_snapshot_id():
     # Verifica que o handler monta current_state_fn e apply_state_fn
     # e chama rollback_to com o snapshot_id informado.

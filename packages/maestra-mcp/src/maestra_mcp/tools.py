@@ -246,23 +246,29 @@ def _playlist_prune(args):
 
 @tool("history_import_outside",
       "Importa faixas ouvidas recentemente para dentro da playlist, "
-      "filtrado por min_plays. DRY-RUN default.",
+      "filtrado por min_plays. DRY-RUN default. Defaults alinhados ao "
+      "subcomando CLI `maestra history import-outside`.",
       {"type": "object", "properties": {
           "confirm": {"type": "boolean", "default": False},
-          "count": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10},
-          "min_plays": {"type": "integer", "minimum": 1, "maximum": 20, "default": 2},
+          "count": {"type": "integer", "minimum": 1, "maximum": 50, "default": 5},
+          "min_plays": {"type": "integer", "minimum": 1, "maximum": 20, "default": 1},
+          "recent_limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50},
           "context": {"type": "string"},
       }, "additionalProperties": False})
 def _history_import(args):
     from maestra_mcp.config import resolve_playlist_id
     deps = build_deps()
     ctx = args.get("context") or (deps["context_state"].show() or {}).get("context", "")
+    # NOTA: o core.history.import_outside não aceita 'signal' — CLI aplica
+    # signal localmente via taste.record_context_signal. Não exposto aqui
+    # para evitar divergência silenciosa (task de seguimento).
     return deps["history_analyzer"].import_outside(
         playlist_id=resolve_playlist_id(),
         context=ctx,
         confirm=args.get("confirm", False),
-        count=args.get("count", 10),
-        min_plays=args.get("min_plays", 2),
+        count=args.get("count", 5),
+        min_plays=args.get("min_plays", 1),
+        recent_limit=args.get("recent_limit", 50),
         taste=deps["taste"],
     )
 
