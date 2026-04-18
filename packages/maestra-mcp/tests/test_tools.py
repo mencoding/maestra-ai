@@ -121,3 +121,72 @@ async def test_rollback_list():
         result = await call_tool("rollback", {"list": True})
     assert "snapshots" in result
     assert len(result["snapshots"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_director_start_delega_para_core():
+    from maestra_mcp.tools import call_tool
+    with patch("maestra_ai.core.director.start",
+               return_value={"status": "started", "pid": 111}) as m:
+        result = await call_tool("director_start", {"interval": 180, "target": 100})
+    m.assert_called_once()
+    assert result["pid"] == 111
+
+
+@pytest.mark.asyncio
+async def test_director_stop_delega():
+    from maestra_mcp.tools import call_tool
+    with patch("maestra_ai.core.director.stop",
+               return_value={"status": "stopped"}) as m:
+        result = await call_tool("director_stop", {})
+    assert result["status"] == "stopped"
+
+
+@pytest.mark.asyncio
+async def test_director_status_delega():
+    from maestra_mcp.tools import call_tool
+    with patch("maestra_ai.core.director.status",
+               return_value={"status": "running", "pid": 222}):
+        result = await call_tool("director_status", {})
+    assert result["pid"] == 222
+
+
+@pytest.mark.asyncio
+async def test_director_once_chama_run_once():
+    from maestra_mcp.tools import call_tool
+    mock_director = MagicMock()
+    mock_director.run_once.return_value = {"added": 2}
+    with patch("maestra_mcp.tools.build_deps", return_value={"director": mock_director}):
+        await call_tool("director_once", {"count": 3})
+    mock_director.run_once.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_onboard_chama_core_onboard_run():
+    from maestra_mcp.tools import call_tool
+    mock_ctrl = MagicMock()
+    mock_taste = MagicMock()
+    mock_ctrl.sp = MagicMock()
+    with patch("maestra_mcp.tools.build_deps",
+               return_value={"controller": mock_ctrl, "taste": mock_taste}), \
+         patch("maestra_ai.core.onboard.run",
+               return_value={"status": "ok"}) as m:
+        result = await call_tool("onboard", {"playlist_name": "X", "seed_count": 0})
+    m.assert_called_once()
+    assert result["status"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_doctor_chama_run_all():
+    from maestra_mcp.tools import call_tool
+    with patch("maestra_ai.core.doctor.run_all",
+               return_value=[{"check": "python", "status": "ok"}]) as m:
+        result = await call_tool("doctor", {})
+    m.assert_called_once()
+    assert "checks" in result
+
+
+@pytest.mark.asyncio
+async def test_total_23_tools():
+    from maestra_mcp.tools import iter_tool_defs
+    assert len(iter_tool_defs()) == 23

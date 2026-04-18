@@ -173,18 +173,6 @@ def _curate(args):
 
 
 # =========================================================================
-# Stub — tool `doctor` preservada de Task 7 (será movida/expandida em Task 10).
-# =========================================================================
-
-@tool("doctor",
-      "Executa os checks de diagnóstico (paridade com `maestra doctor`).",
-      {"type": "object", "properties": {}, "additionalProperties": False})
-def _doctor(args):
-    from maestra_ai.core import doctor as doctor_mod
-    return {"checks": doctor_mod.run_all()}
-
-
-# =========================================================================
 # Análise (3)
 # =========================================================================
 
@@ -299,3 +287,81 @@ def _rollback(args):
             "context": deps["context_state"].show() or {},
         }
     return rb.rollback_to(args.get("snapshot_id"), current_state_fn=current)
+
+
+# =========================================================================
+# Director (4)
+# =========================================================================
+
+@tool("director_start",
+      "Inicia Director em background (loop que popula playlist em lotes).",
+      {"type": "object", "properties": {
+          "interval": {"type": "integer", "minimum": 60, "maximum": 3600, "default": 180},
+          "target": {"type": "integer", "minimum": 10, "maximum": 500, "default": 100},
+          "max_per_artist": {"type": "integer", "minimum": 1, "maximum": 10, "default": 1},
+          "max_artist_share": {"type": "number", "minimum": 0.05, "maximum": 1.0, "default": 0.25},
+          "import_outside": {"type": "string", "enum": ["off", "safe"], "default": "off"},
+      }, "additionalProperties": False})
+def _director_start(args):
+    from maestra_ai.core import director as director_mod
+    return director_mod.start(
+        interval=args.get("interval", 180),
+        target=args.get("target", 100),
+        max_per_artist=args.get("max_per_artist", 1),
+        max_artist_share=args.get("max_artist_share", 0.25),
+        import_outside=args.get("import_outside", "off"),
+    )
+
+
+@tool("director_stop", "Para o Director.",
+      {"type": "object", "properties": {}, "additionalProperties": False})
+def _director_stop(args):
+    from maestra_ai.core import director as director_mod
+    return director_mod.stop()
+
+
+@tool("director_status", "Status atual do Director.",
+      {"type": "object", "properties": {}, "additionalProperties": False})
+def _director_status(args):
+    from maestra_ai.core import director as director_mod
+    return director_mod.status()
+
+
+@tool("director_once", "Roda uma iteração síncrona do Director (sem laço).",
+      {"type": "object", "properties": {
+          "count": {"type": "integer", "minimum": 1, "maximum": 20, "default": 2},
+      }, "additionalProperties": False})
+def _director_once(args):
+    return build_deps()["director"].run_once(count=args.get("count", 2))
+
+
+# =========================================================================
+# Onboard + Doctor (2)
+# =========================================================================
+
+@tool("onboard",
+      "Bootstrap inicial: importa histórico, cria playlist, popula taste, "
+      "sugere contextos.",
+      {"type": "object", "properties": {
+          "playlist_name": {"type": "string", "default": "Maestra"},
+          "seed_count": {"type": "integer", "minimum": 0, "maximum": 100, "default": 30},
+          "dry_run": {"type": "boolean", "default": False},
+      }, "additionalProperties": False})
+def _onboard(args):
+    from maestra_ai.core import onboard as onboard_mod
+    deps = build_deps()
+    return onboard_mod.run(
+        deps["controller"].sp,
+        deps["taste"],
+        playlist_name=args.get("playlist_name", "Maestra"),
+        seed_count=args.get("seed_count", 30),
+        dry_run=args.get("dry_run", False),
+    )
+
+
+@tool("doctor",
+      "Executa os checks de diagnóstico (paridade com `maestra doctor`).",
+      {"type": "object", "properties": {}, "additionalProperties": False})
+def _doctor(args):
+    from maestra_ai.core import doctor as doctor_mod
+    return {"checks": doctor_mod.run_all()}
