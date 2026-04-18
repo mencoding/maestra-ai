@@ -191,6 +191,23 @@ async def test_director_once_chama_run_once():
 
 
 @pytest.mark.asyncio
+async def test_onboard_default_e_dry_run():
+    # Garante que chamar onboard sem argumentos é seguro: dry_run=True.
+    from maestra_mcp.tools import call_tool
+    mock_ctrl = MagicMock()
+    mock_taste = MagicMock()
+    mock_ctrl.sp = MagicMock()
+    with patch("maestra_mcp.tools.build_deps",
+               return_value={"controller": mock_ctrl, "taste": mock_taste}), \
+         patch("maestra_ai.core.onboard.run",
+               return_value={"status": "ok", "dry_run": True}) as m:
+        await call_tool("onboard", {})
+    kwargs = m.call_args.kwargs
+    assert kwargs.get("dry_run") is True, \
+        "onboard default deve ser dry_run=True para evitar mutação sem consentimento"
+
+
+@pytest.mark.asyncio
 async def test_onboard_chama_core_onboard_run():
     from maestra_mcp.tools import call_tool
     mock_ctrl = MagicMock()

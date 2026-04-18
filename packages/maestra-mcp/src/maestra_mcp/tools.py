@@ -362,11 +362,12 @@ def _director_once(args):
 
 @tool("onboard",
       "Bootstrap inicial: importa histórico, cria playlist, popula taste, "
-      "sugere contextos.",
+      "sugere contextos. Default dry_run=True — passe dry_run:false para "
+      "efetivar a criação da playlist.",
       {"type": "object", "properties": {
           "playlist_name": {"type": "string", "default": "Maestra"},
           "seed_count": {"type": "integer", "minimum": 0, "maximum": 100, "default": 30},
-          "dry_run": {"type": "boolean", "default": False},
+          "dry_run": {"type": "boolean", "default": True},
       }, "additionalProperties": False})
 def _onboard(args):
     from maestra_ai.core import onboard as onboard_mod
@@ -376,7 +377,8 @@ def _onboard(args):
         deps["taste"],
         playlist_name=args.get("playlist_name", "Maestra"),
         seed_count=args.get("seed_count", 30),
-        dry_run=args.get("dry_run", False),
+        # Default seguro: dry_run=True quando omitido, alinhado a prune/import-outside
+        dry_run=args.get("dry_run", True),
     )
 
 
