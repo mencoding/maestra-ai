@@ -205,3 +205,102 @@ class MusicDirector:
             "progress_ms": track.get("progress_ms"),
             "duration_ms": track.get("duration_ms"),
         }
+
+
+# === Lifecycle do director daemon (funções livres) ===
+import signal
+import subprocess
+import sys
+from pathlib import Path
+
+
+def _pid_file() -> Path:
+    from maestra_ai.core.storage import data_dir
+    return data_dir() / "director.pid"
+
+
+def _pid_running(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
+def start(
+    *,
+    interval: int = 180,
+    target: int = 100,
+    max_per_artist: int = 1,
+    max_artist_share: float = 0.25,
+    import_outside: str = "off",
+) -> dict:
+    """Inicia o director como subprocess em background (start_new_session).
+
+    Retorna dict com status: "started" (novo processo) ou "already_running"
+    (PID file existente com processo vivo).
+    """
+    pid_path = _pid_file()
+    pid_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if pid_path.exists():
+        try:
+            existing_pid = int(pid_path.read_text(encoding="utf-8").strip())
+        except ValueError:
+            existing_pid = 0
+        if existing_pid and _pid_running(existing_pid):
+            return {"status": "already_running", "pid": existing_pid}
+        # PID obsoleto — remove e segue
+        pid_path.unlink(missing_ok=True)
+
+    cmd = [
+        sys.executable, "-m", "maestra_ai.cli",
+        "director", "run",
+        "--interval", str(interval),
+        "--target", str(target),
+        "--max-per-artist", str(max_per_artist),
+        "--max-artist-share", str(max_artist_share),
+        "--import-outside", import_outside,
+    ]
+    log_path = pid_path.parent / "director.log"
+    log_fd = open(log_path, "a", encoding="utf-8")
+    proc = subprocess.Popen(
+        cmd,
+        stdout=log_fd,
+        stderr=log_fd,
+        start_new_session=True,
+    )
+    pid_path.write_text(str(proc.pid), encoding="utf-8")
+    return {"status": "started", "pid": proc.pid, "log": str(log_path)}
+
+
+def stop() -> dict:
+    """Para o director se estiver rodando. Idempotente."""
+    pid_path = _pid_file()
+    if not pid_path.exists():
+        return {"status": "not_running"}
+    try:
+        pid = int(pid_path.read_text(encoding="utf-8").strip())
+    except ValueError:
+        pid_path.unlink(missing_ok=True)
+        return {"status": "stale_pid_removed"}
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    pid_path.unlink(missing_ok=True)
+    return {"status": "stopped", "pid": pid}
+
+
+def status() -> dict:
+    """Retorna status atual do director."""
+    pid_path = _pid_file()
+    if not pid_path.exists():
+        return {"status": "stopped"}
+    try:
+        pid = int(pid_path.read_text(encoding="utf-8").strip())
+    except ValueError:
+        return {"status": "stale_pid"}
+    if _pid_running(pid):
+        return {"status": "running", "pid": pid}
+    return {"status": "dead_pid", "pid": pid}

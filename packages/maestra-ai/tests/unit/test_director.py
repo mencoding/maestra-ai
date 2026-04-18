@@ -311,3 +311,71 @@ def test_registra_decisao_em_jsonl(tmp_path):
     saved = json.loads(lines[0])
     assert saved["action"] == result["action"]
     assert saved["component"] == "maestra-director"
+
+
+class TestDirectorLifecycle:
+    def test_start_cria_pid_file_e_retorna_dict(self, tmp_path, monkeypatch):
+        from unittest.mock import patch, MagicMock
+        from maestra_ai.core import director as director_mod
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+
+        fake_proc = MagicMock()
+        fake_proc.pid = 12345
+        with patch("subprocess.Popen", return_value=fake_proc) as popen:
+            result = director_mod.start(interval=180, target=100)
+
+        assert result["status"] == "started"
+        assert result["pid"] == 12345
+        popen.assert_called_once()
+
+    def test_start_ja_rodando_retorna_already(self, tmp_path, monkeypatch):
+        from unittest.mock import patch
+        from maestra_ai.core import director as director_mod
+        from maestra_ai.core.storage import data_dir
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+        pid_path = data_dir() / "director.pid"
+        pid_path.parent.mkdir(parents=True, exist_ok=True)
+        pid_path.write_text("99999", encoding="utf-8")
+
+        with patch("os.kill") as mock_kill:  # kill(pid, 0) = vivo
+            result = director_mod.start(interval=60)
+
+        assert result["status"] == "already_running"
+
+    def test_stop_mata_processo_e_remove_pid(self, tmp_path, monkeypatch):
+        from unittest.mock import patch
+        from maestra_ai.core import director as director_mod
+        from maestra_ai.core.storage import data_dir
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+        pid_path = data_dir() / "director.pid"
+        pid_path.parent.mkdir(parents=True, exist_ok=True)
+        pid_path.write_text("12345", encoding="utf-8")
+
+        with patch("os.kill") as mock_kill:
+            result = director_mod.stop()
+
+        assert result["status"] == "stopped"
+        assert not pid_path.exists()
+        mock_kill.assert_called()
+
+    def test_stop_sem_pid_retorna_not_running(self, tmp_path, monkeypatch):
+        from maestra_ai.core import director as director_mod
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+
+        result = director_mod.stop()
+        assert result["status"] == "not_running"
+
+    def test_status_running(self, tmp_path, monkeypatch):
+        from unittest.mock import patch
+        from maestra_ai.core import director as director_mod
+        from maestra_ai.core.storage import data_dir
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+        pid_path = data_dir() / "director.pid"
+        pid_path.parent.mkdir(parents=True, exist_ok=True)
+        pid_path.write_text("12345", encoding="utf-8")
+
+        with patch("os.kill"):
+            result = director_mod.status()
+
+        assert result["status"] == "running"
+        assert result["pid"] == 12345

@@ -2,20 +2,10 @@
 from __future__ import annotations
 
 import argparse
-import os
-import signal as _signal
-import subprocess
-import sys
 import time
 
 from maestra_ai.cli import register
-from maestra_ai.cli._common import (
-    BASE_DIR,
-    DIRECTOR_PID_PATH,
-    DIRECTOR_STDOUT_LOG_PATH,
-    _pid_running,
-    output,
-)
+from maestra_ai.cli._common import output
 
 
 def cmd_director_once(args, director, **_):
@@ -51,78 +41,25 @@ def cmd_director_run(args, director, **_):
 
 
 def cmd_director_start(args, **_):
-    os.makedirs(os.path.dirname(DIRECTOR_PID_PATH), exist_ok=True)
-    if os.path.exists(DIRECTOR_PID_PATH):
-        with open(DIRECTOR_PID_PATH, "r", encoding="utf-8") as f:
-            pid = int(f.read().strip())
-        if _pid_running(pid):
-            output({"status": "running", "pid": pid}, args.human)
-            return
-
-    cmd = [
-        sys.executable,
-        "-m",
-        "maestra_ai.cli",
-        "director",
-        "run",
-        "--interval", str(args.interval),
-        "--count", str(args.count),
-        "--target", str(args.target),
-        "--import-outside", args.import_outside,
-        "--outside-min-plays", str(args.outside_min_plays),
-        "--outside-count", str(args.outside_count),
-        "--outside-recent-limit", str(args.outside_recent_limit),
-        "--max-per-artist", str(args.max_per_artist),
-        "--max-artist-share", str(args.max_artist_share),
-    ]
-    with open(DIRECTOR_STDOUT_LOG_PATH, "a", encoding="utf-8") as log:
-        process = subprocess.Popen(
-            cmd,
-            stdout=log,
-            stderr=log,
-            start_new_session=True,
-            cwd=BASE_DIR,
-        )
-    with open(DIRECTOR_PID_PATH, "w", encoding="utf-8") as f:
-        f.write(str(process.pid))
-    output({
-        "status": "started",
-        "pid": process.pid,
-        "mode": "playlist-buffer",
-        "interval": args.interval,
-        "count": args.count,
-        "target": args.target,
-        "import_outside": args.import_outside,
-        "outside_min_plays": args.outside_min_plays,
-        "max_per_artist": args.max_per_artist,
-        "max_artist_share": args.max_artist_share,
-    }, args.human)
+    from maestra_ai.core import director as director_mod
+    result = director_mod.start(
+        interval=args.interval,
+        target=args.target,
+        max_per_artist=args.max_per_artist,
+        max_artist_share=args.max_artist_share,
+        import_outside=args.import_outside,
+    )
+    output(result, args.human)
 
 
 def cmd_director_stop(args, **_):
-    if not os.path.exists(DIRECTOR_PID_PATH):
-        output({"status": "stopped", "message": "Director não estava rodando."}, args.human)
-        return
-
-    with open(DIRECTOR_PID_PATH, "r", encoding="utf-8") as f:
-        pid = int(f.read().strip())
-    if _pid_running(pid):
-        os.kill(pid, _signal.SIGTERM)
-    os.remove(DIRECTOR_PID_PATH)
-    output({"status": "stopped", "pid": pid}, args.human)
+    from maestra_ai.core import director as director_mod
+    output(director_mod.stop(), args.human)
 
 
 def cmd_director_status(args, **_):
-    if not os.path.exists(DIRECTOR_PID_PATH):
-        output({"status": "stopped"}, args.human)
-        return
-    with open(DIRECTOR_PID_PATH, "r", encoding="utf-8") as f:
-        pid = int(f.read().strip())
-    if _pid_running(pid):
-        output({"status": "running", "pid": pid, "mode": "playlist-buffer"}, args.human)
-        return
-    os.remove(DIRECTOR_PID_PATH)
-    output({"status": "stopped", "stale_pid": pid}, args.human)
+    from maestra_ai.core import director as director_mod
+    output(director_mod.status(), args.human)
 
 
 def _add_director_args(p):
