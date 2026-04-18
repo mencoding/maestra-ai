@@ -270,14 +270,12 @@ def _playlist_prune(args):
           "min_plays": {"type": "integer", "minimum": 1, "maximum": 20, "default": 1},
           "recent_limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50},
           "context": {"type": "string"},
+          "signal": {"type": "string", "enum": ["good", "bad", "skip"], "default": "good"},
       }, "additionalProperties": False})
 def _history_import(args):
     from maestra_mcp.config import resolve_playlist_id
     deps = build_deps()
     ctx = args.get("context") or (deps["context_state"].show() or {}).get("context", "")
-    # NOTA: o core.history.import_outside não aceita 'signal' — CLI aplica
-    # signal localmente via taste.record_context_signal. Não exposto aqui
-    # para evitar divergência silenciosa (task de seguimento).
     return deps["history_analyzer"].import_outside(
         playlist_id=resolve_playlist_id(),
         context=ctx,
@@ -286,6 +284,7 @@ def _history_import(args):
         min_plays=args.get("min_plays", 1),
         recent_limit=args.get("recent_limit", 50),
         taste=deps["taste"],
+        signal=args.get("signal", "good"),
     )
 
 

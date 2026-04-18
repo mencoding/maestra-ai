@@ -139,6 +139,59 @@ async def test_history_import_outside_defaults_alinhados_com_cli():
         f"min_plays default esperado 1, veio {kwargs.get('min_plays')}"
     assert kwargs.get("recent_limit") == 50, \
         f"recent_limit default esperado 50, veio {kwargs.get('recent_limit')}"
+    # Default do signal deve ser "good" — alinhado ao core e CLI
+    assert kwargs.get("signal") == "good", \
+        f"signal default esperado 'good', veio {kwargs.get('signal')!r}"
+
+
+@pytest.mark.asyncio
+async def test_history_import_outside_propaga_signal():
+    """MCP deve repassar `signal` explícito ao core.import_outside."""
+    from maestra_mcp.tools import call_tool
+
+    mock_history = MagicMock()
+    mock_history.import_outside.return_value = {"dry_run": True, "candidates": []}
+    mock_taste = MagicMock()
+    mock_ctx = MagicMock()
+    mock_ctx.show.return_value = {"context": "foco"}
+
+    with patch("maestra_mcp.tools.build_deps",
+               return_value={
+                   "history_analyzer": mock_history,
+                   "taste": mock_taste,
+                   "context_state": mock_ctx,
+               }), \
+         patch("maestra_mcp.config.resolve_playlist_id", return_value="pl_1"):
+        await call_tool("history_import_outside", {"signal": "bad"})
+
+    kwargs = mock_history.import_outside.call_args.kwargs
+    assert kwargs.get("signal") == "bad"
+
+
+@pytest.mark.asyncio
+async def test_history_import_outside_rejeita_signal_invalido():
+    """Signal inválido: core levanta ValueError, call_tool converte em erro."""
+    from maestra_mcp.tools import call_tool
+
+    mock_history = MagicMock()
+    mock_history.import_outside.side_effect = ValueError(
+        "signal inválido: 'invalido'. Use 'good', 'bad' ou 'skip'."
+    )
+    mock_taste = MagicMock()
+    mock_ctx = MagicMock()
+    mock_ctx.show.return_value = {"context": "foco"}
+
+    with patch("maestra_mcp.tools.build_deps",
+               return_value={
+                   "history_analyzer": mock_history,
+                   "taste": mock_taste,
+                   "context_state": mock_ctx,
+               }), \
+         patch("maestra_mcp.config.resolve_playlist_id", return_value="pl_1"):
+        result = await call_tool("history_import_outside", {"signal": "invalido"})
+
+    assert "error" in result
+    assert result["error"]["code"] == "ValueError"
 
 
 @pytest.mark.asyncio
