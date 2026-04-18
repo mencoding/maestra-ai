@@ -231,6 +231,10 @@ def start(
     *,
     interval: int = 180,
     target: int = 100,
+    count: int = 3,
+    outside_min_plays: int = 2,
+    outside_count: int = 2,
+    outside_recent_limit: int = 50,
     max_per_artist: int = 1,
     max_artist_share: float = 0.25,
     import_outside: str = "off",
@@ -239,6 +243,9 @@ def start(
 
     Retorna dict com status: "started" (novo processo) ou "already_running"
     (PID file existente com processo vivo).
+
+    Os parâmetros count/outside-* são propagados ao subprocess para alinhar
+    com as flags aceitas pelo CLI `maestra director start`.
     """
     pid_path = _pid_file()
     pid_path.parent.mkdir(parents=True, exist_ok=True)
@@ -258,6 +265,10 @@ def start(
         "director", "run",
         "--interval", str(interval),
         "--target", str(target),
+        "--count", str(count),
+        "--outside-min-plays", str(outside_min_plays),
+        "--outside-count", str(outside_count),
+        "--outside-recent-limit", str(outside_recent_limit),
         "--max-per-artist", str(max_per_artist),
         "--max-artist-share", str(max_artist_share),
         "--import-outside", import_outside,

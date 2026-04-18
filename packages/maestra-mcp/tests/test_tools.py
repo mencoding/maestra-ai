@@ -114,6 +114,63 @@ async def test_playlist_prune_dry_run():
 
 
 @pytest.mark.asyncio
+async def test_history_import_outside_defaults_alinhados_com_cli():
+    # CLI expõe count=5, min_plays=1, recent_limit=50 — MCP deve espelhar.
+    from maestra_mcp.tools import call_tool
+
+    mock_history = MagicMock()
+    mock_history.import_outside.return_value = {"dry_run": True, "candidates": []}
+    mock_taste = MagicMock()
+    mock_ctx = MagicMock()
+    mock_ctx.show.return_value = {"context": "foco"}
+
+    with patch("maestra_mcp.tools.build_deps",
+               return_value={
+                   "history_analyzer": mock_history,
+                   "taste": mock_taste,
+                   "context_state": mock_ctx,
+               }), \
+         patch("maestra_mcp.config.resolve_playlist_id", return_value="pl_1"):
+        await call_tool("history_import_outside", {})
+
+    kwargs = mock_history.import_outside.call_args.kwargs
+    assert kwargs.get("count") == 5, f"count default esperado 5, veio {kwargs.get('count')}"
+    assert kwargs.get("min_plays") == 1, \
+        f"min_plays default esperado 1, veio {kwargs.get('min_plays')}"
+    assert kwargs.get("recent_limit") == 50, \
+        f"recent_limit default esperado 50, veio {kwargs.get('recent_limit')}"
+
+
+@pytest.mark.asyncio
+async def test_rollback_executa_com_snapshot_id():
+    # Verifica que o handler monta current_state_fn e apply_state_fn
+    # e chama rollback_to com o snapshot_id informado.
+    from maestra_mcp.tools import call_tool
+
+    mock_taste = MagicMock()
+    mock_taste.data = {"tracks": {}}
+    mock_ctx = MagicMock()
+    mock_ctx.show.return_value = {"context": "foco"}
+
+    with patch("maestra_mcp.tools.build_deps",
+               return_value={"taste": mock_taste, "context_state": mock_ctx}), \
+         patch("maestra_ai.core.rollback.rollback_to",
+               return_value={"restored": "abc", "status": "ok"}) as m:
+        result = await call_tool("rollback", {"snapshot_id": "abc"})
+
+    assert m.called, "rollback_to deveria ter sido chamado"
+    kwargs = m.call_args.kwargs
+    positional = m.call_args.args
+    # snapshot_id pode chegar como primeiro posicional ou via kwarg snap_id
+    assert (positional and positional[0] == "abc") or kwargs.get("snap_id") == "abc"
+    assert "current_state_fn" in kwargs
+    assert "apply_state_fn" in kwargs
+    assert callable(kwargs["current_state_fn"])
+    assert callable(kwargs["apply_state_fn"])
+    assert result["status"] == "ok"
+
+
+@pytest.mark.asyncio
 async def test_rollback_list():
     from maestra_mcp.tools import call_tool
     with patch("maestra_ai.core.snapshot.list_snapshots",
@@ -159,6 +216,23 @@ async def test_director_once_chama_run_once():
     with patch("maestra_mcp.tools.build_deps", return_value={"director": mock_director}):
         await call_tool("director_once", {"count": 3})
     mock_director.run_once.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_onboard_default_e_dry_run():
+    # Garante que chamar onboard sem argumentos é seguro: dry_run=True.
+    from maestra_mcp.tools import call_tool
+    mock_ctrl = MagicMock()
+    mock_taste = MagicMock()
+    mock_ctrl.sp = MagicMock()
+    with patch("maestra_mcp.tools.build_deps",
+               return_value={"controller": mock_ctrl, "taste": mock_taste}), \
+         patch("maestra_ai.core.onboard.run",
+               return_value={"status": "ok", "dry_run": True}) as m:
+        await call_tool("onboard", {})
+    kwargs = m.call_args.kwargs
+    assert kwargs.get("dry_run") is True, \
+        "onboard default deve ser dry_run=True para evitar mutação sem consentimento"
 
 
 @pytest.mark.asyncio

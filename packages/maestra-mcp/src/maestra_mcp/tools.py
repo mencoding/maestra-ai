@@ -246,23 +246,29 @@ def _playlist_prune(args):
 
 @tool("history_import_outside",
       "Importa faixas ouvidas recentemente para dentro da playlist, "
-      "filtrado por min_plays. DRY-RUN default.",
+      "filtrado por min_plays. DRY-RUN default. Defaults alinhados ao "
+      "subcomando CLI `maestra history import-outside`.",
       {"type": "object", "properties": {
           "confirm": {"type": "boolean", "default": False},
-          "count": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10},
-          "min_plays": {"type": "integer", "minimum": 1, "maximum": 20, "default": 2},
+          "count": {"type": "integer", "minimum": 1, "maximum": 50, "default": 5},
+          "min_plays": {"type": "integer", "minimum": 1, "maximum": 20, "default": 1},
+          "recent_limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50},
           "context": {"type": "string"},
       }, "additionalProperties": False})
 def _history_import(args):
     from maestra_mcp.config import resolve_playlist_id
     deps = build_deps()
     ctx = args.get("context") or (deps["context_state"].show() or {}).get("context", "")
+    # NOTA: o core.history.import_outside não aceita 'signal' — CLI aplica
+    # signal localmente via taste.record_context_signal. Não exposto aqui
+    # para evitar divergência silenciosa (task de seguimento).
     return deps["history_analyzer"].import_outside(
         playlist_id=resolve_playlist_id(),
         context=ctx,
         confirm=args.get("confirm", False),
-        count=args.get("count", 10),
-        min_plays=args.get("min_plays", 2),
+        count=args.get("count", 5),
+        min_plays=args.get("min_plays", 1),
+        recent_limit=args.get("recent_limit", 50),
         taste=deps["taste"],
     )
 
@@ -281,12 +287,33 @@ def _rollback(args):
         return {"snapshots": snapshot.list_snapshots()}
 
     deps = build_deps()
-    def current():
+    taste = deps["taste"]
+    ctx = deps["context_state"]
+
+    def current_state_fn():
+        # Captura estado atual para snapshot-de-salvaguarda
         return {
-            "taste": deps["taste"].data,
-            "context": deps["context_state"].show() or {},
+            "taste": taste.data,
+            "context": ctx.show(),
         }
-    return rb.rollback_to(args.get("snapshot_id"), current_state_fn=current)
+
+    def apply_state_fn(state):
+        # Aplica estado do snapshot-alvo aos módulos relevantes
+        if "taste" in state and state["taste"] is not None:
+            taste.restore(state["taste"])
+        if "context" in state:
+            ctx_val = state["context"]
+            if ctx_val and isinstance(ctx_val, dict) and ctx_val.get("context"):
+                ttl = ctx_val.get("ttl_minutes", 120)
+                ctx.set(ctx_val["context"], ttl_minutes=ttl)
+            else:
+                ctx.clear()
+
+    return rb.rollback_to(
+        args.get("snapshot_id"),
+        current_state_fn=current_state_fn,
+        apply_state_fn=apply_state_fn,
+    )
 
 
 # =========================================================================
@@ -341,11 +368,12 @@ def _director_once(args):
 
 @tool("onboard",
       "Bootstrap inicial: importa histórico, cria playlist, popula taste, "
-      "sugere contextos.",
+      "sugere contextos. Default dry_run=True — passe dry_run:false para "
+      "efetivar a criação da playlist.",
       {"type": "object", "properties": {
           "playlist_name": {"type": "string", "default": "Maestra"},
           "seed_count": {"type": "integer", "minimum": 0, "maximum": 100, "default": 30},
-          "dry_run": {"type": "boolean", "default": False},
+          "dry_run": {"type": "boolean", "default": True},
       }, "additionalProperties": False})
 def _onboard(args):
     from maestra_ai.core import onboard as onboard_mod
@@ -355,7 +383,8 @@ def _onboard(args):
         deps["taste"],
         playlist_name=args.get("playlist_name", "Maestra"),
         seed_count=args.get("seed_count", 30),
-        dry_run=args.get("dry_run", False),
+        # Default seguro: dry_run=True quando omitido, alinhado a prune/import-outside
+        dry_run=args.get("dry_run", True),
     )
 
 

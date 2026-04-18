@@ -45,6 +45,10 @@ def cmd_director_start(args, **_):
     result = director_mod.start(
         interval=args.interval,
         target=args.target,
+        count=args.count,
+        outside_min_plays=args.outside_min_plays,
+        outside_count=args.outside_count,
+        outside_recent_limit=args.outside_recent_limit,
         max_per_artist=args.max_per_artist,
         max_artist_share=args.max_artist_share,
         import_outside=args.import_outside,
