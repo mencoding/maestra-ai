@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-04-18
+
+Fase 4 do roadmap. Transforma a Maestra em ferramenta integrada a agentes
+de IA via MCP stdio server. Segue design em
+`docs/superpowers/specs/2026-04-18-v040-mcp-server-design.md`.
+
+### Added
+- **Pacote `maestra-mcp`** (workspace) — MCP stdio server com 23 tools:
+  - Playback (7): `now`, `play`, `pause`, `skip`, `queue`, `search`, `devices`
+  - Contexto (3): `set_context`, `get_context`, `clear_context`
+  - Curadoria (1): `curate`
+  - Análise (3): `flow_review`, `taste_review`, `history_outside_playlist`
+  - Manutenção (3): `playlist_prune`, `history_import_outside`, `rollback`
+  - Director (4): `director_start`, `director_stop`, `director_status`, `director_once`
+  - Onboard/Doctor (2): `onboard`, `doctor`
+- Schema JSON estrito por tool (validação no server).
+- Allow-list `disabled_tools` em `config.json::mcp.disabled_tools`.
+- Audit log em toda chamada MCP (redact automático v0.2.4 + v0.3.0).
+- `docs/MCP.md` — guia por agente (Claude Code, Cursor, Codex).
+- `maestra help mcp` — topic conceitual.
+
+### Changed (refactors R1-R4)
+- **R1** `cli/_common.py::_context_review` movido para
+  `core/taste.py::review(profile, tracks, context, top)`. CLI delega.
+- **R2** `cli/playlist.py::cmd_playlist_prune` lógica extraída para
+  `core/curator.py::Curator.prune(playlist_id, context, confirm, top)`.
+- **R3** `MusicDirector._safe_outside_candidates` extraído para
+  `core/history.py::HistoryAnalyzer.import_outside(playlist_id, context, confirm, count, min_plays, taste)`.
+- **R4** `cli/director.py::cmd_director_start/stop/status` promovidos
+  para funções livres em `core/director.py` (consumem PID file em
+  `data_dir()/director.pid` via `atomic_write_json` v0.2.5). CLI vira
+  thin wrapper.
+
+### Tests
+- ~60 testes novos distribuídos em test_taste (1), test_curator (2),
+  test_history (2), test_director (5), test_deps (2), test_server (3),
+  test_tools (15+). Suite: 292 → ~350 passed.
+
+### Notes
+- Fora de escopo: daemon IPC via unix socket (v0.5+), progress
+  notifications em `onboard`/`curate` (SDK MCP-dependente, nice-to-have).
+- Publicação PyPI de `maestra-ai` e `maestra-mcp` é v0.6.0 (Plano 6).
+
 ## [0.3.2] — 2026-04-18
 
 Segundo hotfix revelado pela validação real (primeira execução de
