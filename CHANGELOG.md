@@ -7,6 +7,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-04-18
+
+Fase 3 do roadmap. Transforma o maestra-ai de pré-alpha com stubs de
+auth em sistema operacional na máquina do usuário sem custo recorrente.
+Segue design em `docs/superpowers/specs/2026-04-18-v030-auth-onboard-design.md`.
+
+### Added
+- **`core/token_store.py`** — Protocol `TokenStore` + `KeyringTokenStore`
+  (preferencial) + `FileTokenStore` (fallback em `config_dir()/token.json`
+  com chmod 600). `default_token_store()` escolhe em runtime.
+- **`core/auth.py`** — `setup()` grava config.json; `login()` executa fluxo
+  OAuth paste-back (zero servidor local; compatível com política Spotify
+  que rejeita `localhost`/`127.0.0.1` em apps novos).
+- **`core/onboard.py`** — `run(sp, taste, ...)` em 6 etapas: autenticação,
+  playlist (com sufixo se nome duplicado), top tracks em 3 janelas
+  (`long_term` peso 3, `medium_term` 2, `short_term` 2), saved tracks
+  paginado (cap 1000, peso 1), recently played (50, peso 1), análise
+  local que popula `global_signal` no taste_profile + semeia playlist
+  + deriva 5 contextos sugeridos.
+- **`core/taste.py::record_global_positive(uri, weight)`** — acumula
+  sinais globais ponderados (distinto de `record_feedback(global=True)`
+  que é binário).
+- **`cli/auth.py`** — subcomandos reais `auth setup` (flags + prompt
+  interativo via rich) e `auth login` (paste-back com instruções claras).
+- **`cli/onboard.py`** — UX rich com preview de custo via
+  `format_estimate`, progress com spinner, panel final colorido,
+  flags `--dry-run`, `--yes`, `--json`.
+- **`cli/help.py`** — `maestra help <tópico>` renderiza markdown via
+  rich. Sem arg lista tópicos disponíveis.
+- **`docs/topics/onboarding.md`** — guia completo com pré-requisitos,
+  6 etapas, pesos, custo em req/bytes, próximos passos.
+- **`_InMemoryCacheHandler`** em `core/client.py` — implementa spotipy
+  `CacheHandler` sem escrever em disco; injeta refresh_token do
+  `TokenStore` no fluxo OAuth do controller.
+
+### Changed
+- **`core/client.py::SpotifyController.__init__`** aceita `token_store`
+  via DI. Default lê credenciais de `storage.read_config()` e
+  refresh_token de `default_token_store()`. Fecha o gap bloqueante
+  em que `auth login` salvava mas o client não consumia.
+- **`core/storage.py`** — `save_refresh_token` / `load_refresh_token`
+  viraram shims delegando para `default_token_store()`.
+- **`pyproject.toml`** — `responses>=0.25` em dev deps;
+  `tool.hatch.build.targets.wheel.force-include` empacota
+  `maestra_ai/docs` no wheel.
+
+### Removed
+- **`from dotenv import load_dotenv` em `core/client.py`** — credenciais
+  exclusivamente via config.json. `.env` em `config_dir` não é mais
+  lido. Breaking para setups legados (provavelmente ninguém).
+- Testes de keyring/file via `storage.save/load_refresh_token` em
+  `test_storage.py` (cobertura equivalente em `test_token_store.py`).
+
+### Fixed
+- `_keyring_backend_ok` em `token_store.py`: checa `__module__`
+  (onde "fail"/"null" aparecem) em vez de `__name__` que é sempre
+  "Keyring". Fix silencioso de detecção quebrada que afetava a v0.2.x.
+- `KeyringTokenStore.load/delete` defensivos contra `NoKeyringError`
+  — retornam `None`/no-op em ambientes sem backend, em vez de crash.
+
+### Tests
+- 38 testes novos: `test_token_store.py` (11), `test_auth.py` (8),
+  `test_onboard.py` (13), `test_client.py` (+2), `test_help.py` (3),
+  `test_cli_e2e.py` (+3). Suite: 249 → 287 passed.
+
+### Notes
+- Fora de escopo (Plano 4 / v0.4.0): daemon IPC via unix socket,
+  `skip_deps=True` para comandos read-only (`taste show`, `context show`,
+  `doctor`), MCP server.
+- Fluxo paste-back documentado no `help onboarding` e nos prompts do
+  `auth login`. Sem fallback automático de servidor local.
+
 ## [0.2.5] — 2026-04-18
 
 Fecha os dois P0 remanescentes do review pós-v0.2.3 (P0-3, P0-5) e os
