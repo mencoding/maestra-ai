@@ -61,7 +61,12 @@ class PlaybackEventProcessor:
             for line in f:
                 if not line.strip():
                     continue
-                events.append(json.loads(line))
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(event, dict):
+                    events.append(event)
         return events
 
     @staticmethod
