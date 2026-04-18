@@ -50,13 +50,20 @@ def _disabled_tools() -> set[str]:
 def _build_list_tools_handler():
     async def _list_tools() -> list[types.Tool]:
         disabled = _disabled_tools()
+        defs = iter_tool_defs()
+        # Fix M5: valida nomes em disabled_tools contra o registry. Se o
+        # usuário listar nome inexistente (typo, tool removida), logamos
+        # warning em vez de falhar silenciosamente. Não bloqueia list.
+        known = {t.name for t in defs}
+        for name in disabled - known:
+            logger.warning("Tool desabilitada não reconhecida: %s", name)
         return [
             types.Tool(
                 name=t.name,
                 description=t.description,
                 inputSchema=t.schema,
             )
-            for t in iter_tool_defs()
+            for t in defs
             if t.name not in disabled
         ]
     return _list_tools

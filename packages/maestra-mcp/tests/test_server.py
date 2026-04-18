@@ -119,6 +119,40 @@ async def test_server_audita_excecao_nao_tratada(monkeypatch, tmp_path):
     assert "error" in calls[0]["result"]
 
 
+@pytest.mark.asyncio
+async def test_disabled_tools_nomes_invalidos_logam_warning(monkeypatch, tmp_path, caplog):
+    """Fix M5: se disabled_tools lista um nome que não existe no registry,
+    o server loga warning mas continua funcionando."""
+    import logging
+
+    monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+    from maestra_ai.core import storage
+    storage.write_config({
+        "client_id": "c", "client_secret": "s",
+        "redirect_uri": "https://x/cb",
+        "mcp": {"disabled_tools": ["now", "tool_inexistente_xyz"]},
+    })
+
+    from maestra_mcp import server as server_mod
+    # Limpa cache para forçar releitura
+    server_mod._DISABLED_CACHE["mtime"] = None
+    server_mod._DISABLED_CACHE["value"] = set()
+
+    handler = server_mod._build_list_tools_handler()
+    with caplog.at_level(logging.WARNING, logger="maestra-mcp"):
+        tools = await handler()
+
+    names = {t.name for t in tools}
+    assert "now" not in names  # disabled válido continua filtrado
+    assert "doctor" in names
+
+    # Warning para o nome inválido
+    warnings = [r.message for r in caplog.records
+                if "tool_inexistente_xyz" in r.getMessage()]
+    assert warnings, \
+        f"warning deveria mencionar tool_inexistente_xyz; got: {[r.getMessage() for r in caplog.records]}"
+
+
 def test_server_subprocess_responde_initialize_e_list_tools(tmp_path, monkeypatch):
     """Integration: inicia maestra-mcp como subprocess e fala JSON-RPC stdio."""
     env = os.environ.copy()
