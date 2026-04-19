@@ -580,6 +580,69 @@ class TestPlaylistExpansion:
         assert report["playlist_expansion"]["tracks_added"] == 5
 
 
+class TestExpansionEdgeCases:
+    """v0.5.6 #25: edge cases do contrato do selector."""
+
+    def test_selector_que_levanta_excecao_propaga(self, tmp_path, monkeypatch):
+        """Selector é código do CLI/agente. Se levanta, não queremos
+        swallow silencioso — deixa subir para diagnóstico."""
+        from maestra_ai.core.taste import TasteProfile
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+
+        sp = TestPlaylistExpansion()._sp_with_playlists(
+            own_playlists=[
+                {"id": "p1", "name": "A", "owner": {"id": "me"},
+                 "tracks": {"total": 5}},
+            ],
+        )
+
+        def buggy_selector(_pls):
+            raise ValueError("selector com bug")
+
+        taste = TasteProfile(tmp_path / "taste.json")
+        import pytest
+        with pytest.raises(ValueError, match="selector com bug"):
+            onboard.run(
+                sp, taste, playlist_name="M", seed_count=0,
+                playlist_selector=buggy_selector,
+            )
+
+    def test_selector_retorna_ids_fora_da_lista_fetcher_registra_falha(
+        self, tmp_path, monkeypatch,
+    ):
+        """Agente pode passar IDs que não estão na lista oferecida
+        (via cache antigo, typo). Fetch falha por ID inválido ou
+        permissão; failed_playlists registra."""
+        from unittest.mock import MagicMock
+        from maestra_ai.core.taste import TasteProfile
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+
+        sp = TestPlaylistExpansion()._sp_with_playlists(
+            own_playlists=[
+                {"id": "p1", "name": "A", "owner": {"id": "me"},
+                 "tracks": {"total": 5}},
+            ],
+        )
+        sp.playlist_items.side_effect = Exception(
+            "404 — playlist não pertence ao usuário",
+        )
+
+        def selector(_pls):
+            return ["id_que_nao_esta_na_lista"]
+
+        taste = TasteProfile(tmp_path / "taste.json")
+        report = onboard.run(
+            sp, taste, playlist_name="M", seed_count=0,
+            playlist_selector=selector,
+        )
+        exp = report["playlist_expansion"]
+        assert exp["tracks_added"] == 0
+        assert len(exp["failed_playlists"]) == 1
+        assert exp["failed_playlists"][0]["id"] == "id_que_nao_esta_na_lista"
+
+
 class TestPlaylistCreate403:
     """v0.5.2: 403 ao criar playlist vira PlaylistCreateForbiddenError
     com probable_causes acionáveis (Development Mode, User Management,

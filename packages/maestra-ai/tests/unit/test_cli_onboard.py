@@ -62,6 +62,83 @@ def _fake_run_capture(captured: dict):
     return _fake
 
 
+class TestInteractiveSelectorFluxoReal:
+    """v0.5.6 #24: cobertura real do _interactive_selector além de
+    'é callable' — mocka questionary no nível do módulo e exerce o
+    caminho confirm→checkbox→retorno."""
+
+    def _patch_questionary(self, monkeypatch, confirm_return, checkbox_return):
+        """Substitui questionary no sys.modules para testes interativos."""
+        import sys
+
+        class FakeResp:
+            def __init__(self, v):
+                self._v = v
+            def ask(self):
+                return self._v
+
+        def fake_confirm(message, default=True):
+            return FakeResp(confirm_return)
+
+        def fake_checkbox(message, choices):
+            return FakeResp(checkbox_return)
+
+        fake_q = type("FQ", (), {
+            "confirm": staticmethod(fake_confirm),
+            "checkbox": staticmethod(fake_checkbox),
+            "Choice": lambda title, value: {"title": title, "value": value},
+        })
+        monkeypatch.setitem(sys.modules, "questionary", fake_q)
+
+    def test_confirma_e_escolhe_dois_ids(self, monkeypatch):
+        self._patch_questionary(
+            monkeypatch, confirm_return=True, checkbox_return=["p1", "p3"],
+        )
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+        args = _ns(non_interactive=False)
+        sel = cli_onboard._build_playlist_selector(args, progress=None)
+
+        playlists = [
+            {"id": "p1", "name": "A", "track_count": 20},
+            {"id": "p2", "name": "B", "track_count": 5},
+            {"id": "p3", "name": "C", "track_count": 100},
+        ]
+        result = sel(playlists)
+        assert result == ["p1", "p3"]
+
+    def test_confirm_negado_retorna_vazio(self, monkeypatch):
+        self._patch_questionary(
+            monkeypatch, confirm_return=False, checkbox_return=["whatever"],
+        )
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+        args = _ns(non_interactive=False)
+        sel = cli_onboard._build_playlist_selector(args, progress=None)
+        result = sel([{"id": "p1", "name": "A", "track_count": 10}])
+        assert result == []
+
+    def test_checkbox_nenhum_marcado_retorna_vazio(self, monkeypatch):
+        self._patch_questionary(
+            monkeypatch, confirm_return=True, checkbox_return=[],
+        )
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+        args = _ns(non_interactive=False)
+        sel = cli_onboard._build_playlist_selector(args, progress=None)
+        result = sel([{"id": "p1", "name": "A", "track_count": 10}])
+        assert result == []
+
+    def test_lista_vazia_dispara_mensagem_humana(self, monkeypatch, capsys):
+        self._patch_questionary(
+            monkeypatch, confirm_return=True, checkbox_return=["p1"],
+        )
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+        args = _ns(non_interactive=False)
+        sel = cli_onboard._build_playlist_selector(args, progress=None)
+        result = sel([])  # nenhuma playlist própria
+        assert result == []
+        out = capsys.readouterr().out
+        assert "aprender" in out or "sem" in out.lower()
+
+
 class TestPromptExpansionConfirmDinamico:
     """v0.5.5 #9: mensagem do prompt reflete --total-cap real,
     não o literal '5000'."""
