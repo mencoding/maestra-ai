@@ -96,7 +96,7 @@ Maestra AI — Spotify controller para agentes de IA.
 Primeira vez?
   maestra help onboarding       Fluxo completo de bootstrap (OAuth + perfil)
   maestra doctor                Diagnóstico do ambiente
-  maestra --help                Lista todos os 28 subcomandos
+  maestra --help                Lista todos os subcomandos
 
 Já autenticado?
   maestra onboard               Bootstrap do perfil por histórico

@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-04-19
+
+Polimento de primeira impressão. Cinco achados da simulação de usuário
+novo: README raso, `doctor` mentindo sobre Config, erro enganoso de
+`auth setup` sem TTY, `--help` de `auth setup` sem pré-requisitos
+Spotify, e ausência de quickstart ao rodar `maestra` sem args.
+Suite: 374 passed (maestra-ai).
+
+### Fixed
+- **`doctor.check_config` detecta placeholders e campos incompletos**:
+  antes reportava "Config ✓ ok" mesmo com apenas `client_id` presente,
+  ou com `redirect_uri=https://example.com/callback`. Agora valida os
+  três campos obrigatórios e reconhece placeholders óbvios copiados
+  de docs (`your_client_id`, `example.com`, `localhost`, `xxx`, etc.).
+- **Erro de `auth setup` sem TTY tem categoria apropriada**: nova classe
+  `NonInteractiveError` (subclasse de `UserError`) com title
+  "Entrada interativa indisponível" e causes apontando TTY/pipe em vez
+  de "flag fora do range permitido".
+
+### Added
+- **`maestra` sem subcomando mostra quickstart banner**: painel Rich
+  compacto apontando `maestra help onboarding`, `maestra doctor` e
+  `maestra onboard`. Substitui o wall-of-text do argparse help, que
+  deixava usuário novo perdido entre os subcomandos.
+- **`maestra auth setup --help` lista pré-requisitos Spotify**:
+  description com os 3 passos (criar app no dashboard, copiar
+  credenciais, registrar redirect HTTPS) + explicação de por que
+  `localhost` é rejeitado.
+- **README expandido**: instalação via `uv sync`, fluxo de 5 passos
+  do primeiro uso, tabela dos 2 pacotes do monorepo, ponteiros para
+  docs internas.
+
+### Tests
+- `test_doctor.py`: +4 casos (placeholder redirect, placeholder client_id,
+  secret ausente, redirect_uri ausente).
+- `test_auth.py`: +1 classe `TestAuthSetupCLINonTTY`.
+- `test_cli_main.py`: +1 classe `TestQuickstartBanner` (2 casos).
+- `test_cli_smoke.py`: +1 caso (`test_auth_setup_help_cita_dashboard_e_redirect_https`);
+  teste antigo `test_help_sem_subcomando_falha` substituído por
+  `test_sem_subcomando_mostra_banner_e_retorna_zero`.
+
 ## [0.5.0] - 2026-04-19
 
 Polimento pós-v0.4.5. Fecha os 6 achados HIGH/MEDIUM remanescentes
