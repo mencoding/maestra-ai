@@ -92,26 +92,21 @@ def _fetch_saved(
     return collected[:max_tracks]
 
 
-def _fetch_own_playlists(sp, me_id: str) -> list[dict]:
+def _fetch_own_playlists(
+    sp, me_id: str, *, progress_cb: Callable | None = None,
+) -> tuple[list[dict], int]:
     """v0.5.3: lista playlists criadas PELO próprio usuário (filtro
     owner.id == me_id). Exclui seguidas. Paginação via campo `next`.
 
-    v0.5.3.1 (C2): guarda contra loop infinito — Spotify pode
-    retornar items=[] com next != None em rate-limit soft; sem break
-    o offset fica preso.
+    v0.5.3.1 (C2): guarda contra loop infinito.
 
-    v0.5.5 #4: filtra também playlists com `track_count == 0`. Selectors
-    externos (MCP, scripts, testes) não precisam duplicar esse filtro,
-    e `_fetch_playlist_tracks` nunca é chamado com playlist vazia
-    (economiza um request por playlist vazia que o usuário tenha).
+    v0.5.5 #4: filtra playlists com `track_count <= 0`.
 
-    v0.5.7 #17: retorna tupla `(usable, empty_count)` — primeiro item é
-    a lista utilizável (comportamento existente), segundo é a contagem
-    de playlists próprias com `track_count <= 0`. CLI usa esse número
-    para distinguir "usuário sem playlists" de "usuário tem N playlists
-    mas todas estão vazias" na mensagem humana.
+    v0.5.7 #17: retorna tupla `(usable, empty_count)`.
 
-    Retorna `(list[dict{id, name, track_count}], int)`.
+    v0.5.7 #20: `progress_cb` opcional recebe int (total listado até
+    agora) a cada página — CLI com Rich Progress pode atualizar status
+    em bibliotecas grandes (500+ playlists) sem silêncio de 10s.
     """
     collected: list[dict] = []
     empty_count = 0
@@ -119,7 +114,6 @@ def _fetch_own_playlists(sp, me_id: str) -> list[dict]:
     while True:
         resp = sp.current_user_playlists(limit=_PAGE, offset=offset)
         items = resp.get("items", []) or []
-        # Guarda C2: página vazia = fim, mesmo se next disser outra coisa.
         if not items:
             break
         for it in items:
@@ -136,6 +130,8 @@ def _fetch_own_playlists(sp, me_id: str) -> list[dict]:
                 "track_count": track_count,
             })
         offset += len(items)
+        if progress_cb:
+            progress_cb(len(collected))
         if resp.get("next") is None:
             break
     return collected, empty_count
@@ -468,6 +464,9 @@ def run(
             me = sp.current_user()
             own_playlists, empty_count = _fetch_own_playlists(
                 sp, me_id=me.get("id"),
+                progress_cb=(
+                    lambda n: report_step(6, "Listando playlists", f"{n}")
+                ) if progress_cb else None,
             )
         except Exception:
             own_playlists, empty_count = [], 0
@@ -483,7 +482,14 @@ def run(
             )
         else:
             selected_ids = playlist_selector(own_playlists) or []
-            expansion_info["selected_playlists"] = list(selected_ids)
+            # v0.5.7 #19: guarda objetos {id, name} em vez de só IDs.
+            # Relatórios humanos e JSON podem mostrar nomes sem precisar
+            # refazer lookup na API.
+            name_by_id = {p["id"]: p.get("name", p["id"]) for p in own_playlists}
+            expansion_info["selected_playlists"] = [
+                {"id": pid, "name": name_by_id.get(pid, pid)}
+                for pid in selected_ids
+            ]
             if selected_ids:
                 # URIs já vistos, para não duplicar trabalho de fetch nem
                 # inflar artificialmente o contador

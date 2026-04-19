@@ -125,6 +125,13 @@ def _prompt_expansion_confirm(current_total: int = 0, total_cap: int = 5000) -> 
     Antes, mensagem hard-coded "menor que 5000" mentia para usuários
     que passavam --total-cap diferente do default. Agora o prompt
     informa o valor efetivo e o delta.
+
+    v0.5.7 #18: ATENÇÃO — esta função assume que o Rich Progress já foi
+    pausado pelo caller (stdout+stderr estão livres para questionary
+    tomar o terminal). Só é seguro chamá-la dentro do
+    `_interactive_selector` (onde `progress.stop()` é garantido) ou
+    quando não há progress rodando. Chamar de outros contextos pode
+    causar sobreposição de output.
     """
     if current_total > 0:
         gap = max(0, total_cap - current_total)
@@ -163,16 +170,34 @@ def _prompt_playlists_checkbox(playlists: list[dict]) -> list[str]:
         ).ask()
         return selected or []
     except Exception:
-        # Fallback: numerado + vírgulas
+        # Fallback texto: numerado + vírgulas. v0.5.7 #16: usuários com
+        # muitas playlists (100+) teriam UX péssima com lista dump. Se
+        # passar de _FALLBACK_LIMIT, ordena por track_count desc e corta.
+        _FALLBACK_LIMIT = 20
+        shown = playlists
+        truncated = False
+        if len(playlists) > _FALLBACK_LIMIT:
+            shown = sorted(
+                playlists,
+                key=lambda p: p.get("track_count", 0),
+                reverse=True,
+            )[:_FALLBACK_LIMIT]
+            truncated = True
         print("Playlists disponíveis:")
-        for i, p in enumerate(playlists, 1):
+        for i, p in enumerate(shown, 1):
             print(f"  [{i}] {p['name']} ({p['track_count']} faixas)")
+        if truncated:
+            total = len(playlists)
+            print(
+                f"\n  (mostrando top {_FALLBACK_LIMIT} de {total} por "
+                f"tamanho — use questionary/TTY para ver todas)",
+            )
         raw = input("Números separados por vírgula (ou 'all'): ").strip()
         if raw.lower() == "all":
-            return [p["id"] for p in playlists]
+            return [p["id"] for p in shown]
         try:
             idxs = [int(x.strip()) for x in raw.split(",") if x.strip()]
-            return [playlists[i - 1]["id"] for i in idxs if 1 <= i <= len(playlists)]
+            return [shown[i - 1]["id"] for i in idxs if 1 <= i <= len(shown)]
         except ValueError:
             return []
 
@@ -226,9 +251,21 @@ def _print_report(report: dict) -> None:
             reason = expansion.get("reason")
             failed = expansion.get("failed_playlists") or []
             if added:
+                # v0.5.7 #19: mostra nomes das playlists (até 3) em vez
+                # de só contagem, quando selected_playlists tem dicts
+                # com name (formato v0.5.7+).
+                def _name(p):
+                    return p.get("name", p.get("id", "?")) if isinstance(p, dict) else str(p)
+                names = [_name(p) for p in picked[:3]]
+                names_suffix = ""
+                if names:
+                    names_suffix = f" [{', '.join(names)}"
+                    if len(picked) > 3:
+                        names_suffix += f" +{len(picked) - 3}"
+                    names_suffix += "]"
                 expansion_line = (
                     f"Expansão:         +{added} faixas de "
-                    f"{len(picked)} playlist(s) própria(s)"
+                    f"{len(picked)} playlist(s) própria(s){names_suffix}"
                 )
                 if failed:
                     expansion_line += f" ({len(failed)} falhou/falharam)"

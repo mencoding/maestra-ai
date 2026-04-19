@@ -5,7 +5,7 @@
 CLI e servidor MCP para controlar Spotify através de agentes de IA, com
 curadoria contextual que aprende gosto via feedback conservador.
 
-**Status:** pre-alpha (v0.5.6). Lançamento público planejado em v1.0.0.
+**Status:** pre-alpha (v0.5.7). Lançamento público planejado em v1.0.0.
 
 ## Instalação
 
@@ -75,10 +75,31 @@ contorno via `--playlist-id` em `maestra help onboarding`.
 ### `env | grep MAESTRA` mostra caminhos inesperados
 
 Remova exports legados de `~/.bashrc`/`~/.profile` e abra terminal novo.
-Defaults XDG:
-- `~/.config/maestra/` — credenciais
-- `~/.local/share/maestra/` — taste_profile, histórico, snapshots
-- `~/.local/state/maestra/` — rate limiter
+
+Por design, a Maestra respeita três env vars **independentes** (segue
+[XDG Base Directory](https://specifications.freedesktop.org/basedir-spec/)):
+
+| Variável | Default XDG | Conteúdo |
+|----------|-------------|----------|
+| `MAESTRA_CONFIG_DIR` | `$XDG_CONFIG_HOME/maestra` → `~/.config/maestra` | credenciais, playlist_id, preferências |
+| `MAESTRA_DATA_DIR` | `$XDG_DATA_HOME/maestra` → `~/.local/share/maestra` | taste_profile, histórico, snapshots, director_decisions |
+| `MAESTRA_STATE_DIR` | `$XDG_STATE_HOME/maestra` → `~/.local/state/maestra` | rate limiter (SQLite), circuit breaker |
+
+**Atenção:** são independentes. `rm -rf ~/.local/share/maestra` não
+apaga credenciais em `~/.config/maestra`. Para limpeza total:
+
+```bash
+rm -rf ~/.config/maestra ~/.local/share/maestra ~/.local/state/maestra
+uv run python -c "import keyring; keyring.delete_password('maestra-ai','spotify-refresh-token')"
+```
+
+Para apontar todos pra um diretório único customizado (ex: teste isolado):
+
+```bash
+export MAESTRA_CONFIG_DIR=/tmp/maestra-test/cfg
+export MAESTRA_DATA_DIR=/tmp/maestra-test/data
+export MAESTRA_STATE_DIR=/tmp/maestra-test/state
+```
 
 ### `maestra doctor` reporta `email: None`
 

@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.7] - 2026-04-19
+
+Terceiro lote do backlog consolidado — polimento de UX, docstrings
+e observabilidade. Itens 15-22 fechados; #23 já tinha sido feito
+com #11 em v0.5.6. Suite: 457 (maestra-ai).
+
+### Changed
+- **#17 distinção "zero playlists" vs "todas vazias"**:
+  `_fetch_own_playlists` agora retorna tupla `(usable, empty_count)`.
+  Novo `reason="only_empty_playlists"` + campo
+  `own_playlists_empty_count` em `expansion_info`. Mensagem humana
+  em `_print_report` adapta o texto conforme contagem.
+- **#19 `selected_playlists` com `{id, name}`**: em vez de só IDs,
+  `expansion_info.selected_playlists` guarda dicts com nome. Relatório
+  humano mostra nomes (primeiras 3) em vez de só contagem.
+- **#16 fallback texto do checkbox com cap**: quando `questionary`
+  cai em runtime e o usuário tem >20 playlists, mostra top 20 por
+  `track_count` em vez de imprimir a lista inteira. `"all"`/índices
+  operam sobre o subset mostrado.
+
+### Added
+- **#20 `progress_cb` em `_fetch_own_playlists`**: CLI pode atualizar
+  Rich Progress com "listando N playlists" em bibliotecas grandes,
+  elimina silêncio de 10s+ em usuários com 500+ playlists.
+
+### Docs
+- **#15 + #21 docstring expandida de `onboard.run()`**: seções
+  "Parâmetros", "Expansão por playlists próprias", "Semântica de
+  pesos" (explicita dedup do peso "playlist"=2 em múltiplas playlists),
+  "expansion_info no report" (vocabulário fechado de `reason`).
+- **#18 docstring de `_prompt_expansion_confirm`**: avisa que caller
+  precisa ter pausado Rich Progress antes da invocação.
+- **#22 doc explícita das 3 env vars XDG no README**: tabela com
+  variável, default, conteúdo; aviso de independência;
+  comando completo de limpeza total.
+
+### Já fechado em outra release (anotação)
+- **#23 `_rotate` do audit sem lock**: resolvido junto com #11 em
+  v0.5.6 (mesmo commit `a6ef3a7`).
+
 ## [0.5.6] - 2026-04-19
 
 Segundo lote do backlog consolidado (itens 10-14 + testes 24-26).

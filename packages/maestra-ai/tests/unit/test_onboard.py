@@ -532,7 +532,10 @@ class TestPlaylistExpansion:
         report = onboard.run(sp, taste, playlist_name="M", seed_count=0,
                               playlist_selector=selector)
         assert report["playlist_expansion"]["tracks_added"] == 2
-        assert report["playlist_expansion"]["selected_playlists"] == ["p1"]
+        # v0.5.7 #19: selected_playlists guarda {id, name}.
+        assert report["playlist_expansion"]["selected_playlists"] == [
+            {"id": "p1", "name": "Minha A"},
+        ]
         # taste.data["tracks"][uri]["global_signal"] deve ter peso 2 (playlist)
         tracks = taste.data.get("tracks", {})
         assert tracks.get("spotify:track:new1", {}).get("global_signal") == 2
