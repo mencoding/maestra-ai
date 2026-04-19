@@ -174,22 +174,41 @@ def _handle(args: argparse.Namespace, controller, taste, **_) -> int:
             if response == "n":
                 return 0
 
+    # v0.5.2 (bug 4): top_short tem cap 50 na API Spotify. Pedir mais é
+    # silenciosamente clampeado. Avisa o usuário antes de gastar ~8s.
+    warnings: list[str] = []
+    if args.seed_playlist > 50:
+        msg = (
+            f"--seed-playlist={args.seed_playlist} será clampeado para 50 "
+            f"(Spotify limita top_short_term a 50 faixas)."
+        )
+        warnings.append(msg)
+        if not args.json:
+            try:
+                from rich.console import Console
+                Console().print(f"[yellow]⚠ {msg}[/yellow]")
+            except ImportError:
+                print(f"[WARN] {msg}")
+
     cb = None
     progress = None
-    try:
-        from rich.progress import Progress, SpinnerColumn, TextColumn
-        progress = Progress(SpinnerColumn(), TextColumn("{task.description}"))
-        progress.start()
-        task_id = progress.add_task("Iniciando...", total=None)
+    # v0.5.2: em modo JSON não renderizar progress (polui stdout e
+    # quebra parsing por agente).
+    if not args.json:
+        try:
+            from rich.progress import Progress, SpinnerColumn, TextColumn
+            progress = Progress(SpinnerColumn(), TextColumn("{task.description}"))
+            progress.start()
+            task_id = progress.add_task("Iniciando...", total=None)
 
-        def _cb(ev):
-            desc = f"[{ev.get('step')}/6] {ev.get('name', '')}"
-            if ev.get("detail"):
-                desc += f" — {ev['detail']}"
-            progress.update(task_id, description=desc)
-        cb = _cb
-    except ImportError:
-        pass
+            def _cb(ev):
+                desc = f"[{ev.get('step')}/6] {ev.get('name', '')}"
+                if ev.get("detail"):
+                    desc += f" — {ev['detail']}"
+                progress.update(task_id, description=desc)
+            cb = _cb
+        except ImportError:
+            pass
 
     try:
         report = onboard.run(
@@ -204,6 +223,10 @@ def _handle(args: argparse.Namespace, controller, taste, **_) -> int:
     finally:
         if progress is not None:
             progress.stop()
+
+    if warnings:
+        report = dict(report)
+        report["warnings"] = warnings
 
     if args.json:
         print(json.dumps(report, indent=2, ensure_ascii=False))

@@ -58,6 +58,42 @@ def _fake_run_capture(captured: dict):
     return _fake
 
 
+def test_seed_maior_que_50_emite_warning_em_json(monkeypatch, capsys):
+    """v0.5.2 (bug 4): report JSON inclui campo warnings quando
+    --seed-playlist > 50 (Spotify clampa top_short em 50)."""
+    import json
+    captured = {}
+    monkeypatch.setattr(
+        "maestra_ai.core.onboard.run", _fake_run_capture(captured)
+    )
+    args = _ns(
+        playlist_name="Maestra", non_interactive=True, yes=True,
+        seed_playlist=100, json=True, dry_run=False,
+    )
+    rc = cli_onboard._handle(args, _FakeController(), taste=None)
+    assert rc == 0
+    out = capsys.readouterr().out
+    report = json.loads(out)
+    assert "warnings" in report
+    assert any("50" in w and "clampeado" in w for w in report["warnings"])
+
+
+def test_seed_50_ou_menos_nao_emite_warning(monkeypatch, capsys):
+    import json
+    captured = {}
+    monkeypatch.setattr(
+        "maestra_ai.core.onboard.run", _fake_run_capture(captured)
+    )
+    args = _ns(
+        playlist_name="Maestra", non_interactive=True, yes=True,
+        seed_playlist=50, json=True, dry_run=False,
+    )
+    rc = cli_onboard._handle(args, _FakeController(), taste=None)
+    assert rc == 0
+    report = json.loads(capsys.readouterr().out)
+    assert "warnings" not in report
+
+
 def test_onboard_cli_non_interactive_com_name(monkeypatch):
     captured = {}
     monkeypatch.setattr(
