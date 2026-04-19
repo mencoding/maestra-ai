@@ -112,6 +112,33 @@ class TasteProfile:
             track.setdefault("context_signals", [])
         return data
 
+    def _write_atomic(self, tmp_path: str) -> None:
+        """v0.5.5 #5: escrita atômica com cleanup garantido do .tmp.
+
+        Antes, se `os.replace()` falhava (disco cheio, permissão, crash
+        de volume montado), o `.tmp` ficava órfão e `self.data` em
+        memória divergia do disco. Agora o `.tmp` é removido em qualquer
+        caminho de falha e a exceção é traduzida para `StorageError` com
+        agent_hint.
+        """
+        from maestra_ai.core.errors import StorageError
+
+        try:
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(self.data, f, indent=2, ensure_ascii=False)
+                f.write("\n")
+            os.replace(tmp_path, self.path)
+        except OSError as e:
+            # Best-effort cleanup; se o unlink falha, nada mais a fazer.
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise StorageError(
+                f"Falha ao persistir perfil em {self.path}: {e}",
+                where={"path": self.path, "tmp_path": tmp_path},
+            ) from e
+
     def save(self):
         """Persiste perfil no disco preservando escritas concorrentes."""
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
@@ -122,11 +149,7 @@ class TasteProfile:
             if disk_data:
                 self.data = self._merge_profiles(disk_data, self.data)
             self._update_success_rates()
-            tmp_path = f"{self.path}.tmp"
-            with open(tmp_path, "w", encoding="utf-8") as f:
-                json.dump(self.data, f, indent=2, ensure_ascii=False)
-                f.write("\n")
-            os.replace(tmp_path, self.path)
+            self._write_atomic(f"{self.path}.tmp")
 
     def restore(self, data):
         """Sobrescreve perfil com `data` sem merge (uso: rollback).
@@ -139,11 +162,7 @@ class TasteProfile:
         lock_path = f"{self.path}.lock"
         with open(lock_path, "w", encoding="utf-8") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
-            tmp_path = f"{self.path}.tmp"
-            with open(tmp_path, "w", encoding="utf-8") as f:
-                json.dump(self.data, f, indent=2, ensure_ascii=False)
-                f.write("\n")
-            os.replace(tmp_path, self.path)
+            self._write_atomic(f"{self.path}.tmp")
 
     def _reload_latest(self):
         """Atualiza memória local com dados já gravados por outros processos."""

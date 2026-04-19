@@ -1,10 +1,47 @@
-"""HIGH-2: taste.restore valida schema antes de sobrescrever."""
+"""HIGH-2: taste.restore valida schema antes de sobrescrever.
+v0.5.5 #5: restore/save limpam .tmp órfão em falha de os.replace.
+"""
 from __future__ import annotations
 
 import pytest
 
-from maestra_ai.core.errors import ValidationError
+from maestra_ai.core.errors import StorageError, ValidationError
 from maestra_ai.core.taste import TasteProfile
+
+
+class TestAtomicWriteCleanup:
+    """v0.5.5 #5: se os.replace falha durante save/restore, o .tmp não
+    pode ficar órfão e a exceção deve ser traduzida para StorageError."""
+
+    def test_save_limpa_tmp_quando_os_replace_falha(self, tmp_path, monkeypatch):
+        import os
+        tp = TasteProfile(path=str(tmp_path / "taste.json"))
+
+        def _fake_replace(src, dst):
+            raise OSError(28, "No space left on device")
+
+        monkeypatch.setattr(os, "replace", _fake_replace)
+        with pytest.raises(StorageError) as exc:
+            tp.save()
+        assert "persistir perfil" in exc.value.what_happened_msg
+        # .tmp não pode estar órfão
+        tmp = f"{tp.path}.tmp"
+        assert not os.path.exists(tmp), \
+            f".tmp órfão em {tmp} após falha de save"
+
+    def test_restore_limpa_tmp_quando_os_replace_falha(self, tmp_path, monkeypatch):
+        import os
+        tp = TasteProfile(path=str(tmp_path / "taste.json"))
+
+        def _fake_replace(src, dst):
+            raise OSError(13, "Permission denied")
+
+        monkeypatch.setattr(os, "replace", _fake_replace)
+        payload = {"tracks": {"spotify:track:y": {"weight": 2}}}
+        with pytest.raises(StorageError):
+            tp.restore(payload)
+        tmp = f"{tp.path}.tmp"
+        assert not os.path.exists(tmp)
 
 
 def test_restore_aceita_payload_valido(tmp_path):
