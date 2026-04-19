@@ -122,3 +122,58 @@ class TestAuth:
 # mock injetável e esses testes virão junto. Ver P1-4 (DI já pronto no
 # constructor) + dívida arquitetural em cli/__init__.py::main
 # (skip_deps só existe para rollback e auth hoje).
+
+
+class TestQuickstart:
+    """v0.5.6 #26: quickstart banner e grupos sem sub-subcomando."""
+
+    def test_maestra_sem_args_mostra_quickstart(self, isolated_env):
+        r = run_maestra([], isolated_env)
+        assert r.returncode == 0
+        # O banner quickstart cita comandos-chave de bootstrap.
+        assert "onboarding" in r.stdout or "onboard" in r.stdout
+        assert "doctor" in r.stdout
+
+    def test_grupo_taste_sem_sub_mostra_help(self, isolated_env):
+        """v0.5.2 + fix regressão v0.5.3.1: grupo sem sub-subcomando
+        imprime help e retorna 0, não 2."""
+        r = run_maestra(["taste"], isolated_env)
+        assert r.returncode == 0
+        assert "show" in r.stdout or "review" in r.stdout
+
+
+class TestConfig:
+    """v0.5.6 #26: fluxo config list redactando secrets."""
+
+    def test_config_list_redacta_client_secret(self, isolated_env, tmp_path):
+        # Grava credenciais primeiro via auth setup.
+        run_maestra(
+            [
+                "auth", "setup",
+                "--client-id", "cid_cfg_e2e",
+                "--client-secret", "SUPER_SECRETO_XYZ",
+                "--redirect-uri", "https://example.com/cb",
+                "--json",
+            ],
+            isolated_env,
+        )
+        r = run_maestra(["config", "list"], isolated_env)
+        assert r.returncode == 0, f"stderr: {r.stderr}"
+        assert "SUPER_SECRETO_XYZ" not in r.stdout
+        # client_id pode aparecer em clear (não é secret).
+        assert "cid_cfg_e2e" in r.stdout
+
+
+class TestHelpTopics:
+    """v0.5.6 #26: help topics internos (onboarding, mcp) são acessíveis."""
+
+    def test_help_onboarding_cita_pre_requisitos(self, isolated_env):
+        r = run_maestra(["help", "onboarding"], isolated_env)
+        assert r.returncode == 0
+        assert "dashboard" in r.stdout.lower()
+        assert "paste" in r.stdout.lower() or "redirect" in r.stdout.lower()
+
+    def test_help_sem_topico_lista_disponiveis(self, isolated_env):
+        r = run_maestra(["help"], isolated_env)
+        assert r.returncode == 0
+        assert "onboarding" in r.stdout
