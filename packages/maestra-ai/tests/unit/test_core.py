@@ -1,6 +1,8 @@
 """Testes do SpotifyController com mocks do spotipy."""
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
+
 import pytest
+
 from maestra_ai.core.client import SpotifyController
 
 

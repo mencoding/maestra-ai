@@ -9,7 +9,6 @@ import time
 from maestra_ai.cli import register
 from maestra_ai.cli._common import (
     PLAYLIST_ID,
-    _active_context_value,
     _curation_context,
     _record_curated_tracks,
     error,

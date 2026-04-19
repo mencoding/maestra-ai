@@ -1,7 +1,6 @@
 """FlowAnalyzer — detecta deriva negativa no fluxo musical."""
 from collections import Counter
 
-
 NEGATIVE_SIGNALS = {"bad", "skip", "negative"}
 POSITIVE_SIGNALS = {"good", "positive"}
 STYLE_TERMS = (

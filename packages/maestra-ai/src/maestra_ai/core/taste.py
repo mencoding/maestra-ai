@@ -21,7 +21,7 @@ class TasteProfile:
         """Carrega perfil do disco ou cria um vazio."""
         if os.path.exists(self.path):
             try:
-                with open(self.path, "r", encoding="utf-8") as f:
+                with open(self.path, encoding="utf-8") as f:
                     data = json.load(f)
                 if not isinstance(data, dict):
                     self._preserve_corrupt("estrutura JSON inválida (não é objeto)")
@@ -117,7 +117,7 @@ class TasteProfile:
         if not os.path.exists(self.path):
             return None
         try:
-            with open(self.path, "r", encoding="utf-8") as f:
+            with open(self.path, encoding="utf-8") as f:
                 return self._migrate(json.load(f))
         except (json.JSONDecodeError, OSError):
             return None
@@ -463,7 +463,6 @@ def _signal_weight(signal):
 
 
 def _prune_candidates(tracks, profile, context):
-    from collections import Counter
     candidates = []
     for track in tracks:
         uri = track["uri"]

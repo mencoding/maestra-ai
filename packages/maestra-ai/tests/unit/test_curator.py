@@ -1,6 +1,8 @@
 """Testes do Curator — tradução de contexto em buscas."""
 from unittest.mock import MagicMock
+
 import pytest
+
 from maestra_ai.core.curator import Curator
 from maestra_ai.core.taste import TasteProfile
 
@@ -183,10 +185,11 @@ class TestResolveQueries:
 
 class TestCuratorPrune:
     def test_prune_dry_run_retorna_candidatos_sem_remover(self):
+        import tempfile
         from unittest.mock import MagicMock
+
         from maestra_ai.core.curator import Curator
         from maestra_ai.core.taste import TasteProfile
-        import tempfile
 
         controller = MagicMock()
         controller.playlist_tracks.return_value = [
@@ -209,6 +212,7 @@ class TestCuratorPrune:
 
     def test_prune_confirm_remove_e_cria_snapshot(self, tmp_path, monkeypatch):
         from unittest.mock import MagicMock
+
         from maestra_ai.core.curator import Curator
         from maestra_ai.core.taste import TasteProfile
         monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))

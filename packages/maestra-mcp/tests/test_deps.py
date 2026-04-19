@@ -69,8 +69,6 @@ def test_build_deps_thread_safe(monkeypatch, tmp_path):
     call_count = {"n": 0}
     count_lock = threading.Lock()
 
-    real_init = None  # __init__ original do SpotifyController
-
     def counting_init(self, *args, **kwargs):
         with count_lock:
             call_count["n"] += 1

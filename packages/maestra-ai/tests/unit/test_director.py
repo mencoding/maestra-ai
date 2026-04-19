@@ -315,7 +315,8 @@ def test_registra_decisao_em_jsonl(tmp_path):
 
 class TestDirectorLifecycle:
     def test_start_cria_pid_file_e_retorna_dict(self, tmp_path, monkeypatch):
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import MagicMock, patch
+
         from maestra_ai.core import director as director_mod
         monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
 
@@ -330,7 +331,8 @@ class TestDirectorLifecycle:
 
     def test_start_propaga_count_e_outside_flags(self, tmp_path, monkeypatch):
         # Garante que start() propaga count/outside-* para o subprocess
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import MagicMock, patch
+
         from maestra_ai.core import director as director_mod
         monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
 
@@ -359,6 +361,7 @@ class TestDirectorLifecycle:
 
     def test_start_ja_rodando_retorna_already(self, tmp_path, monkeypatch):
         from unittest.mock import patch
+
         from maestra_ai.core import director as director_mod
         from maestra_ai.core.storage import data_dir
         monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
@@ -366,13 +369,14 @@ class TestDirectorLifecycle:
         pid_path.parent.mkdir(parents=True, exist_ok=True)
         pid_path.write_text("99999", encoding="utf-8")
 
-        with patch("os.kill") as mock_kill:  # kill(pid, 0) = vivo
+        with patch("os.kill"):  # kill(pid, 0) = vivo
             result = director_mod.start(interval=60)
 
         assert result["status"] == "already_running"
 
     def test_stop_mata_processo_e_remove_pid(self, tmp_path, monkeypatch):
         from unittest.mock import patch
+
         from maestra_ai.core import director as director_mod
         from maestra_ai.core.storage import data_dir
         monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
@@ -396,6 +400,7 @@ class TestDirectorLifecycle:
 
     def test_status_running(self, tmp_path, monkeypatch):
         from unittest.mock import patch
+
         from maestra_ai.core import director as director_mod
         from maestra_ai.core.storage import data_dir
         monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))

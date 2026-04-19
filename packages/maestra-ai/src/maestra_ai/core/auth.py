@@ -9,7 +9,7 @@ trocado por `refresh_token`, persistido via `TokenStore`.
 from __future__ import annotations
 
 import webbrowser
-from typing import Callable
+from collections.abc import Callable
 
 from spotipy.cache_handler import CacheHandler
 from spotipy.oauth2 import SpotifyOAuth
@@ -17,7 +17,6 @@ from spotipy.oauth2 import SpotifyOAuth
 from maestra_ai.core import storage
 from maestra_ai.core.errors import AuthError, ConfigError
 from maestra_ai.core.token_store import default_token_store
-
 
 SCOPES = " ".join([
     "user-read-playback-state",

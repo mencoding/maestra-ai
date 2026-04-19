@@ -1,7 +1,7 @@
 """Rollback: restaura snapshot após gravar estado atual como salvaguarda."""
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 from maestra_ai.core import snapshot
 from maestra_ai.core.errors import NotFoundError

@@ -7,10 +7,7 @@ KeyringTokenStore (preferencial) e FileTokenStore (fallback).
 from __future__ import annotations
 
 import json
-import stat
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from maestra_ai.core import storage
 from maestra_ai.core.token_store import (

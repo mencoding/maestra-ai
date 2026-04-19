@@ -171,7 +171,8 @@ class Curator:
         Dry-run por padrão (confirm=False). Em execução real, cria snapshot
         automático antes de remover.
         """
-        from maestra_ai.core import snapshot, taste as taste_mod
+        from maestra_ai.core import snapshot
+        from maestra_ai.core import taste as taste_mod
 
         tracks = self.controller.playlist_tracks(playlist_id)
         candidates = taste_mod._prune_candidates(tracks, self.taste, context)

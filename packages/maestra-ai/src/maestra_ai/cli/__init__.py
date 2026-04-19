@@ -12,10 +12,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Callable
+from collections.abc import Callable
 
 from maestra_ai.cli._common import (
-    BASE_DIR,
     CONTEXT_PATH,
     DIRECTOR_DECISIONS_PATH,
     FEEDBACK_PROMPT_STATE_PATH,
@@ -24,7 +23,6 @@ from maestra_ai.cli._common import (
     PLAYLIST_ID,
     TASTE_PATH,
 )
-
 
 _REGISTRARS: list[Callable[[argparse._SubParsersAction], None]] = []
 
@@ -40,19 +38,23 @@ def _import_subcommands() -> None:
     from maestra_ai.cli import (  # noqa: F401
         auth,
         basic,
-        context as context_cmd,
         curate,
         director,
         doctor,
         feedback,
         flow,
-        help as help_cmd,
         history,
         onboard,
         playback,
         playlist,
         rollback,
         taste,
+    )
+    from maestra_ai.cli import (
+        context as context_cmd,
+    )
+    from maestra_ai.cli import (
+        help as help_cmd,
     )
     _ = (auth, basic, context_cmd, curate, director, doctor, feedback, flow,
          help_cmd, history, onboard, playback, playlist, rollback, taste)
@@ -108,14 +110,13 @@ def _build_deps(args: argparse.Namespace) -> dict:
     from maestra_ai.core.context import ContextState
     from maestra_ai.core.curator import Curator
     from maestra_ai.core.director import MusicDirector
+    from maestra_ai.core.errors import AuthError, MaestraError
     from maestra_ai.core.feedback_prompt import FeedbackPrompter
     from maestra_ai.core.flow import FlowAnalyzer
     from maestra_ai.core.history import HistoryAnalyzer
     from maestra_ai.core.playback import PlaybackObserver
     from maestra_ai.core.playback_processor import PlaybackEventProcessor
     from maestra_ai.core.taste import TasteProfile
-
-    from maestra_ai.core.errors import AuthError, MaestraError
     try:
         controller = SpotifyController()
     except MaestraError:

@@ -15,10 +15,9 @@ saved=1, recent=1.
 from __future__ import annotations
 
 from collections import Counter
-from typing import Any, Callable
+from collections.abc import Callable
 
 from maestra_ai.core import storage
-
 
 WEIGHTS = {
     "long_term": 3,
