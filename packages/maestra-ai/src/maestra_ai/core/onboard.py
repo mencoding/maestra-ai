@@ -204,9 +204,25 @@ def run(
         playlist_id = existing_playlist_id
         try:
             pl_meta = sp.playlist(existing_playlist_id, fields="name")
-            effective_name = (pl_meta or {}).get("name") or existing_playlist_id
+            current_name = (pl_meta or {}).get("name") or existing_playlist_id
         except Exception:
-            effective_name = existing_playlist_id
+            current_name = existing_playlist_id
+
+        # v0.5.2 (bug 5): se usuário passar --playlist-name junto com
+        # --playlist-id e o nome atual da playlist diferir, renomeia no
+        # Spotify. Caso típico: usuário cria playlist no app Spotify que
+        # fica com nome default "My Playlist #N" e quer chamá-la "Maestra".
+        if playlist_name and playlist_name != current_name and not dry_run:
+            try:
+                sp.playlist_change_details(existing_playlist_id, name=playlist_name)
+                effective_name = playlist_name
+            except Exception:
+                # Rename falhou (permissão, Development Mode) — mantém nome
+                # atual. Não bloqueia o onboard.
+                effective_name = current_name
+        else:
+            effective_name = current_name
+
         if not dry_run:
             cfg = storage.read_config()
             cfg["playlist_id"] = playlist_id

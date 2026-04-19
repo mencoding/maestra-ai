@@ -127,6 +127,73 @@ class TestFetchSaved:
         assert len(result) == 50
 
 
+class TestPlaylistRename:
+    """v0.5.2 (bug 5): --playlist-id + --playlist-name renomeia a
+    playlist no Spotify se nome atual diferir."""
+
+    def test_rename_quando_nome_difere(self, tmp_path, monkeypatch):
+        from maestra_ai.core.taste import TasteProfile
+
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+
+        sp = _make_sp(top_long=1, saved_pages=[{"items": []}])
+        sp.playlist.return_value = {"name": "My Playlist #7"}
+
+        taste = TasteProfile(tmp_path / "taste.json")
+        report = onboard.run(
+            sp, taste,
+            playlist_name="Maestra",
+            existing_playlist_id="pl_existing",
+            seed_count=0,
+        )
+
+        sp.playlist_change_details.assert_called_once_with(
+            "pl_existing", name="Maestra"
+        )
+        assert report["playlist_name"] == "Maestra"
+
+    def test_nao_renomeia_se_nome_igual(self, tmp_path, monkeypatch):
+        from maestra_ai.core.taste import TasteProfile
+
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+
+        sp = _make_sp(top_long=1, saved_pages=[{"items": []}])
+        sp.playlist.return_value = {"name": "Maestra"}
+
+        taste = TasteProfile(tmp_path / "taste.json")
+        onboard.run(
+            sp, taste,
+            playlist_name="Maestra",
+            existing_playlist_id="pl_existing",
+            seed_count=0,
+        )
+
+        sp.playlist_change_details.assert_not_called()
+
+    def test_rename_falhando_nao_bloqueia_onboard(self, tmp_path, monkeypatch):
+        from maestra_ai.core.taste import TasteProfile
+
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+
+        sp = _make_sp(top_long=1, saved_pages=[{"items": []}])
+        sp.playlist.return_value = {"name": "My Playlist #7"}
+        sp.playlist_change_details.side_effect = RuntimeError("403 forbidden")
+
+        taste = TasteProfile(tmp_path / "taste.json")
+        report = onboard.run(
+            sp, taste,
+            playlist_name="Maestra",
+            existing_playlist_id="pl_existing",
+            seed_count=0,
+        )
+        # Mantém nome atual quando rename falha, onboard segue normalmente.
+        assert report["playlist_name"] == "My Playlist #7"
+        assert report["status"] == "ok"
+
+
 class TestPlaylistCreate403:
     """v0.5.2: 403 ao criar playlist vira PlaylistCreateForbiddenError
     com probable_causes acionáveis (Development Mode, User Management,
@@ -378,13 +445,15 @@ class TestRunComExistingPlaylistId:
         from maestra_ai.core.taste import TasteProfile
         taste = TasteProfile(str(tmp_path / "taste.json"))
 
+        # v0.5.2: passando playlist_name vazio ou igual ao atual evita rename.
         report = onboard.run(
-            sp, taste, playlist_name="ignorado", seed_count=0,
+            sp, taste, playlist_name="Playlist Existente", seed_count=0,
             dry_run=False, existing_playlist_id="pl_X",
         )
 
         sp.user_playlist_create.assert_not_called()
         sp.playlist.assert_called()
+        sp.playlist_change_details.assert_not_called()
         assert report["playlist_id"] == "pl_X"
         assert report["playlist_name"] == "Playlist Existente"
 
