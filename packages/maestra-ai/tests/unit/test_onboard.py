@@ -1025,8 +1025,9 @@ class TestExpansionContextShape:
         monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
         monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
 
-        # _make_sp(top_long=10, top_medium=10, top_short=10, recent=5, saved=0)
-        # produz 35 URIs únicos (prefixos distintos).
+        # _sp_with_playlists() chama _make_sp(top_long=10, top_medium=10,
+        # top_short=10, recent=5, saved=0) internamente — produz 35 URIs
+        # únicos (prefixos distintos).
         sp = TestPlaylistExpansion()._sp_with_playlists(
             own_playlists=[
                 {"id": "p1", "name": "A", "owner": {"id": "me"},

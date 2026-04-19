@@ -29,6 +29,7 @@ from maestra_ai.core.onboard_types import (
     ExpansionInfo,
     FailedPlaylist,
     OwnPlaylist,
+    PlaylistSelector,
     SelectedPlaylist,
 )
 
@@ -267,7 +268,7 @@ def run(
     saved_cap: int | None = None,
     existing_playlist_id: str | None = None,
     total_cap: int = _TOTAL_CAP_DEFAULT,
-    playlist_selector: Callable | None = None,
+    playlist_selector: PlaylistSelector | None = None,
 ) -> dict:
     """Executa onboarding. Retorna relatório estruturado.
 

@@ -97,9 +97,8 @@ def _build_playlist_selector(args, progress):
             # onboard — top/saved/recent já foram buscados e devem ser
             # persistidos. Degrada silenciosamente para [] (sem expansão)
             # para que o core continue o fluxo normal.
-            # v0.5.5 #9: passa o cap real para o prompt — current_total
-            # fica 0 aqui (core ainda não expõe; será corrigido no item
-            # 27 com ExpansionContext).
+            # v0.6.0 #27: core expõe ExpansionContext com total_cap e
+            # current_total reais; prompt mostra os valores em vez de 0.
             try:
                 confirm = _prompt_expansion_confirm(
                     current_total=ctx["current_total"],
