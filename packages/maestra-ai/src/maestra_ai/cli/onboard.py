@@ -86,8 +86,10 @@ def _build_playlist_selector(args, progress):
         # v0.5.5 #4: core já filtrou playlists vazias em _fetch_own_playlists,
         # CLI não precisa duplicar. Lista vazia aqui = usuário sem playlists
         # próprias utilizáveis.
+        # v0.5.7 #17: mensagem humana foi movida para _print_report — lá
+        # temos acesso ao expansion_info.own_playlists_empty_count para
+        # distinguir "zero playlists" de "todas vazias".
         if not playlists:
-            _humanized_no_playlists_message()
             return []
         # Pausa Rich Progress enquanto questionary toma o terminal.
         if progress is not None:
@@ -175,12 +177,25 @@ def _prompt_playlists_checkbox(playlists: list[dict]) -> list[str]:
             return []
 
 
-def _humanized_no_playlists_message() -> None:
-    """Mensagem calorosa quando o usuário não tem playlists próprias."""
-    msg = (
-        "Você ainda não criou nenhuma playlist no Spotify — tudo bem, "
-        "vou aprender seus gostos ao longo das nossas interações."
-    )
+def _humanized_no_playlists_message(empty_count: int = 0) -> None:
+    """Mensagem calorosa quando o usuário não tem playlists utilizáveis.
+
+    v0.5.7 #17: distingue "sem nenhuma playlist própria" de "tem N
+    playlists mas todas estão vazias" — antes a mesma frase era usada
+    para ambos os casos e mentia no segundo.
+    """
+    if empty_count > 0:
+        msg = (
+            f"Suas {empty_count} playlist(s) próprias estão vazias — "
+            "volte aqui quando preencher alguma, ou sigamos com o que "
+            "já temos. Vou aprender seus gostos ao longo das nossas "
+            "interações."
+        )
+    else:
+        msg = (
+            "Você ainda não criou nenhuma playlist no Spotify — tudo bem, "
+            "vou aprender seus gostos ao longo das nossas interações."
+        )
     try:
         from rich.console import Console
         Console().print(f"[cyan]{msg}[/cyan]")
@@ -201,6 +216,7 @@ def _print_report(report: dict) -> None:
         # porque o CLI sabe que o selector é interativo aqui.
         reason_to_text = {
             "no_own_playlists": "— (sem playlists próprias)",
+            "only_empty_playlists": "— (suas playlists estão vazias)",
             "selector_returned_empty": "— (dispensada)",
             "cap_already_reached": "— (amostra já atinge o teto)",
         }
@@ -237,6 +253,14 @@ def _print_report(report: dict) -> None:
             "e depois [cyan]maestra curate[/]"
         )
         console.print(Panel(body, title="✓ Onboard concluído", border_style="green"))
+
+        # v0.5.7 #17: mensagem calorosa depois do painel quando o usuário
+        # não tem playlists utilizáveis — distingue "zero criadas" de
+        # "todas vazias" via own_playlists_empty_count.
+        if expansion.get("reason") in ("no_own_playlists", "only_empty_playlists"):
+            _humanized_no_playlists_message(
+                empty_count=expansion.get("own_playlists_empty_count", 0),
+            )
     except ImportError:
         for k, v in report.items():
             print(f"  {k}: {v}")

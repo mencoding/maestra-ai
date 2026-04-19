@@ -83,15 +83,16 @@ class TestFetchOwnPlaylists:
                 "next": None,
             },
         ]
-        result = onboard._fetch_own_playlists(sp, me_id="me")
+        result, empty_count = onboard._fetch_own_playlists(sp, me_id="me")
         ids = [p["id"] for p in result]
         assert "p1" in ids
         assert "p3" in ids
         assert "p2" not in ids  # seguida, não própria
+        assert empty_count == 0
 
-    def test_filtra_playlists_vazias(self):
-        """v0.5.5 #4: playlist com track_count=0 não deve ser oferecida —
-        selector perderia request chamando _fetch_playlist_tracks nela."""
+    def test_filtra_playlists_vazias_e_conta(self):
+        """v0.5.5 #4 + v0.5.7 #17: filtra vazias e retorna contagem delas
+        (para o CLI distinguir 'zero' de 'todas vazias')."""
         from unittest.mock import MagicMock
         sp = MagicMock()
         sp.current_user_playlists.side_effect = [
@@ -107,9 +108,10 @@ class TestFetchOwnPlaylists:
                 "next": None,
             },
         ]
-        result = onboard._fetch_own_playlists(sp, me_id="me")
+        result, empty_count = onboard._fetch_own_playlists(sp, me_id="me")
         ids = [p["id"] for p in result]
         assert ids == ["p1"]
+        assert empty_count == 2  # p2 (total=0) e p3 (tracks=None)
 
     def test_pagina_ate_next_null(self):
         from unittest.mock import MagicMock
@@ -122,7 +124,7 @@ class TestFetchOwnPlaylists:
                         "tracks": {"total": 5}}],
              "next": None},
         ]
-        result = onboard._fetch_own_playlists(sp, me_id="me")
+        result, _ = onboard._fetch_own_playlists(sp, me_id="me")
         assert len(result) == 2
 
     def test_guarda_contra_loop_infinito_items_vazio_com_next(self):
@@ -132,8 +134,6 @@ class TestFetchOwnPlaylists:
         """
         from unittest.mock import MagicMock
         sp = MagicMock()
-        # Página 1 normal, página 2 patológica (vazia com next), página 3
-        # nunca deveria ser chamada.
         sp.current_user_playlists.side_effect = [
             {"items": [{"id": "p1", "name": "A", "owner": {"id": "me"},
                         "tracks": {"total": 5}}],
@@ -143,12 +143,39 @@ class TestFetchOwnPlaylists:
                         "tracks": {"total": 5}}],
              "next": None},
         ]
-        result = onboard._fetch_own_playlists(sp, me_id="me")
-        # Deve ter retornado só p1 (parou na página vazia).
+        result, _ = onboard._fetch_own_playlists(sp, me_id="me")
         assert len(result) == 1
         assert result[0]["id"] == "p1"
-        # Verifica que não travou em loop: só 2 chamadas (1 + a vazia).
         assert sp.current_user_playlists.call_count == 2
+
+    def test_reason_only_empty_playlists_quando_todas_vazias(
+        self, tmp_path, monkeypatch,
+    ):
+        """v0.5.7 #17: usuário com N playlists próprias mas todas com
+        track_count=0 gera reason='only_empty_playlists' (distinto de
+        'no_own_playlists') e own_playlists_empty_count=N."""
+        from maestra_ai.core.taste import TasteProfile
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+
+        sp = TestPlaylistExpansion()._sp_with_playlists(
+            own_playlists=[
+                {"id": "p1", "name": "Vazia A", "owner": {"id": "me"},
+                 "tracks": {"total": 0}},
+                {"id": "p2", "name": "Vazia B", "owner": {"id": "me"},
+                 "tracks": {"total": 0}},
+            ],
+        )
+
+        taste = TasteProfile(tmp_path / "taste.json")
+        report = onboard.run(
+            sp, taste, playlist_name="M", seed_count=0,
+            playlist_selector=lambda pls: [],
+        )
+        exp = report["playlist_expansion"]
+        assert exp["reason"] == "only_empty_playlists"
+        assert exp["own_playlists_empty_count"] == 2
+        assert exp["offered_playlists"] == 0
 
 
 class TestFetchPlaylistTracks:

@@ -126,17 +126,29 @@ class TestInteractiveSelectorFluxoReal:
         result = sel([{"id": "p1", "name": "A", "track_count": 10}])
         assert result == []
 
-    def test_lista_vazia_dispara_mensagem_humana(self, monkeypatch, capsys):
+    def test_lista_vazia_retorna_sem_imprimir(self, monkeypatch, capsys):
+        """v0.5.7 #17: selector não imprime mais mensagem humana em lista
+        vazia — responsabilidade moveu para _print_report que tem acesso
+        ao own_playlists_empty_count para distinguir os casos."""
         self._patch_questionary(
             monkeypatch, confirm_return=True, checkbox_return=["p1"],
         )
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
         args = _ns(non_interactive=False)
         sel = cli_onboard._build_playlist_selector(args, progress=None)
-        result = sel([])  # nenhuma playlist própria
+        result = sel([])
         assert result == []
-        out = capsys.readouterr().out
-        assert "aprender" in out or "sem" in out.lower()
+
+    def test_humanized_message_distingue_zero_de_todas_vazias(self, capsys):
+        """v0.5.7 #17: mensagem muda conforme empty_count."""
+        cli_onboard._humanized_no_playlists_message(empty_count=0)
+        out1 = capsys.readouterr().out
+        assert "ainda não criou" in out1
+
+        cli_onboard._humanized_no_playlists_message(empty_count=3)
+        out2 = capsys.readouterr().out
+        assert "3" in out2
+        assert "vazias" in out2
 
 
 class TestPromptExpansionConfirmDinamico:

@@ -105,9 +105,16 @@ def _fetch_own_playlists(sp, me_id: str) -> list[dict]:
     e `_fetch_playlist_tracks` nunca é chamado com playlist vazia
     (economiza um request por playlist vazia que o usuário tenha).
 
-    Retorna lista de dicts: {id, name, track_count}.
+    v0.5.7 #17: retorna tupla `(usable, empty_count)` — primeiro item é
+    a lista utilizável (comportamento existente), segundo é a contagem
+    de playlists próprias com `track_count <= 0`. CLI usa esse número
+    para distinguir "usuário sem playlists" de "usuário tem N playlists
+    mas todas estão vazias" na mensagem humana.
+
+    Retorna `(list[dict{id, name, track_count}], int)`.
     """
     collected: list[dict] = []
+    empty_count = 0
     offset = 0
     while True:
         resp = sp.current_user_playlists(limit=_PAGE, offset=offset)
@@ -121,6 +128,7 @@ def _fetch_own_playlists(sp, me_id: str) -> list[dict]:
                 continue
             track_count = (it.get("tracks") or {}).get("total", 0)
             if track_count <= 0:
+                empty_count += 1
                 continue
             collected.append({
                 "id": it.get("id"),
@@ -130,7 +138,7 @@ def _fetch_own_playlists(sp, me_id: str) -> list[dict]:
         offset += len(items)
         if resp.get("next") is None:
             break
-    return collected
+    return collected, empty_count
 
 
 _PLAYLIST_TRACKS_FIELDS = "items(track(uri,name,artists(name))),next"
@@ -260,22 +268,55 @@ def run(
 ) -> dict:
     """Executa onboarding. Retorna relatório estruturado.
 
-    `saved_cap`: override do cap de Liked Songs. Se None, usa _MAX_SAVED.
-    Para segurança, o valor é clampeado a min(saved_cap, _MAX_SAVED * 2).
+    ## Parâmetros
 
-    `existing_playlist_id`: v0.4.5 parte 2 — se passado, pula a criação
-    de playlist e reaproveita a existente como buffer. Nome é obtido via
-    `sp.playlist(..., fields="name")` apenas para relatório.
+    - `saved_cap`: override do cap de Liked Songs. Se None, usa `_MAX_SAVED`.
+      Para segurança, o valor é clampeado a `min(saved_cap, _MAX_SAVED * 2)`.
 
-    `total_cap`: v0.5.3 — teto desejado para total de faixas únicas
-    pontuadas. Se após top+saved+recent o total ficar abaixo e
-    `playlist_selector` estiver definido, oferece expansão via
-    playlists criadas pelo próprio usuário.
+    - `existing_playlist_id`: v0.4.5 parte 2 — se passado, pula a criação
+      de playlist e reaproveita a existente como buffer. Nome é obtido via
+      `sp.playlist(..., fields="name")` apenas para relatório.
 
-    `playlist_selector`: v0.5.3 — callback que recebe
-    `list[dict(id, name, track_count)]` das playlists próprias do
-    usuário e retorna `list[str]` com IDs escolhidos. Retornar `[]`
-    pula a expansão. Se `None` (default), pula sempre.
+    - `total_cap`: v0.5.3 — teto desejado para total de faixas únicas
+      pontuadas. Default 5000.
+
+    - `playlist_selector`: v0.5.3 — callback opcional que decide quais
+      playlists do usuário entram na expansão. Veja "Expansão" abaixo.
+
+    ## Expansão por playlists próprias (v0.5.3)
+
+    Executada entre recent e análise quando TODAS estas condições são
+    verdadeiras:
+    - `playlist_selector is not None`
+    - `current_total_unique < total_cap`
+
+    O selector recebe `list[dict(id, name, track_count)]` filtrada por
+    `owner.id == me.id` e já sem playlists vazias. Retornar `[]` pula
+    a expansão (`reason="selector_returned_empty"`). Exceções do
+    selector propagam — não são engolidas.
+
+    ## Semântica de pesos
+
+    Cada URI contribui com a SOMA dos pesos das fontes em que aparece:
+    - `long_term`=3, `medium_term`=2, `short_term`=2
+    - `saved` (Liked Songs ❤️)=3
+    - `recent`=1
+    - `playlist`=2 (v0.5.3) — **aplicado uma única vez** por URI,
+      mesmo que apareça em múltiplas playlists do usuário (dedup por
+      `seen` set). Exemplo: faixa em top_long + duas playlists do
+      usuário = 3 (long) + 2 (playlist) = 5, não 3 + 2 + 2 = 7.
+
+    ## expansion_info no report
+
+    Campo `reason` sempre preenchido com vocabulário fechado:
+    - `selector_not_provided` — selector=None
+    - `cap_already_reached` — total já cobria o cap antes da oferta
+    - `no_own_playlists` — usuário sem playlists próprias utilizáveis
+    - `selector_returned_empty` — selector retornou []
+    - `ok` — expansão concluída com tracks_added > 0
+
+    Campo `failed_playlists` lista `{id, reason}` para playlists em
+    que `_fetch_playlist_tracks` falhou (race, timeout, 401 parcial).
     """
     # Resolução do cap efetivo para Liked Songs.
     if saved_cap is None:
@@ -396,10 +437,13 @@ def run(
     #   - "no_own_playlists":      selector chamou mas usuário não tem
     #                               playlists próprias utilizáveis
     #   - "selector_returned_empty": selector rodou e retornou []
+    #   - "only_empty_playlists":    v0.5.7 — usuário tem N playlists
+    #                                 próprias mas todas com track_count=0
     #   - "ok":                     expansão concluída (tracks_added > 0)
     expansion_info: dict = {
         "attempted": False,
         "offered_playlists": 0,
+        "own_playlists_empty_count": 0,
         "selected_playlists": [],
         "tracks_added": 0,
         "reason": "selector_not_provided",
@@ -422,13 +466,21 @@ def run(
         report_step(6, "Expansão por playlists (opcional)")
         try:
             me = sp.current_user()
-            own_playlists = _fetch_own_playlists(sp, me_id=me.get("id"))
+            own_playlists, empty_count = _fetch_own_playlists(
+                sp, me_id=me.get("id"),
+            )
         except Exception:
-            own_playlists = []
+            own_playlists, empty_count = [], 0
         expansion_info["attempted"] = True
         expansion_info["offered_playlists"] = len(own_playlists)
+        # v0.5.7 #17: expõe contagem para CLI distinguir "nenhuma playlist
+        # própria" de "playlists próprias existem mas todas estão vazias".
+        expansion_info["own_playlists_empty_count"] = empty_count
         if not own_playlists:
-            expansion_info["reason"] = "no_own_playlists"
+            expansion_info["reason"] = (
+                "only_empty_playlists" if empty_count > 0
+                else "no_own_playlists"
+            )
         else:
             selected_ids = playlist_selector(own_playlists) or []
             expansion_info["selected_playlists"] = list(selected_ids)
