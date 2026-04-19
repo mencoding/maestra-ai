@@ -88,15 +88,29 @@ def _maybe_rotate() -> None:
 
 
 def _force_rotate() -> None:
+    """Rotaciona o audit ativo para archive comprimido.
+
+    v0.5.6 #11: FileLock em `<state_dir>/.audit-rotate.lock` para
+    serializar writes concorrentes. Daemon + CLI rodando em paralelo
+    podiam duplicar o archive ou perder linhas.
+    """
+    import fcntl
     p = _path_active()
     if not p.exists():
         return
-    ts = datetime.now(UTC).strftime("%Y-%m-%d")
-    archive = storage.state_dir() / f"audit.{ts}.jsonl.gz"
-    with p.open("rb") as src, gzip.open(archive, "wb") as dst:
-        shutil.copyfileobj(src, dst)
-    p.unlink()
-    _purge_old_archives()
+    lock_path = storage.state_dir() / ".audit-rotate.lock"
+    with open(lock_path, "w", encoding="utf-8") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        # Re-check após o lock: outro processo pode ter rotacionado
+        # enquanto esperávamos.
+        if not p.exists():
+            return
+        ts = datetime.now(UTC).strftime("%Y-%m-%d")
+        archive = storage.state_dir() / f"audit.{ts}.jsonl.gz"
+        with p.open("rb") as src, gzip.open(archive, "wb") as dst:
+            shutil.copyfileobj(src, dst)
+        p.unlink()
+        _purge_old_archives()
 
 
 def _purge_old_archives() -> None:

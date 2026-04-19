@@ -53,15 +53,26 @@ def create(operation: str, state: dict) -> str:
 
 
 def _rotate() -> None:
-    active = sorted(_snap_dir().glob("*.json"))
-    overflow = len(active) - _MAX_ACTIVE
-    if overflow <= 0:
-        return
-    for path in active[:overflow]:
-        dest = _archive_dir() / (path.name + ".gz")
-        with path.open("rb") as src, gzip.open(dest, "wb") as dst:
-            shutil.copyfileobj(src, dst)
-        path.unlink()
+    """Rotaciona snapshots ativos para o archive com compressão.
+
+    v0.5.6 #11: FileLock em `<snap_dir>/.rotate.lock` serializa writes
+    concorrentes. Antes, daemon director + CLI manual podiam fazer
+    glob+move em paralelo, duplicando ou perdendo arquivos no archive.
+    """
+    import fcntl
+    snap_dir = _snap_dir()
+    lock_path = snap_dir / ".rotate.lock"
+    with open(lock_path, "w", encoding="utf-8") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        active = sorted(snap_dir.glob("*.json"))
+        overflow = len(active) - _MAX_ACTIVE
+        if overflow <= 0:
+            return
+        for path in active[:overflow]:
+            dest = _archive_dir() / (path.name + ".gz")
+            with path.open("rb") as src, gzip.open(dest, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+            path.unlink()
 
 
 def list_snapshots() -> list[dict]:
