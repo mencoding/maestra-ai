@@ -48,18 +48,27 @@ def _fetch_saved(
     *,
     max_tracks: int = _MAX_SAVED,
 ) -> list[dict]:
-    """Paginação defensiva: cap `max_tracks`, para em página vazia ou parcial.
+    """Paginação pelo campo `next` da resposta Spotify.
 
     v0.4.4 CRITICAL-4: ignora items com track=None (faixa removida do
     catálogo / indisponível na região).
 
     v0.4.5: `max_tracks` parametrizável (default = _MAX_SAVED = 5000).
+
+    v0.5.2 (bug 3): usar `resp['next']` como condição de parada em vez da
+    heurística `len(items) < 50`. Cenário que falhava antes: página
+    intermediária com menos de 50 items (rate limit soft, inconsistência
+    do Spotify) encerrava a paginação prematura e perdia o restante da
+    biblioteca silenciosamente. Fallback para heurística quando `next`
+    ausente (mocks antigos, respostas malformadas).
     """
     collected: list[dict] = []
     offset = 0
     while len(collected) < max_tracks:
         resp = sp.current_user_saved_tracks(limit=_PAGE, offset=offset)
         items = resp.get("items", [])
+        has_next_field = "next" in resp
+        next_url = resp.get("next")
         if not items:
             break
         for it in items:
@@ -70,7 +79,11 @@ def _fetch_saved(
         offset += len(items)
         if progress_cb:
             progress_cb(len(collected))
-        if len(items) < _PAGE:
+        # Parada canônica: Spotify diz que acabou via next=null.
+        if has_next_field and next_url is None:
+            break
+        # Fallback (campo next ausente): heurística antiga.
+        if not has_next_field and len(items) < _PAGE:
             break
     return collected[:max_tracks]
 

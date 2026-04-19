@@ -63,21 +63,68 @@ class TestComputeWeights:
         assert w["spotify:track:3"] == onboard.WEIGHTS["saved"]
 
 
+def _fake_saved_with_next(n, has_next=True):
+    """Página com campo `next` (Spotify manda URL da próxima página ou null)."""
+    return {
+        "items": [
+            {"track": {"uri": f"spotify:track:s{i}", "name": f"S{i}", "artists": [{"name": f"As{i}"}]}}
+            for i in range(n)
+        ],
+        "next": "https://api.spotify.com/v1/me/tracks?offset=50&limit=50" if has_next else None,
+    }
+
+
 class TestFetchSaved:
-    def test_cap_em_1000(self, monkeypatch):
+    def test_cap_em_max_saved(self, monkeypatch):
         sp = MagicMock()
-        # 24 páginas de 50 + uma vazia = 1200, mas cap 1000
-        sp.current_user_saved_tracks.side_effect = [_fake_saved(50)] * 24 + [{"items": []}]
+        # 101 páginas de 50 com next → 5050 items, mas cap em _MAX_SAVED
+        pages = [_fake_saved_with_next(50, has_next=True)] * 100 + \
+                [_fake_saved_with_next(50, has_next=False)]
+        sp.current_user_saved_tracks.side_effect = pages
         result = onboard._fetch_saved(sp)
         assert len(result) <= onboard._MAX_SAVED
 
-    def test_para_em_pagina_vazia(self):
+    def test_para_quando_next_e_null(self):
+        """v0.5.2: heurística real de fim é next=null, NÃO len(items) < 50."""
         sp = MagicMock()
         sp.current_user_saved_tracks.side_effect = [
-            _fake_saved(50), _fake_saved(50), {"items": []},
+            _fake_saved_with_next(50, has_next=True),
+            _fake_saved_with_next(50, has_next=True),
+            _fake_saved_with_next(50, has_next=False),  # última página, mesmo com 50 items
         ]
         result = onboard._fetch_saved(sp)
-        assert len(result) == 100
+        assert len(result) == 150
+
+    def test_pagina_intermediaria_parcial_nao_interrompe(self):
+        """v0.5.2 (bug 3): antes, len(items) < 50 parava paginação prematura
+        se Spotify mandasse página parcial no meio (rate limit soft,
+        inconsistência). Agora só para em next=null."""
+        sp = MagicMock()
+        sp.current_user_saved_tracks.side_effect = [
+            _fake_saved_with_next(50, has_next=True),
+            _fake_saved_with_next(30, has_next=True),   # parcial mas há mais
+            _fake_saved_with_next(50, has_next=True),
+            _fake_saved_with_next(20, has_next=False),  # fim real
+        ]
+        result = onboard._fetch_saved(sp)
+        # Antes reportaria 80 (parou em len<50 na segunda página).
+        # Agora reporta os 150 reais.
+        assert len(result) == 150
+
+    def test_compat_para_sem_campo_next(self):
+        """Spotify às vezes omite `next` em respostas antigas/mocks. Fallback
+        para heurística de tamanho se campo ausente."""
+        sp = MagicMock()
+        sp.current_user_saved_tracks.side_effect = [
+            {"items": [
+                {"track": {"uri": f"spotify:track:a{i}", "name": f"A{i}",
+                           "artists": [{"name": "X"}]}}
+                for i in range(50)
+            ]},
+            {"items": []},
+        ]
+        result = onboard._fetch_saved(sp)
+        assert len(result) == 50
 
 
 class TestPlaylistCreate403:
