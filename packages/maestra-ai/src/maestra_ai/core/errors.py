@@ -166,6 +166,33 @@ class UserError(MaestraError):
     agent_hint = "Input do usuário inválido. Mostre o help do subcomando."
 
 
+class NonInteractiveError(UserError):
+    """Comando exige stdin interativo mas foi invocado em pipe/script/CI.
+
+    Distinção importante em relação a UserError genérico: o título "Argumento
+    inválido" com causa "Flag com valor fora do range" confunde quando o
+    problema real é ausência de TTY — o usuário não escolheu mal a flag,
+    ele simplesmente precisa passar os valores explicitamente.
+    """
+
+    code = "NonInteractiveError"
+    title = "Entrada interativa indisponível"
+    probable_causes = [
+        "stdin não é um TTY (script, pipe, CI, editor embutido)",
+        "Subcomando foi invocado sem as flags obrigatórias",
+    ]
+    suggested_actions = [
+        {"command": "maestra auth setup --client-id <id> --client-secret <secret> --redirect-uri <url>",
+         "description": "Passar credenciais via flags"},
+        {"command": "maestra <subcomando> --help",
+         "description": "Ver todas as flags disponíveis"},
+    ]
+    agent_hint = (
+        "Usuário está em ambiente não-interativo. Passe todos os argumentos "
+        "via flags explícitas em vez de depender de prompt."
+    )
+
+
 class ValidationError(UserError):
     """Payload não passou em validação de schema (HIGH-2)."""
 

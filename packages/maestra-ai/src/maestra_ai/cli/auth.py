@@ -8,7 +8,7 @@ import webbrowser
 
 from maestra_ai.cli import register
 from maestra_ai.core import auth
-from maestra_ai.core.errors import UserError
+from maestra_ai.core.errors import NonInteractiveError
 
 
 def _handle_setup(args: argparse.Namespace) -> int:
@@ -18,8 +18,10 @@ def _handle_setup(args: argparse.Namespace) -> int:
 
     if not cid or not sec or not redirect:
         if not sys.stdin.isatty():
-            raise UserError(
-                "Em ambiente não interativo use --client-id, --client-secret e --redirect-uri.",
+            raise NonInteractiveError(
+                "Faltam credenciais e stdin não é interativo. "
+                "Passe --client-id, --client-secret e --redirect-uri "
+                "explicitamente.",
             )
         try:
             from rich.prompt import Prompt

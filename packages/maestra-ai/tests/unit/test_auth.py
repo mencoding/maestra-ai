@@ -6,7 +6,37 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from maestra_ai.core import auth, storage
-from maestra_ai.core.errors import AuthError, ConfigError
+from maestra_ai.core.errors import AuthError, ConfigError, NonInteractiveError
+
+
+class TestAuthSetupCLINonTTY:
+    """_handle_setup sem args e sem stdin-TTY → erro de categoria
+    apropriada (NonInteractiveError), não 'Argumento inválido'."""
+
+    def test_levanta_non_interactive_error_com_title_claro(self, monkeypatch):
+        """Mensagem do painel deve ajudar, não falar em 'flag fora do range'."""
+        from argparse import Namespace
+
+        from maestra_ai.cli.auth import _handle_setup
+
+        monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+
+        args = Namespace(
+            client_id=None, client_secret=None, redirect_uri=None, json=False,
+        )
+        with pytest.raises(NonInteractiveError) as exc:
+            _handle_setup(args)
+
+        err = exc.value.to_human_dict()
+        # Title não deve mais ser "Argumento inválido".
+        assert err["title"] != "Argumento inválido"
+        # Causes devem mencionar TTY/script/pipe, não "flag fora do range".
+        joined_causes = " ".join(err["probable_causes"]).lower()
+        assert "tty" in joined_causes or "interativ" in joined_causes \
+               or "script" in joined_causes or "pipe" in joined_causes
+        # Sugere o comando correto.
+        actions_text = " ".join(a["command"] for a in err["suggested_actions"])
+        assert "--client-id" in actions_text or "maestra auth setup" in actions_text
 
 
 class TestAuthSetup:
