@@ -13,10 +13,30 @@ from typing import Any
 
 from maestra_ai.core.audit import _redact
 
-# Captura (a) "Bearer <token>" e (b) strings alfanuméricas longas (>=32)
-# que tipicamente são access_token, refresh_token ou API keys opacas.
+# MEDIUM-1: redação contextual — só mascara quando houver pista de que
+# é secret. Evita falsos positivos em URIs de track, playlist IDs,
+# nomes longos de faixa etc.
+#  1. Bearer <token>
+#  2. <known_key>=<value> ou <known_key>: <value>   (access_token,
+#     refresh_token, client_secret, api_key, apikey, authorization, auth)
+#  3. JWT shape                                     (3 segmentos
+#     base64url separados por '.', começando com 'eyJ')
+_KNOWN_SECRET_KEYS = (
+    "access_token", "refresh_token", "client_secret",
+    "api_key", "apikey", "authorization", "auth",
+)
 _SECRET_RE = re.compile(
-    r"(Bearer\s+[A-Za-z0-9\-_\.]+|[A-Za-z0-9_\-]{32,})"
+    r"("
+    # JWT primeiro (mais específico)
+    r"eyJ[A-Za-z0-9_\-]+\.eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+"
+    # Bearer <token>
+    r"|Bearer\s+[A-Za-z0-9\-_\.]+"
+    # known_key=<value> — o valor não pode começar com 'Bearer '
+    # (senão consumiria o prefixo e deixaria o token exposto).
+    r"|(?:" + "|".join(_KNOWN_SECRET_KEYS) + r")"
+    r"\s*[:=]\s*(?!Bearer\s)[A-Za-z0-9\-_\.]+"
+    r")",
+    re.IGNORECASE,
 )
 
 
