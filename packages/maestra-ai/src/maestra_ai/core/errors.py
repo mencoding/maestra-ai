@@ -89,6 +89,44 @@ class SpotifyAPIError(MaestraError):
         return d
 
 
+class PlaylistCreateForbiddenError(SpotifyAPIError):
+    """v0.5.2: 403 ao criar playlist — causa quase sempre é app em
+    Development Mode sem usuário em User Management, ou propagação
+    ainda em curso.
+
+    Mensagem genérica "Forbidden" do Spotify não ajuda o usuário novo
+    a descobrir o caminho para resolver. Essa classe traz as 4 causas
+    plausíveis e orientação acionável.
+    """
+
+    code = "PlaylistCreateForbiddenError"
+    title = "Spotify recusou a criação da playlist (403 Forbidden)"
+    probable_causes = [
+        "App Spotify em Development Mode e o usuário autenticado não "
+        "está em User Management do dashboard",
+        "Usuário foi adicionado mas a propagação ainda não ocorreu "
+        "(pode demorar até 30 min)",
+        "Email no User Management não bate com o email canônico da "
+        "conta Spotify (verifique em spotify.com/account)",
+        "Conta Spotify é Free — algumas operações exigem Premium",
+    ]
+    suggested_actions = [
+        {"command": "https://developer.spotify.com/dashboard",
+         "description": "Dashboard → teu app → User Management → "
+                        "Add new user com email EXATO da tua conta Spotify"},
+        {"command": "maestra onboard --playlist-id <URL ou ID>",
+         "description": "Contorno: cria playlist 'Maestra' manualmente no "
+                        "app Spotify, copia o link e usa esta flag"},
+        {"command": "maestra doctor",
+         "description": "Conferir email/country/product da conta autenticada"},
+    ]
+    agent_hint = (
+        "Criação de playlist bloqueada por permissão do Spotify, não por "
+        "bug local. Oriente o usuário a verificar User Management ou use "
+        "o fallback --playlist-id com uma playlist criada manualmente."
+    )
+
+
 class RateLimitError(SpotifyAPIError):
     code = "RateLimitError"
     title = "Limite de requisições do Spotify atingido"

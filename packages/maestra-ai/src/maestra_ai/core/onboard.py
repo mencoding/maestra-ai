@@ -23,6 +23,7 @@ from collections import Counter
 from collections.abc import Callable
 
 from maestra_ai.core import storage
+from maestra_ai.core.errors import PlaylistCreateForbiddenError
 
 WEIGHTS = {
     "long_term": 3,
@@ -201,12 +202,32 @@ def run(
     elif not dry_run:
         effective_name = _resolve_playlist_name(sp, playlist_name)
         me = sp.current_user()
-        new_pl = sp.user_playlist_create(
-            me["id"],
-            effective_name,
-            public=False,
-            description="Buffer de curadoria da Maestra.",
-        )
+        try:
+            new_pl = sp.user_playlist_create(
+                me["id"],
+                effective_name,
+                public=False,
+                description="Buffer de curadoria da Maestra.",
+            )
+        except Exception as e:
+            # v0.5.2: 403 aqui é quase sempre Development Mode / User Management.
+            # Inspeciona string da exceção (spotipy.SpotifyException formata assim).
+            status = getattr(e, "http_status", None) or getattr(e, "status", None)
+            msg = str(e)
+            if status == 403 or "403" in msg:
+                raise PlaylistCreateForbiddenError(
+                    f"Spotify retornou 403 ao criar a playlist '{effective_name}' "
+                    f"para o usuário '{me.get('id')}'.",
+                    status=403,
+                    where={
+                        "user_id": me.get("id"),
+                        "email": me.get("email"),
+                        "country": me.get("country"),
+                        "product": me.get("product"),
+                        "playlist_name": effective_name,
+                    },
+                ) from e
+            raise
         playlist_id = new_pl["id"]
         cfg = storage.read_config()
         cfg["playlist_id"] = playlist_id

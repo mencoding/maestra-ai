@@ -80,6 +80,70 @@ class TestFetchSaved:
         assert len(result) == 100
 
 
+class TestPlaylistCreate403:
+    """v0.5.2: 403 ao criar playlist vira PlaylistCreateForbiddenError
+    com probable_causes acionáveis (Development Mode, User Management,
+    propagação, Premium), não stack trace cru."""
+
+    def test_403_vira_playlist_create_forbidden_error(self, tmp_path, monkeypatch):
+        import pytest
+
+        from maestra_ai.core.errors import PlaylistCreateForbiddenError
+        from maestra_ai.core.taste import TasteProfile
+
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+
+        # spotipy.SpotifyException tem http_status e a string contém "403".
+        class FakeSpotifyException(Exception):
+            def __init__(self):
+                super().__init__("http status: 403 - Forbidden")
+                self.http_status = 403
+
+        sp = _make_sp(top_long=5, top_short=5, saved_pages=[{"items": []}], recent=3)
+        sp.current_user.return_value = {
+            "id": "user_x",
+            "email": "x@example.com",
+            "country": "BR",
+            "product": "premium",
+        }
+        sp.user_playlist_create.side_effect = FakeSpotifyException()
+
+        taste = TasteProfile(tmp_path / "taste.json")
+        with pytest.raises(PlaylistCreateForbiddenError) as exc:
+            onboard.run(sp, taste, playlist_name="Maestra")
+
+        err = exc.value.to_human_dict()
+        # Título específico, não genérico.
+        assert "403" in err["title"]
+        # Causes devem citar Development Mode e User Management.
+        joined = " ".join(err["probable_causes"]).lower()
+        assert "development mode" in joined
+        assert "user management" in joined
+        # Action sugerida inclui contorno via --playlist-id.
+        actions = " ".join(a["command"] for a in err["suggested_actions"])
+        assert "--playlist-id" in actions
+        # where preserva contexto para debug.
+        assert err["where"]["user_id"] == "user_x"
+        assert err["where"]["product"] == "premium"
+
+    def test_outros_erros_continuam_subindo(self, tmp_path, monkeypatch):
+        """Não deve engolir 500/rede/timeout — só o 403 é tratado."""
+        import pytest
+
+        from maestra_ai.core.taste import TasteProfile
+
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+
+        sp = _make_sp(top_long=5, top_short=5, saved_pages=[{"items": []}], recent=3)
+        sp.user_playlist_create.side_effect = RuntimeError("network timeout")
+
+        taste = TasteProfile(tmp_path / "taste.json")
+        with pytest.raises(RuntimeError, match="network timeout"):
+            onboard.run(sp, taste, playlist_name="Maestra")
+
+
 class TestRun:
     def test_dry_run_nao_cria_playlist(self, tmp_path, monkeypatch):
         monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
