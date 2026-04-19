@@ -6,10 +6,10 @@ import argparse
 
 from maestra_ai.cli import register
 from maestra_ai.cli._common import (
-    PLAYLIST_ID,
     _curation_context,
     _record_curated_tracks,
     output,
+    resolve_playlist_id,
 )
 
 
@@ -45,12 +45,20 @@ def cmd_history_outside_playlist(args, history_analyzer, **_):
     )
 
 
+def _outside_playlist_resolve_default(args, history_analyzer, **kw):
+    # Resolve default via config quando --playlist-id não foi passado.
+    if not args.playlist_id:
+        args.playlist_id = resolve_playlist_id()
+    return cmd_history_outside_playlist(args, history_analyzer, **kw)
+
+
 def cmd_history_import_outside(args, controller, taste, history_analyzer, context_state, **_):
+    playlist_id = resolve_playlist_id()
     context, context_source = _curation_context(args, context_state)
 
     # Delega ao core.HistoryAnalyzer.import_outside — signal é aplicado lá.
     result = history_analyzer.import_outside(
-        playlist_id=PLAYLIST_ID,
+        playlist_id=playlist_id,
         context=context,
         confirm=not args.dry_run,
         count=args.count,
@@ -65,7 +73,7 @@ def cmd_history_import_outside(args, controller, taste, history_analyzer, contex
     if not candidates:
         # Re-obtém contadores do outside_playlist para payload informativo.
         analysis_info = history_analyzer.outside_playlist(
-            PLAYLIST_ID, recent_limit=args.recent_limit
+            playlist_id, recent_limit=args.recent_limit
         )
         output({
             "status": "unchanged",
@@ -133,8 +141,12 @@ def _register(subparsers: argparse._SubParsersAction) -> None:
 
     p = sub.add_parser("outside-playlist", help="Lista recentes fora da Sincronia Iris")
     p.add_argument("--recent-limit", type=int, default=50)
-    p.add_argument("--playlist-id", default=PLAYLIST_ID)
-    p.set_defaults(func=cmd_history_outside_playlist)
+    p.add_argument(
+        "--playlist-id",
+        default=None,
+        help="ID da playlist; default resolve via config (playlist_id).",
+    )
+    p.set_defaults(func=_outside_playlist_resolve_default)
 
     p = sub.add_parser("import-outside", help="Importa recentes fora da playlist para o contexto ativo")
     p.add_argument("--recent-limit", type=int, default=50)

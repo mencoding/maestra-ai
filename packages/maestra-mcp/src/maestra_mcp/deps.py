@@ -65,10 +65,18 @@ def _build_and_cache() -> dict:
         str(base / "playback_state.json"),
         str(base / "playback_events.jsonl"),
     )
+    # v0.4.4 CRITICAL-2: resolve playlist_id via config. Se ausente, fica
+    # None — tools que precisam da playlist (director_once) vão falhar com
+    # erro tipado do core em vez de TypeError em .playlist_tracks(None).
+    from maestra_mcp.config import resolve_playlist_id
+    try:
+        playlist_id = resolve_playlist_id()
+    except Exception:
+        playlist_id = None
     director = MusicDirector(
         controller, curator, taste, context_state,
         str(base / "director_decisions.jsonl"),
-        playlist_id=None,  # tools que precisam resolvem via config
+        playlist_id=playlist_id,
         history_analyzer=history_analyzer,
     )
 

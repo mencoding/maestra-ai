@@ -179,3 +179,60 @@ def test_sem_dotenv_nao_lido_apenas_read_config(monkeypatch, tmp_path):
 
     SpotifyController()
     assert captured["auth_manager"].client_id == "from_config"
+
+
+def test_client_now_tolera_track_sem_artists(monkeypatch):
+    """CRITICAL-4: payload degradado onde track['artists'] é [] não deve crashar.
+    Antes: IndexError em track['artists'][0]."""
+    sp = MagicMock()
+    sp.current_playback.return_value = {
+        "is_playing": True,
+        "item": {
+            "name": "Faixa",
+            "artists": [],  # vazio
+            "album": {"name": "Album"},
+            "uri": "spotify:track:x",
+            "duration_ms": 1000,
+        },
+        "device": {"name": "dev"},
+        "progress_ms": 500,
+    }
+    import maestra_ai.core.client as client_mod
+    monkeypatch.setattr(client_mod, "_get_bucket", lambda: MagicMock(
+        wait_and_acquire=lambda timeout=10.0: True,
+    ))
+    monkeypatch.setattr(client_mod, "_get_breaker", lambda: MagicMock(
+        allow=lambda: True, record_success=lambda: None,
+    ))
+    controller = SpotifyController(sp=sp)
+    result = controller.now()
+    assert result is not None
+    assert result["track"] == "Faixa"
+    # Artista fallback não explode
+    assert "artist" in result
+
+
+def test_playlist_tracks_filtra_track_none(monkeypatch):
+    """playlist_items pode ter items com track=None (faixa removida)."""
+    sp = MagicMock()
+    sp.playlist_items.return_value = {
+        "items": [
+            {"track": None},
+            {"track": {
+                "name": "OK", "artists": [{"name": "A"}],
+                "uri": "spotify:track:ok",
+            }},
+        ],
+        "next": None,
+    }
+    import maestra_ai.core.client as client_mod
+    monkeypatch.setattr(client_mod, "_get_bucket", lambda: MagicMock(
+        wait_and_acquire=lambda timeout=10.0: True,
+    ))
+    monkeypatch.setattr(client_mod, "_get_breaker", lambda: MagicMock(
+        allow=lambda: True, record_success=lambda: None,
+    ))
+    controller = SpotifyController(sp=sp)
+    tracks = controller.playlist_tracks("pl")
+    assert len(tracks) == 1
+    assert tracks[0]["track"] == "OK"

@@ -8,18 +8,19 @@ import time
 
 from maestra_ai.cli import register
 from maestra_ai.cli._common import (
-    PLAYLIST_ID,
     _curation_context,
     _record_curated_tracks,
     error,
     output,
+    resolve_playlist_id,
     safe_call,
     taste_summary,
 )
 
 
 def cmd_start(args, controller, **_):
-    playlist_uri = f"spotify:playlist:{PLAYLIST_ID}"
+    playlist_id = resolve_playlist_id()
+    playlist_uri = f"spotify:playlist:{playlist_id}"
 
     try:
         controller.ensure_active_device()
@@ -161,14 +162,21 @@ def cmd_play_context(args, controller, taste, curator, context_state, **_):
 def cmd_status(args, controller, taste, context_state, feedback_prompter, **_):
     active_context = context_state.show()
     context = active_context["context"] if active_context else None
-    playlist_tracks = safe_call(lambda: controller.playlist_tracks(PLAYLIST_ID), "PLAYLIST_ERROR")
+    try:
+        playlist_id = resolve_playlist_id()
+    except Exception:
+        playlist_id = None
+    if playlist_id:
+        playlist_tracks = safe_call(lambda: controller.playlist_tracks(playlist_id), "PLAYLIST_ERROR")
+    else:
+        playlist_tracks = {"error": "playlist_id não configurado", "code": "PLAYLIST_UNSET"}
     playlist_count = len(playlist_tracks) if isinstance(playlist_tracks, list) else None
 
     output({
         "now": safe_call(controller.now, "PLAYBACK_ERROR"),
         "context": active_context or {"status": "unset", "context": None},
         "playlist": {
-            "id": PLAYLIST_ID,
+            "id": playlist_id,
             "count": playlist_count,
             "error": playlist_tracks if isinstance(playlist_tracks, dict) else None,
         },

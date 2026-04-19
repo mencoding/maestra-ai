@@ -3,10 +3,26 @@ from argparse import Namespace
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
+
 from maestra_ai.cli import history as _cli_history
 from maestra_ai.cli import playlist as _cli_playlist
 from maestra_ai.cli import taste as _cli_taste
-from maestra_ai.cli._common import PLAYLIST_ID as _PLAYLIST_ID
+
+# v0.4.4: PLAYLIST_ID removido; playlist_id agora vem do config persistido
+# via resolve_playlist_id(). Testes usam fixture que grava config com
+# "pl_test" em tmp_path e isola MAESTRA_CONFIG_DIR.
+_TEST_PLAYLIST_ID = "pl_test"
+
+
+@pytest.fixture(autouse=True)
+def _cli_playlist_id_fixture(monkeypatch, tmp_path):
+    monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path / "cfg"))
+    (tmp_path / "cfg").mkdir()
+    from maestra_ai.core import storage
+    storage.write_config({"playlist_id": _TEST_PLAYLIST_ID})
+    yield
+
 
 cli = SimpleNamespace(
     cmd_playlist_add=_cli_playlist.cmd_playlist_add,
@@ -15,7 +31,7 @@ cli = SimpleNamespace(
     cmd_playlist_remove=_cli_playlist.cmd_playlist_remove,
     cmd_taste_review=_cli_taste.cmd_taste_review,
     cmd_history_import_outside=_cli_history.cmd_history_import_outside,
-    PLAYLIST_ID=_PLAYLIST_ID,
+    PLAYLIST_ID=_TEST_PLAYLIST_ID,
 )
 
 

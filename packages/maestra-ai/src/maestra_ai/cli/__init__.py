@@ -20,8 +20,8 @@ from maestra_ai.cli._common import (
     FEEDBACK_PROMPT_STATE_PATH,
     PLAYBACK_EVENTS_PATH,
     PLAYBACK_STATE_PATH,
-    PLAYLIST_ID,
     TASTE_PATH,
+    resolve_playlist_id,
 )
 
 _REGISTRARS: list[Callable[[argparse._SubParsersAction], None]] = []
@@ -110,7 +110,7 @@ def _build_deps(args: argparse.Namespace) -> dict:
     from maestra_ai.core.context import ContextState
     from maestra_ai.core.curator import Curator
     from maestra_ai.core.director import MusicDirector
-    from maestra_ai.core.errors import AuthError, MaestraError
+    from maestra_ai.core.errors import AuthError, ConfigError, MaestraError
     from maestra_ai.core.feedback_prompt import FeedbackPrompter
     from maestra_ai.core.flow import FlowAnalyzer
     from maestra_ai.core.history import HistoryAnalyzer
@@ -132,13 +132,19 @@ def _build_deps(args: argparse.Namespace) -> dict:
     history_analyzer = HistoryAnalyzer(controller)
     flow_analyzer = FlowAnalyzer(taste)
     curator = Curator(controller, taste)
+    # Subcomandos como auth, doctor, onboard podem rodar sem playlist_id.
+    # Validação individual fica a cargo do caller que realmente precisa.
+    try:
+        playlist_id = resolve_playlist_id()
+    except ConfigError:
+        playlist_id = None
     director = MusicDirector(
         controller,
         curator,
         taste,
         context_state,
         DIRECTOR_DECISIONS_PATH,
-        PLAYLIST_ID,
+        playlist_id,
         history_analyzer=history_analyzer,
     )
 

@@ -214,3 +214,34 @@ class TestTasteRecordGlobalPositive:
         t.record_global_positive("spotify:track:a", weight=2)
         t.record_global_positive("spotify:track:a", weight=3)
         assert t.data["tracks"]["spotify:track:a"]["global_signal"] == 5
+
+
+class TestOnboardToleraTrackNone:
+    """CRITICAL-4: _fetch_saved / _fetch_recent devem ignorar items com track=None."""
+
+    def test_fetch_saved_ignora_track_none(self):
+        from maestra_ai.core import onboard as onboard_mod
+        sp = MagicMock()
+        sp.current_user_saved_tracks.return_value = {
+            "items": [
+                {"track": None},
+                {"track": {"uri": "spotify:track:ok", "name": "OK"}},
+            ],
+        }
+        result = onboard_mod._fetch_saved(sp)
+        # Só o track não-nulo
+        assert all(t is not None and t.get("uri") for t in result)
+        assert len(result) == 1
+
+    def test_fetch_recent_ignora_track_none(self):
+        from maestra_ai.core import onboard as onboard_mod
+        sp = MagicMock()
+        sp.current_user_recently_played.return_value = {
+            "items": [
+                {"track": None},
+                {"track": {"uri": "spotify:track:a", "name": "A"}},
+            ],
+        }
+        result = onboard_mod._fetch_recent(sp)
+        assert len(result) == 1
+        assert result[0]["uri"] == "spotify:track:a"

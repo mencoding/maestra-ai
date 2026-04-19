@@ -26,17 +26,41 @@ def cmd_director_once(args, director, **_):
 
 
 def cmd_director_run(args, director, **_):
+    """Loop infinito do daemon. Qualquer exceção tipada ou inesperada
+    é logada e o loop continua com backoff exponencial limitado a
+    `args.interval`. Só KeyboardInterrupt encerra (propagado para o
+    handler externo derrubar o processo limpo)."""
+    import logging
+
+    from maestra_ai.core.errors import MaestraError
+
+    log = logging.getLogger("maestra.director.run")
+    backoff = 1
     while True:
-        director.run_once(
-            target=args.target,
-            add_count=args.count,
-            import_outside=args.import_outside,
-            outside_min_plays=args.outside_min_plays,
-            outside_count=args.outside_count,
-            outside_recent_limit=args.outside_recent_limit,
-            max_per_artist=args.max_per_artist,
-            max_artist_share=args.max_artist_share,
-        )
+        try:
+            director.run_once(
+                target=args.target,
+                add_count=args.count,
+                import_outside=args.import_outside,
+                outside_min_plays=args.outside_min_plays,
+                outside_count=args.outside_count,
+                outside_recent_limit=args.outside_recent_limit,
+                max_per_artist=args.max_per_artist,
+                max_artist_share=args.max_artist_share,
+            )
+            backoff = 1
+        except KeyboardInterrupt:
+            raise
+        except MaestraError as e:
+            log.warning("director iteration failed: %s", e)
+            time.sleep(min(backoff, args.interval))
+            backoff = min(backoff * 2, args.interval)
+            continue
+        except Exception:
+            log.exception("unexpected error in director iteration")
+            time.sleep(min(backoff, args.interval))
+            backoff = min(backoff * 2, args.interval)
+            continue
         time.sleep(args.interval)
 
 

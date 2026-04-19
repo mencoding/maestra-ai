@@ -20,8 +20,22 @@ DIRECTOR_PID_PATH = os.path.join(BASE_DIR, "director.pid")
 DIRECTOR_STDOUT_LOG_PATH = os.path.join(BASE_DIR, "director.log")
 DIRECTOR_DECISIONS_PATH = os.path.join(BASE_DIR, "director_decisions.jsonl")
 
-# ID da playlist Sincronia Iris
-PLAYLIST_ID = "1V2aEtKkJxLyJcxAz94nLY"
+def resolve_playlist_id() -> str:
+    """Resolve o playlist_id a partir do config persistido.
+
+    Levanta `ConfigError` quando ausente — orienta o usuário a rodar
+    `maestra onboard --confirm` ou `maestra config set playlist_id <ID>`.
+    """
+    from maestra_ai.core import storage
+    from maestra_ai.core.errors import ConfigError
+    cfg = storage.read_config()
+    pid = cfg.get("playlist_id")
+    if not pid:
+        raise ConfigError(
+            "playlist_id não configurado. Rode `maestra onboard --confirm` "
+            "ou `maestra config set playlist_id <ID>`."
+        )
+    return pid
 
 
 def output(data, human=False):

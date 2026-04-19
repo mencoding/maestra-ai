@@ -44,6 +44,47 @@ def test_build_deps_cacheia_entre_chamadas(monkeypatch, tmp_path):
     assert a is b
 
 
+def test_build_deps_usa_playlist_id_do_config(monkeypatch, tmp_path):
+    """CRITICAL-2: director_once crashava com playlist_id=None fixo.
+    build_deps deve resolver playlist_id via config quando disponível."""
+    monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+    from maestra_ai.core import storage
+    storage.write_config({
+        "client_id": "cid", "client_secret": "sec",
+        "redirect_uri": "https://example.com/cb",
+        "playlist_id": "pl_X",
+    })
+
+    from maestra_mcp.deps import _reset, build_deps
+    _reset()
+
+    with patch("maestra_ai.core.client.spotipy.Spotify"):
+        deps = build_deps()
+
+    assert deps["director"].playlist_id == "pl_X"
+    _reset()
+
+
+def test_build_deps_sem_playlist_id_no_config_fica_none(monkeypatch, tmp_path):
+    """Ausente no config: playlist_id fica None (tools que precisam falham
+    com erro tipado do core; as que não precisam continuam funcionando)."""
+    monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+    from maestra_ai.core import storage
+    storage.write_config({
+        "client_id": "c", "client_secret": "s",
+        "redirect_uri": "https://example.com/cb",
+    })
+
+    from maestra_mcp.deps import _reset, build_deps
+    _reset()
+    with patch("maestra_ai.core.client.spotipy.Spotify"):
+        deps = build_deps()
+    assert deps["director"].playlist_id is None
+    _reset()
+
+
 def test_build_deps_thread_safe(monkeypatch, tmp_path):
     """Fix M1: múltiplas threads chamando build_deps() em paralelo devem
     instanciar SpotifyController exatamente uma vez. Antes, sem lock, o

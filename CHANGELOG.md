@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-04-19
+
+Quarto hotfix da série v0.4. Fecha 2 BLOCKERs, 4 CRITICALs e 1 HIGH do
+code review pós-v0.4.3. Suite continua 100% verde (347 testes).
+
+### Segurança
+- **Removido ID de playlist pessoal** commitado inadvertidamente em
+  `cli/_common.py` (BLOCKER-1). O ID permanece no histórico git;
+  usuários afetados devem considerar a exposição e, se aplicável,
+  trocar a visibilidade da playlist no Spotify.
+- **`FileTokenStore` fecha janela TOCTOU** (CRITICAL-3): antes, o
+  token era gravado via `atomic_write_json` e só depois recebia
+  `chmod 600` — deixando uma janela onde o arquivo era world-readable
+  (ou o que o umask permitisse). Agora `atomic_write_json` aceita
+  `mode=0o600` e o chmod acontece no `.tmp` antes do `os.replace`.
+
+### Fixed
+- **`cli/_common.py::PLAYLIST_ID` removido** (BLOCKER-1): substituído
+  por `resolve_playlist_id()` que lê `storage.read_config()["playlist_id"]`
+  e levanta `ConfigError` se ausente. Callers atualizados: `basic`,
+  `playlist`, `taste`, `history`. `_build_deps` ignora `ConfigError`
+  para subcomandos que não precisam (auth, doctor, onboard).
+- **Director daemon respawn** (BLOCKER-2): `cmd_director_run` agora
+  captura `MaestraError` (log warning) e `Exception` (log exception)
+  com backoff exponencial limitado a `args.interval`. Antes, qualquer
+  falha matava o daemon e deixava PID file órfão.
+- **`director.pid` path unificado** (CRITICAL-1): `doctor.check_director`
+  usava `state_dir()/director.pid` enquanto o daemon escreve em
+  `data_dir()/director.pid`. Doctor reportava "parado" para daemon
+  vivo. Agora doctor importa `_pid_file` de `core.director`.
+- **MCP `director_once`** (CRITICAL-2): `deps.build_deps` construía
+  `MusicDirector` com `playlist_id=None` hardcoded, crashando em
+  `playlist_tracks(None)`. Agora usa `resolve_playlist_id()`;
+  falha é tipada (via core), não `TypeError` surpresa.
+- **Payloads degradados Spotify** (CRITICAL-4): `client.py` (now,
+  search, top_tracks, top_artists, _track_summary) e
+  `onboard._fetch_saved` acessavam `track['name']` /
+  `track['artists'][0]['name']` direto. Agora usam `.get()` com
+  defaults e pré-filtram `track=None` / `artists=[]`.
+- **`ContextState.show()` ISO malformado** (HIGH-1): `datetime.fromisoformat`
+  sem try/except crashava em state corrompido. Agora captura
+  `(ValueError, KeyError, TypeError)` e limpa o state.
+
+### Changed
+- **`storage.atomic_write_json`**: novo kwarg `mode: int | None = None`
+  para aplicar chmod ao arquivo temporário antes do rename atômico.
+  Backward-compatible (kwarg opcional).
+- **`cli/history outside-playlist --playlist-id`**: default agora é
+  resolvido via config quando omitido, em vez de constante hardcoded.
+
 ## [0.4.3] - 2026-04-18
 
 Terceiro hotfix da série v0.4. Fecha H2 do code review pós-v0.4.2:

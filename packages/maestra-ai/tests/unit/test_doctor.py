@@ -36,3 +36,25 @@ def test_run_all_returns_list():
     results = doctor.run_all()
     assert isinstance(results, list)
     assert all("name" in r and "status" in r for r in results)
+
+
+def test_doctor_reporta_director_rodando_quando_pid_existe_em_data_dir(
+    monkeypatch, tmp_path
+):
+    """CRITICAL-1: doctor checava state_dir/director.pid mas director usa
+    data_dir/director.pid. Doctor mostrava 'parado' para daemon vivo."""
+    import os
+
+    data = tmp_path / "data"
+    state = tmp_path / "state"
+    data.mkdir()
+    state.mkdir()
+    monkeypatch.setenv("MAESTRA_DATA_DIR", str(data))
+    monkeypatch.setenv("MAESTRA_STATE_DIR", str(state))
+
+    # Usa PID do próprio processo (garantidamente vivo).
+    (data / "director.pid").write_text(str(os.getpid()), encoding="utf-8")
+
+    check = doctor.check_director()
+    assert "rodando" in check["message"].lower() or "running" in check["message"].lower()
+    assert check["details"].get("pid") == str(os.getpid())
