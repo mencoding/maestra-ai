@@ -5,11 +5,11 @@ import argparse
 
 from maestra_ai.cli import register
 from maestra_ai.cli._common import (
-    PLAYLIST_ID,
     _context_review,
     _curation_context,
     _prune_candidates,
     output,
+    resolve_playlist_id,
     taste_summary,
 )
 
@@ -19,8 +19,9 @@ def cmd_taste_show(args, taste, **_):
 
 
 def cmd_taste_review(args, controller, taste, context_state, **_):
+    playlist_id = resolve_playlist_id()
     context, context_source = _curation_context(args, context_state)
-    tracks = controller.playlist_tracks(PLAYLIST_ID)
+    tracks = controller.playlist_tracks(playlist_id)
     review = _context_review(
         tracks,
         taste,

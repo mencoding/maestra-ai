@@ -5,26 +5,28 @@ import argparse
 
 from maestra_ai.cli import register
 from maestra_ai.cli._common import (
-    PLAYLIST_ID,
     _curation_context,
     _record_curated_tracks,
     error,
     output,
+    resolve_playlist_id,
 )
 
 
 def cmd_playlist_list(args, controller, **_):
-    tracks = controller.playlist_tracks(PLAYLIST_ID)
+    playlist_id = resolve_playlist_id()
+    tracks = controller.playlist_tracks(playlist_id)
     output(tracks, args.human)
 
 
 def cmd_playlist_add(args, controller, taste, curator, context_state, **_):
+    playlist_id = resolve_playlist_id()
     context, context_source = _curation_context(args, context_state)
     results, queries_used = curator.curate(context, count=args.count)
     if not results:
         error("Não consegui encontrar faixas para esse contexto.", "NO_RESULTS")
     uris = [r["uri"] for r in results]
-    controller.playlist_add(PLAYLIST_ID, uris)
+    controller.playlist_add(playlist_id, uris)
     _record_curated_tracks(taste, results, context, queries_used)
     output({
         "added": len(results),
@@ -35,8 +37,9 @@ def cmd_playlist_add(args, controller, taste, curator, context_state, **_):
 
 
 def cmd_playlist_top_up(args, controller, taste, curator, context_state, **_):
+    playlist_id = resolve_playlist_id()
     context, context_source = _curation_context(args, context_state)
-    tracks = controller.playlist_tracks(PLAYLIST_ID)
+    tracks = controller.playlist_tracks(playlist_id)
     existing_uris = {t["uri"] for t in tracks}
     needed = max(args.target - len(existing_uris), 0)
 
@@ -61,7 +64,7 @@ def cmd_playlist_top_up(args, controller, taste, curator, context_state, **_):
         error("Não consegui encontrar faixas novas para complementar a playlist.", "NO_RESULTS")
 
     uris = [r["uri"] for r in results]
-    controller.playlist_add(PLAYLIST_ID, uris)
+    controller.playlist_add(playlist_id, uris)
     _record_curated_tracks(taste, results, context, queries_used)
 
     output({
@@ -76,27 +79,30 @@ def cmd_playlist_top_up(args, controller, taste, curator, context_state, **_):
 
 
 def cmd_playlist_clean(args, controller, taste, **_):
-    tracks = controller.playlist_tracks(PLAYLIST_ID)
+    playlist_id = resolve_playlist_id()
+    tracks = controller.playlist_tracks(playlist_id)
     to_remove = [t["uri"] for t in tracks if taste.should_remove(t["uri"])]
     if not to_remove:
         output({"removed": 0, "message": "Nenhuma faixa pra remover."}, args.human)
         return
-    controller.playlist_remove(PLAYLIST_ID, to_remove)
+    controller.playlist_remove(playlist_id, to_remove)
     output({"removed": len(to_remove), "uris": to_remove}, args.human)
 
 
 def cmd_playlist_remove(args, controller, **_):
+    playlist_id = resolve_playlist_id()
     uris = list(dict.fromkeys(args.uris))
-    controller.playlist_remove(PLAYLIST_ID, uris)
+    controller.playlist_remove(playlist_id, uris)
     output({"status": "removed", "removed": len(uris), "uris": uris}, args.human)
 
 
 def cmd_playlist_prune(args, controller, taste, context_state, curator, **_):
+    playlist_id = resolve_playlist_id()
     context = context_state.show() or {}
     context_name = context.get("context") if isinstance(context, dict) else None
 
     result = curator.prune(
-        playlist_id=PLAYLIST_ID,
+        playlist_id=playlist_id,
         context=context_name or "",
         confirm=not args.dry_run,
     )
@@ -104,12 +110,13 @@ def cmd_playlist_prune(args, controller, taste, context_state, curator, **_):
 
 
 def cmd_playlist_clear(args, controller, **_):
-    tracks = controller.playlist_tracks(PLAYLIST_ID)
+    playlist_id = resolve_playlist_id()
+    tracks = controller.playlist_tracks(playlist_id)
     if not tracks:
         output({"removed": 0, "message": "Playlist já está vazia."}, args.human)
         return
     uris = [t["uri"] for t in tracks]
-    controller.playlist_remove(PLAYLIST_ID, uris)
+    controller.playlist_remove(playlist_id, uris)
     output({"removed": len(uris)}, args.human)
 
 
