@@ -71,11 +71,31 @@ class TestPlaylistSelector:
         assert sel is None
 
     def test_expand_playlists_fixo_retorna_ids(self):
-        args = _ns(expand_playlists="p1, p2 ,p3")
+        # v0.5.5 #8: IDs devem ter formato válido (22 chars base62).
+        valid_ids = "ABCDEFGHIJKLMNOPQRSTUV,123456789012345678901X"
+        args = _ns(expand_playlists=valid_ids)
         sel = cli_onboard._build_playlist_selector(args, progress=None)
-        # Callback ignora lista oferecida, retorna pre-set parsed.
         ids = sel([{"id": "xxx", "name": "Ignorada", "track_count": 5}])
-        assert ids == ["p1", "p2", "p3"]
+        assert ids == ["ABCDEFGHIJKLMNOPQRSTUV", "123456789012345678901X"]
+
+    def test_expand_playlists_aceita_url_e_uri(self):
+        """normalize_playlist_id extrai o ID de 22 chars de qualquer forma."""
+        preset = (
+            "spotify:playlist:ABCDEFGHIJKLMNOPQRSTUV,"
+            "https://open.spotify.com/playlist/123456789012345678901X?si=abc"
+        )
+        args = _ns(expand_playlists=preset)
+        sel = cli_onboard._build_playlist_selector(args, progress=None)
+        ids = sel([])
+        assert ids == ["ABCDEFGHIJKLMNOPQRSTUV", "123456789012345678901X"]
+
+    def test_expand_playlists_id_invalido_levanta_user_error(self):
+        """v0.5.5 #8: ID malformado vira UserError com mensagem clara —
+        antes caía no except Exception: continue do core silenciosamente."""
+        from maestra_ai.core.errors import UserError
+        args = _ns(expand_playlists="valido_22_caracteres_1,blabla")
+        with pytest.raises(UserError, match="inválido"):
+            cli_onboard._build_playlist_selector(args, progress=None)
 
     def test_non_interactive_sem_preset_retorna_none(self):
         args = _ns(non_interactive=True)

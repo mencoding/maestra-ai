@@ -55,7 +55,20 @@ def _build_playlist_selector(args, progress):
 
     preset = getattr(args, "expand_playlists", None)
     if preset:
-        ids = [s.strip() for s in preset.split(",") if s.strip()]
+        # v0.5.5 #8: valida cada ID via normalize_playlist_id — aceita
+        # ID puro de 22 chars, URI (spotify:playlist:...) ou URL
+        # (open.spotify.com/playlist/...). Usuário passando lista
+        # com item inválido recebe UserError imediato em vez de ver
+        # "falha silenciosa" via except Exception: continue no core.
+        from maestra_ai.core.config import normalize_playlist_id
+        from maestra_ai.core.errors import UserError
+        raw_items = [s.strip() for s in preset.split(",") if s.strip()]
+        try:
+            ids = [normalize_playlist_id(r) for r in raw_items]
+        except ValueError as e:
+            raise UserError(
+                f"--expand-playlists inválido: {e}",
+            ) from e
 
         def _fixed_selector(_playlists):
             return ids
