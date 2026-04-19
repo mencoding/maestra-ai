@@ -18,20 +18,83 @@ def check_python() -> dict:
     }
 
 
+# Valores óbvios de placeholder que o usuário pode ter copiado direto
+# do --help ou de algum exemplo. "example.com/example.org" só é placeholder
+# quando aparece no redirect_uri — no client_id/secret seria bizarro e
+# cairia no check de comprimento mínimo de qualquer forma.
+_PLACEHOLDER_TOKENS = (
+    "your_client_id", "your_client_secret", "your-client-id", "your-client-secret",
+    "seu_client_id", "seu_client_secret",
+    "<client_id>", "<client_secret>", "<redirect_uri>",
+    "xxx", "xxxx", "todo", "tbd", "changeme",
+)
+
+
+def _is_placeholder(value: str) -> bool:
+    """True se `value` parece placeholder copiado de doc/exemplo."""
+    if not value:
+        return True
+    v = value.strip().lower()
+    return any(tok in v for tok in _PLACEHOLDER_TOKENS)
+
+
+def _redirect_uri_is_placeholder(value: str) -> bool:
+    """Redirect placeholder = example.com/example.org/localhost (Spotify rejeita)."""
+    if _is_placeholder(value):
+        return True
+    v = value.strip().lower()
+    return (
+        "example.com" in v
+        or "example.org" in v
+        or v.startswith("http://localhost")
+        or v.startswith("http://127.0.0.1")
+    )
+
+
 def check_config() -> dict:
     cfg = storage.read_config()
+    path_hint = str(storage.config_dir() / "config.json")
     if not cfg:
         return {
             "name": "Config",
             "status": "warning",
             "message": "config.json ausente. Rode `maestra auth setup`.",
-            "details": {"path": str(storage.config_dir() / "config.json")},
+            "details": {"path": path_hint},
         }
-    has_client = bool(cfg.get("client_id"))
+
+    missing: list[str] = []
+    placeholders: list[str] = []
+    for field in ("client_id", "client_secret", "redirect_uri"):
+        val = cfg.get(field)
+        if not val:
+            missing.append(field)
+            continue
+        if field == "redirect_uri":
+            if _redirect_uri_is_placeholder(val):
+                placeholders.append(field)
+        elif _is_placeholder(val):
+            placeholders.append(field)
+
+    if missing:
+        return {
+            "name": "Config",
+            "status": "warning",
+            "message": f"Config incompleto — faltam: {', '.join(missing)}. "
+                       f"Rode `maestra auth setup`.",
+            "details": {"missing": missing, "path": path_hint},
+        }
+    if placeholders:
+        return {
+            "name": "Config",
+            "status": "warning",
+            "message": f"Campos com placeholder: {', '.join(placeholders)}. "
+                       f"Rode `maestra auth setup` com valores reais.",
+            "details": {"placeholders": placeholders, "path": path_hint},
+        }
     return {
         "name": "Config",
-        "status": "ok" if has_client else "warning",
-        "message": "OK" if has_client else "client_id não configurado",
+        "status": "ok",
+        "message": "OK",
         "details": {"keys": list(cfg.keys())},
     }
 

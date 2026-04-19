@@ -17,13 +17,71 @@ def test_check_config_missing(monkeypatch, tmp_path):
     assert "config.json" in check["message"].lower()
 
 
-def test_check_config_with_client_id(monkeypatch, tmp_path):
+def test_check_config_with_valid_credentials(monkeypatch, tmp_path):
     monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path / "cfg"))
     (tmp_path / "cfg").mkdir()
     from maestra_ai.core import storage
-    storage.write_config({"client_id": "abc"})
+    storage.write_config({
+        "client_id": "a" * 32,
+        "client_secret": "b" * 32,
+        "redirect_uri": "https://maestra.dev/callback",
+    })
     check = doctor.check_config()
     assert check["status"] == "ok"
+
+
+def test_check_config_rejeita_redirect_uri_example(monkeypatch, tmp_path):
+    """Se redirect_uri aponta para example.com, deve ser warning —
+    é placeholder documental, não URL real registrada no dashboard Spotify."""
+    monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path / "cfg"))
+    (tmp_path / "cfg").mkdir()
+    from maestra_ai.core import storage
+    storage.write_config({
+        "client_id": "a" * 32,
+        "client_secret": "b" * 32,
+        "redirect_uri": "https://example.com/callback",
+    })
+    check = doctor.check_config()
+    assert check["status"] == "warning"
+    assert "placeholder" in check["message"].lower()
+
+
+def test_check_config_rejeita_client_id_placeholder(monkeypatch, tmp_path):
+    monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path / "cfg"))
+    (tmp_path / "cfg").mkdir()
+    from maestra_ai.core import storage
+    storage.write_config({
+        "client_id": "your_client_id",
+        "client_secret": "your_client_secret",
+        "redirect_uri": "https://maestra.dev/callback",
+    })
+    check = doctor.check_config()
+    assert check["status"] == "warning"
+    assert "placeholder" in check["message"].lower()
+
+
+def test_check_config_rejeita_client_secret_ausente(monkeypatch, tmp_path):
+    """Apenas client_id configurado não basta: auth login precisa do secret."""
+    monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path / "cfg"))
+    (tmp_path / "cfg").mkdir()
+    from maestra_ai.core import storage
+    storage.write_config({"client_id": "a" * 32})
+    check = doctor.check_config()
+    assert check["status"] == "warning"
+    assert "client_secret" in check["message"] or "incompleto" in check["message"].lower()
+
+
+def test_check_config_rejeita_redirect_uri_ausente(monkeypatch, tmp_path):
+    monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path / "cfg"))
+    (tmp_path / "cfg").mkdir()
+    from maestra_ai.core import storage
+    storage.write_config({
+        "client_id": "a" * 32,
+        "client_secret": "b" * 32,
+    })
+    check = doctor.check_config()
+    assert check["status"] == "warning"
+    assert "redirect_uri" in check["message"] or "incompleto" in check["message"].lower()
 
 
 def test_check_disk_space():
