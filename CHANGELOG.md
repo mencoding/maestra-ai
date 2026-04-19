@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-04-19
+
+Polimento pós-v0.4.5. Fecha os 6 achados HIGH/MEDIUM remanescentes
+do code review. Sem quebra de API pública (apenas SNAP_ID ficou mais
+restritivo — mas o formato já era o canônico gerado pelo próprio
+código). Suite total: 374 (maestra-ai) + 35 (maestra-mcp) = 409 passed.
+
+### Fixed
+- **`taste.restore` valida schema antes de sobrescrever** (HIGH-2):
+  payload malformado levanta `ValidationError`; perfil em memória e
+  em disco permanecem intactos.
+- **`_SNAP_ID_RE` estrita** (HIGH-4): só aceita formato canônico
+  `YYYY-MM-DD-HHMMSS-uuuuuu-<operation>`. Rejeita `../`, espaços,
+  strings curtas — defesa em profundidade contra IDs maldosos em
+  `snapshot.load()`.
+- **Redação de secrets contextual** (MEDIUM-1): URIs de track,
+  playlist IDs e nomes longos não são mais mascarados. Mantém
+  redação de `Bearer ...`, `access_token=...`, `refresh_token=...`,
+  `client_secret=...`, `api_key=...` e JWTs. Logs de debug ficam
+  legíveis sem comprometer segurança.
+- **Sonda de processo Spotify portável** (MEDIUM-2): novo
+  `core/process.py::is_spotify_running()` com fallback
+  pgrep → tasklist → None. `client.ensure_active_device` trata
+  None como "desconhecido, prossegue e deixa API falar". Remove
+  dependência hard em `pgrep` (Linux-only).
+
+### Added
+- **`maestra doctor --reset-breaker`** (HIGH-3): zera o circuit
+  breaker persistente. Útil quando operador corrigiu a causa-raiz
+  e não quer esperar o cooldown. `PersistentCircuitBreaker.reset()`
+  exposto na classe; `ratelimit.reset_breaker()` livre para callers
+  externos.
+- **Rotação do audit.log por tamanho** (MEDIUM-3): `_MAX_SIZE_BYTES
+  = 10MB` força rotação mesmo antes da idade. Evita crescimento
+  descontrolado em uso intensivo via MCP.
+
+### Tests
+- Novos módulos: `test_taste_restore`, `test_ratelimit_breaker_reset`,
+  `test_process`, `test_audit_rotation`. Acréscimos em
+  `test_snapshot`, `test_security`, `test_cli_doctor`.
+- `test_snapshot.test_load_rejects_malformed_snapshot` e
+  `test_load_rejects_non_dict_snapshot` foram atualizados: IDs
+  hardcoded `"fake-snap"` e `"bad"` trocados por IDs canônicos para
+  não colidir com a regex mais estrita; intenção original do teste
+  (validar detecção de conteúdo malformado) preservada.
+
 ## [0.4.5] - 2026-04-19
 
 Melhorias de onboarding e configuração. Reforça o peso do sinal
