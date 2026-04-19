@@ -1,7 +1,7 @@
-# Backlog consolidado — estado em v0.5.4
+# Backlog consolidado — estado em v0.5.6
 
 **Data:** 2026-04-19
-**Versão de referência:** v0.5.4
+**Versão de referência:** v0.5.6 (itens 1-14 e 24-26 fechados)
 **Fontes:** `2026-04-17-fases-1-2.md`, `2026-04-17-pos-v023.md`, review inline da v0.5.3 (code-reviewer), varredura estática de v0.5.4.
 
 Este documento é a **fonte autoritativa** do backlog técnico aberto. Os dois
@@ -209,12 +209,11 @@ módulos principais, P2-1, P2-4, PLAN-v050, PLAN-v040) não aparecem aqui.
 
 ---
 
-## Proposta de ordem de execução
+## Ordem de execução — status
 
-**v0.5.5 (9 itens — alto ROI):** 1, 2, 3, 4, 5 (todos os altos) + 6+7 (resolvidos juntos) + 8, 9.
-**v0.5.6 (8 itens):** 10, 11, 12, 13, 14 + 24, 25, 26 (testes).
-**v0.5.7 (9 itens):** 15, 16, 17, 18, 19, 20, 21, 22, 23 (polimento final antes do refactor de design).
-**v0.6.0-alpha:** 27, 28, 29 (quebra de contrato — mini-spec próprio) + B3 (sugestões).
+**v0.5.5 ✅ (2026-04-19):** itens 1-9 fechados (9 altos + médios de alto ROI).
+**v0.5.6 ✅ (2026-04-19):** itens 10, 11, 13, 14 + 24, 25, 26. Item 12 descartado como falso positivo (já resolvido em v0.4.4 — ver CHANGELOG 0.5.6).
+**v0.5.7 (pendente):** itens 15-23 (9 de polimento final) — documentação de semântica, UX de fallback, docstrings, consolidação de 3 env vars.
+**v0.6.0-alpha (pendente):** 27, 28, 29 (quebra de contrato do selector + refactor de expansion_info) + B3 fora-de-escopo (sugestões inteligentes).
 
-Total fora de v0.5.x: 4 itens (design + sugestões).
-Total em v0.5.x: 25 itens.
+Itens fechados: 15 de 29 (+ 1 descartado). Pendentes: 13.

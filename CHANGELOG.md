@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.6] - 2026-04-19
+
+Segundo lote do backlog consolidado (itens 10-14 + testes 24-26).
+Item #12 descoberto como falso positivo do relatório Explore (já
+resolvido em v0.4.4 com cobertura de teste). Suite: 442 unit + 13
+E2E = 455 passed (maestra-ai).
+
+### Fixed
+- **#11 FileLock em `_rotate` de snapshot e audit**: daemon + CLI
+  concorrentes podiam duplicar ou perder arquivos no archive durante
+  rotação. Adiciona `<dir>/.rotate.lock` em ambos. audit re-verifica
+  existência do ativo após o lock para o caso de outra rotação ter
+  corrido em paralelo.
+- **#13 side-effect de `os.makedirs` removido do import de
+  `cli/_common.py`**: `import` não modifica mais o filesystem.
+  `storage.ensure_dirs()` continua sendo chamado on-demand pelos
+  callers que escrevem. BASE_DIR segue como string avaliada no
+  import (sem efeito no fs).
+
+### Changed
+- **#10 `expansion_info.reason` com vocabulário fechado**:
+  `"selector_not_provided"` / `"cap_already_reached"` (novo) /
+  `"no_own_playlists"` / `"selector_returned_empty"` (substitui
+  `"user_skipped"`) / `"ok"` (substitui `None` em sucesso). Campo
+  sempre preenchido — consumidores JSON não tropeçam mais em
+  `if reason:`. CLI `_print_report` traduz valores técnicos para
+  humanos. Breaking change mínimo: nada interno chamava
+  `"user_skipped"`.
+
+### Tests
+- **#14 redação end-to-end em `error()`**: TestErrorEndToEndRedact
+  valida que Bearer/access_token embutidos em mensagem passam pelo
+  redator antes de stderr. Substitui teste antigo tautológico que
+  validava `_redact()` em isolamento.
+- **#24 fluxo interativo real do selector**: TestInteractiveSelectorFluxoReal
+  mocka `questionary.confirm`/`checkbox` via `sys.modules` e exerce
+  confirmar+escolher, confirmar+vazio, negar confirmação, lista
+  vazia dispara mensagem humana.
+- **#25 edge cases do selector**: exceção do selector propaga (core
+  não swallow); IDs fora da lista oferecida viram entrada em
+  `failed_playlists`.
+- **#26 E2E ampliado**: +5 cenários (quickstart banner, `taste` sem
+  sub-sub, `config list` redactando secret, help topics). Total
+  E2E: 13 (era 8).
+
+### Descartado (falso positivo do relatório Explore)
+- **#12 `datetime.fromisoformat` sem guard em `context.show`**: já
+  resolvido em v0.4.4 (HIGH-1) com `try/except (ValueError, KeyError,
+  TypeError)` e `self.clear()`. Teste
+  `test_show_limpa_state_com_iso_malformado` cobre o cenário.
+
 ## [0.5.5] - 2026-04-19
 
 Primeiro lote do backlog consolidado (itens 1-9) — altos + médios de
