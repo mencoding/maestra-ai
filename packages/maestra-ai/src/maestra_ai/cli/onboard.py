@@ -70,7 +70,7 @@ def _build_playlist_selector(args, progress):
                 f"--expand-playlists inválido: {e}",
             ) from e
 
-        def _fixed_selector(_playlists):
+        def _fixed_selector(_playlists, _ctx):
             return ids
 
         return _fixed_selector
@@ -80,9 +80,7 @@ def _build_playlist_selector(args, progress):
     if not sys.stdin.isatty():
         return None
 
-    total_cap = getattr(args, "total_cap", 5000)
-
-    def _interactive_selector(playlists):
+    def _interactive_selector(playlists, ctx):
         # v0.5.5 #4: core já filtrou playlists vazias em _fetch_own_playlists,
         # CLI não precisa duplicar. Lista vazia aqui = usuário sem playlists
         # próprias utilizáveis.
@@ -103,7 +101,10 @@ def _build_playlist_selector(args, progress):
             # fica 0 aqui (core ainda não expõe; será corrigido no item
             # 27 com ExpansionContext).
             try:
-                confirm = _prompt_expansion_confirm(total_cap=total_cap)
+                confirm = _prompt_expansion_confirm(
+                    current_total=ctx["current_total"],
+                    total_cap=ctx["total_cap"],
+                )
             except KeyboardInterrupt:
                 return []
             if not confirm:
