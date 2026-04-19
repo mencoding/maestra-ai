@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-04-19
+
+Primeiro lote do backlog consolidado (itens 1-9) — altos + médios de
+alto ROI. Ver `docs/reviews/2026-04-19-backlog-consolidado.md`.
+Suite: 429 (maestra-ai).
+
+### Fixed
+- **#1 `DeviceError(MaestraError)`** substitui `RuntimeError` em
+  `SpotifyController.ensure_active_device`. Contrato padronizado
+  com `probable_causes` e `suggested_actions` (abrir Spotify, rodar
+  doctor, listar devices). Painel Rich correto em vez de genérico.
+- **#2 `safe_call` redacta str(e)**: complementa o fix P0-R1 de
+  `error()` (v0.5.0). Usado em `cmd_status`; antes podia vazar token
+  Bearer em exceções de spotipy.
+- **#5 `taste.save/restore` limpam `.tmp` órfão**: helper
+  `_write_atomic` com `try/except OSError + os.unlink` e tradução
+  para `StorageError` com `where={path, tmp_path}`. Antes, falha de
+  `os.replace` (disco cheio, permissão) deixava `.tmp` preso e
+  memória diverge do disco.
+
+### Added
+- **#6 + #7 `expansion_info.failed_playlists`**: lista
+  `[{id, reason}]` (reason truncada em 80 chars) rastreando
+  playlists que falharam durante fetch da expansão (race, timeout,
+  401 parcial). Antes engolidas silenciosamente; agora visíveis no
+  `--json` e resumidas no modo human ("+N faixas de K playlist(s)
+  (X falhou/falharam)").
+- **#8 `--expand-playlists` valida formato via `normalize_playlist_id`**:
+  aceita ID puro, URI `spotify:playlist:...` ou URL
+  `open.spotify.com/playlist/...?si=...`. ID malformado → `UserError`
+  imediato em vez de falha silenciosa no core.
+- **#9 mensagem dinâmica do prompt de expansão**: `_prompt_expansion_confirm`
+  usa `total_cap` real vindo de `args.total_cap` (mostra gap se
+  `current_total` conhecido). Antes hard-coded "5000 faixas" mentia
+  quando usuário passava `--total-cap=1000`.
+
+### Changed
+- **#3 `sp.playlist_items` com `fields` restrito**:
+  `"items(track(uri,name,artists(name))),next"` reduz payload em ~80%.
+  Onboard acelera proporcionalmente em bibliotecas grandes e gasta
+  menos rate limit.
+- **#4 filtro `track_count=0` movido para o core**:
+  `_fetch_own_playlists` já retorna apenas playlists utilizáveis.
+  Selectors externos (MCP, scripts, testes) não precisam duplicar.
+
+### Tests
+- `test_client.py`: +3 em TestEnsureActiveDeviceError
+- `test_cli_common.py`: +3 em TestSafeCallRedact
+- `test_onboard.py`: +3 (filtro vazias, fields restrito, falhas parciais)
+- `test_taste_restore.py`: +2 em TestAtomicWriteCleanup
+- `test_cli_onboard.py`: +5 (validação --expand-playlists com URL/URI,
+  UserError em malformado, TestPromptExpansionConfirmDinamico x2)
+- Total 429 passed (era 414).
+
 ## [0.5.4] - 2026-04-19
 
 Patch blocker pós code-review da v0.5.3: dois críticos e um de
