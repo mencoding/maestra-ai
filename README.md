@@ -64,6 +64,27 @@ com override via env vars (`MAESTRA_CONFIG_DIR`, `MAESTRA_DATA_DIR`,
 - **Planos:** [`docs/superpowers/plans/`](docs/superpowers/plans/)
 - **Guias internos:** `maestra help onboarding`, `maestra help mcp`
 
+## Troubleshooting
+
+### 403 Forbidden ao criar playlist
+
+App em Development Mode — adicione seu usuário em **User Management** no
+dashboard do app Spotify (email exato da conta Spotify). Detalhes e
+contorno via `--playlist-id` em `maestra help onboarding`.
+
+### `env | grep MAESTRA` mostra caminhos inesperados
+
+Remova exports legados de `~/.bashrc`/`~/.profile` e abra terminal novo.
+Defaults XDG:
+- `~/.config/maestra/` — credenciais
+- `~/.local/share/maestra/` — taste_profile, histórico, snapshots
+- `~/.local/state/maestra/` — rate limiter
+
+### `maestra doctor` reporta `email: None`
+
+Token antigo sem os scopes `user-read-email`/`user-read-private`. Rode
+`maestra auth login` de novo.
+
 ## Licença
 
 MIT.
