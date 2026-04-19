@@ -85,18 +85,41 @@ def test_load_rejects_malformed_snapshot(monkeypatch, tmp_path):
     (tmp_path / "data").mkdir()
     snap_dir = tmp_path / "data" / "snapshots"
     snap_dir.mkdir(parents=True)
-    (snap_dir / "fake-snap.json").write_text('{"id": "fake-snap", "operation": "test"}')
+    canonical_id = "2026-04-19-142530-000000-fake"
+    (snap_dir / f"{canonical_id}.json").write_text(
+        f'{{"id": "{canonical_id}", "operation": "test"}}'
+    )
     with pytest.raises(StorageError, match="malformado"):
-        snapshot.load("fake-snap")
+        snapshot.load(canonical_id)
 
 def test_load_rejects_non_dict_snapshot(monkeypatch, tmp_path):
     monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
     (tmp_path / "data").mkdir()
     snap_dir = tmp_path / "data" / "snapshots"
     snap_dir.mkdir(parents=True)
-    (snap_dir / "bad.json").write_text('"just a string"')
+    canonical_id = "2026-04-19-142530-000001-bad"
+    (snap_dir / f"{canonical_id}.json").write_text('"just a string"')
     with pytest.raises(StorageError, match="malformado"):
-        snapshot.load("bad")
+        snapshot.load(canonical_id)
+
+def test_snap_id_regex_aceita_formato_canonico():
+    from maestra_ai.core.snapshot import _SNAP_ID_RE
+    assert _SNAP_ID_RE.match("2026-04-19-142530-000000-safety-before-rollback")
+    assert _SNAP_ID_RE.match("2026-04-19-142530-000000-pre_prune")
+    assert _SNAP_ID_RE.match("2026-01-01-000000-000000-op")
+
+
+def test_snap_id_regex_rejeita_formatos_invalidos():
+    from maestra_ai.core.snapshot import _SNAP_ID_RE
+    # ausência de partes
+    assert not _SNAP_ID_RE.match("foo")
+    assert not _SNAP_ID_RE.match("2026-04-19-safety")
+    # caracteres fora do whitelist
+    assert not _SNAP_ID_RE.match("2026-04-19-142530-000000-op/etc")
+    assert not _SNAP_ID_RE.match("../etc/passwd")
+    # espaços
+    assert not _SNAP_ID_RE.match("2026-04-19-142530-000000-op with space")
+
 
 def test_list_snapshots_skips_malformed(monkeypatch, tmp_path):
     monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))

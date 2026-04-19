@@ -11,8 +11,12 @@ from pathlib import Path
 from maestra_ai.core import storage
 from maestra_ai.core.errors import NotFoundError, StorageError, UserError
 
-# Somente caracteres alfanuméricos, underline, dois-pontos e hífen são permitidos
-_SNAP_ID_RE = re.compile(r"^[\w:\-]+$")
+# HIGH-4: formato canônico produzido por create():
+# YYYY-MM-DD-HHMMSS-uuuuuu-<operation>
+# operation começa com letra minúscula e só aceita [a-z0-9_-].
+_SNAP_ID_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2}-\d{6}-\d{6}-[a-z][a-z0-9_\-]*$"
+)
 
 _MAX_ACTIVE = 20
 
