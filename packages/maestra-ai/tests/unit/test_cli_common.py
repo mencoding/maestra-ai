@@ -28,6 +28,39 @@ class TestImportSemSideEffect:
             f"import criou diretório {custom_dir} — side-effect proibido"
 
 
+class TestErrorEndToEndRedact:
+    """v0.5.6 #14: teste real de que error() redacta Bearer/secret antes
+    de escrever em stderr. O teste antigo (test_redact_secrets_in_json_output)
+    validava apenas _redact em isolamento — tautológico, não prova que
+    o caminho real chama o redator."""
+
+    def test_error_redacta_bearer_token_no_stderr(self, capsys):
+        from maestra_ai.cli._common import error
+        with pytest.raises(SystemExit):
+            error(
+                "Falha ao chamar API: Authorization: Bearer "
+                "BQAkZ9xK_abc123def456ghi789 (401 Unauthorized)",
+            )
+        captured = capsys.readouterr()
+        assert "BQAkZ9xK_abc123def456ghi789" not in captured.err
+        assert "REDACTED" in captured.err
+
+    def test_error_redacta_access_token_na_mensagem(self, capsys):
+        from maestra_ai.cli._common import error
+        with pytest.raises(SystemExit):
+            error("access_token=xyz789abc123 expirou")
+        captured = capsys.readouterr()
+        assert "xyz789abc123" not in captured.err
+
+    def test_error_preserva_mensagem_sem_secret(self, capsys):
+        from maestra_ai.cli._common import error
+        with pytest.raises(SystemExit):
+            error("Playlist não encontrada", "NOT_FOUND")
+        captured = capsys.readouterr()
+        assert "Playlist não encontrada" in captured.err
+        assert "NOT_FOUND" in captured.err
+
+
 class TestSafeCallRedact:
     """v0.5.5 #2: safe_call redacta str(e) antes de retornar no dict
     de erro. Antes, tokens em mensagens de SpotifyException vazavam
