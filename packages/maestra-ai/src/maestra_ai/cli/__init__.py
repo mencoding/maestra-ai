@@ -51,13 +51,17 @@ def _import_subcommands() -> None:
         taste,
     )
     from maestra_ai.cli import (
+        config as config_cmd,
+    )
+    from maestra_ai.cli import (
         context as context_cmd,
     )
     from maestra_ai.cli import (
         help as help_cmd,
     )
-    _ = (auth, basic, context_cmd, curate, director, doctor, feedback, flow,
-         help_cmd, history, onboard, playback, playlist, rollback, taste)
+    _ = (auth, basic, config_cmd, context_cmd, curate, director, doctor,
+         feedback, flow, help_cmd, history, onboard, playback, playlist,
+         rollback, taste)
 
 
 def _build_parser() -> argparse.ArgumentParser:
