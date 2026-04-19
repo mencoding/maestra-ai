@@ -989,3 +989,113 @@ class TestOnboardToleraTrackNone:
         result = onboard_mod._fetch_recent(sp)
         assert len(result) == 1
         assert result[0]["uri"] == "spotify:track:a"
+
+
+class TestExpansionContextShape:
+    """v0.6.0: core constrói ExpansionContext corretamente e passa ao
+    selector. Contrato novo (2-arg), hard break do antigo."""
+
+    def test_ctx_tem_total_cap_igual_ao_configurado(self, tmp_path, monkeypatch):
+        from maestra_ai.core.taste import TasteProfile
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+
+        sp = TestPlaylistExpansion()._sp_with_playlists(
+            own_playlists=[
+                {"id": "p1", "name": "A", "owner": {"id": "me"},
+                 "tracks": {"total": 3}},
+            ],
+        )
+        captured = {}
+
+        def spy_selector(pls, ctx):
+            captured["ctx"] = dict(ctx)
+            return []
+
+        taste = TasteProfile(tmp_path / "taste.json")
+        onboard.run(
+            sp, taste, playlist_name="M", seed_count=0,
+            playlist_selector=spy_selector, total_cap=777,
+        )
+        assert captured["ctx"]["total_cap"] == 777
+
+    def test_ctx_current_total_eh_uniao_de_fontes(self, tmp_path, monkeypatch):
+        """current_total = |top_long + top_medium + top_short + saved + recent|."""
+        from maestra_ai.core.taste import TasteProfile
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+
+        # _make_sp(top_long=10, top_medium=10, top_short=10, recent=5, saved=0)
+        # produz 35 URIs únicos (prefixos distintos).
+        sp = TestPlaylistExpansion()._sp_with_playlists(
+            own_playlists=[
+                {"id": "p1", "name": "A", "owner": {"id": "me"},
+                 "tracks": {"total": 3}},
+            ],
+        )
+        captured = {}
+
+        def spy_selector(pls, ctx):
+            captured["ctx"] = dict(ctx)
+            return []
+
+        taste = TasteProfile(tmp_path / "taste.json")
+        onboard.run(
+            sp, taste, playlist_name="M", seed_count=0,
+            playlist_selector=spy_selector, total_cap=5000,
+        )
+        assert captured["ctx"]["current_total"] == 35
+
+    def test_ctx_remaining_eh_diferenca(self, tmp_path, monkeypatch):
+        from maestra_ai.core.taste import TasteProfile
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+
+        sp = TestPlaylistExpansion()._sp_with_playlists(
+            own_playlists=[
+                {"id": "p1", "name": "A", "owner": {"id": "me"},
+                 "tracks": {"total": 3}},
+            ],
+        )
+        captured = {}
+
+        def spy_selector(pls, ctx):
+            captured["ctx"] = dict(ctx)
+            return []
+
+        taste = TasteProfile(tmp_path / "taste.json")
+        onboard.run(
+            sp, taste, playlist_name="M", seed_count=0,
+            playlist_selector=spy_selector, total_cap=100,
+        )
+        # current_total=35, total_cap=100 → remaining=65
+        assert captured["ctx"]["remaining"] == 65
+
+    def test_selector_com_assinatura_antiga_1arg_levanta_type_error(
+        self, tmp_path, monkeypatch,
+    ):
+        """v0.6.0 hard break: selector com assinatura antiga (1 arg)
+        levanta TypeError quando core o chama com 2 args. Confirma
+        que a quebra é intencional e observável."""
+        import pytest
+
+        from maestra_ai.core.taste import TasteProfile
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+
+        sp = TestPlaylistExpansion()._sp_with_playlists(
+            own_playlists=[
+                {"id": "p1", "name": "A", "owner": {"id": "me"},
+                 "tracks": {"total": 3}},
+            ],
+        )
+
+        # Assinatura antiga — só 1 arg.
+        old_selector = lambda pls: []  # noqa: E731
+
+        taste = TasteProfile(tmp_path / "taste.json")
+        with pytest.raises(TypeError, match="positional argument"):
+            onboard.run(
+                sp, taste, playlist_name="M", seed_count=0,
+                playlist_selector=old_selector,
+            )
