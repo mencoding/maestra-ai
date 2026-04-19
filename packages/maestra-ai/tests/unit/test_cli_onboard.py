@@ -24,6 +24,10 @@ def _ns(**kwargs):
         yes=True,
         non_interactive=False,
         playlist_id=None,
+        # v0.5.3: novos args de expansão
+        total_cap=5000,
+        no_expand=False,
+        expand_playlists=None,
     )
     for k, v in kwargs.items():
         setattr(ns, k, v)
@@ -56,6 +60,39 @@ def _fake_run_capture(captured: dict):
             "context_suggestions": ["a", "b", "c", "d", "e"],
         }
     return _fake
+
+
+class TestPlaylistSelector:
+    """v0.5.3: _build_playlist_selector retorna callback conforme flags."""
+
+    def test_no_expand_retorna_none(self):
+        args = _ns(no_expand=True)
+        sel = cli_onboard._build_playlist_selector(args, progress=None)
+        assert sel is None
+
+    def test_expand_playlists_fixo_retorna_ids(self):
+        args = _ns(expand_playlists="p1, p2 ,p3")
+        sel = cli_onboard._build_playlist_selector(args, progress=None)
+        # Callback ignora lista oferecida, retorna pre-set parsed.
+        ids = sel([{"id": "xxx", "name": "Ignorada", "track_count": 5}])
+        assert ids == ["p1", "p2", "p3"]
+
+    def test_non_interactive_sem_preset_retorna_none(self):
+        args = _ns(non_interactive=True)
+        sel = cli_onboard._build_playlist_selector(args, progress=None)
+        assert sel is None
+
+    def test_sem_tty_retorna_none(self, monkeypatch):
+        args = _ns(non_interactive=False)
+        monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+        sel = cli_onboard._build_playlist_selector(args, progress=None)
+        assert sel is None
+
+    def test_tty_retorna_callback(self, monkeypatch):
+        args = _ns(non_interactive=False)
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+        sel = cli_onboard._build_playlist_selector(args, progress=None)
+        assert callable(sel)
 
 
 def test_seed_maior_que_50_emite_warning_em_json(monkeypatch, capsys):

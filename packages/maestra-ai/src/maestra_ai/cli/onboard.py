@@ -41,11 +41,133 @@ def _prompt_playlist_name(default: str) -> str:
         return r or default
 
 
+def _build_playlist_selector(args, progress):
+    """v0.5.3: constrói callback para expansão via playlists.
+
+    Três modos:
+    - `--no-expand`: None (core pula expansão).
+    - `--expand-playlists "id1,id2"`: selector fixo sem prompt.
+    - TTY + Rich/questionary disponível: checkbox interativo.
+    - Non-TTY ou --non-interactive sem --expand-playlists: None.
+    """
+    if getattr(args, "no_expand", False):
+        return None
+
+    preset = getattr(args, "expand_playlists", None)
+    if preset:
+        ids = [s.strip() for s in preset.split(",") if s.strip()]
+
+        def _fixed_selector(_playlists):
+            return ids
+
+        return _fixed_selector
+
+    if getattr(args, "non_interactive", False):
+        return None
+    if not sys.stdin.isatty():
+        return None
+
+    def _interactive_selector(playlists):
+        # Playlists sem faixas não valem — filtra.
+        playlists = [p for p in playlists if (p.get("track_count") or 0) > 0]
+        if not playlists:
+            _humanized_no_playlists_message()
+            return []
+        # Pausa Rich Progress enquanto questionary toma o terminal.
+        if progress is not None:
+            progress.stop()
+        try:
+            confirm = _prompt_expansion_confirm()
+            if not confirm:
+                return []
+            return _prompt_playlists_checkbox(playlists)
+        finally:
+            if progress is not None:
+                progress.start()
+
+    return _interactive_selector
+
+
+def _prompt_expansion_confirm() -> bool:
+    """Pergunta ao usuário se quer expandir via playlists próprias."""
+    try:
+        import questionary
+        return questionary.confirm(
+            "Sua amostra inicial é menor que 5000 faixas. "
+            "Quer expandir usando suas próprias playlists?",
+            default=True,
+        ).ask() or False
+    except Exception:
+        r = input("Expandir com suas playlists? [Y/n]: ").strip().lower()
+        return r != "n"
+
+
+def _prompt_playlists_checkbox(playlists: list[dict]) -> list[str]:
+    """Checkbox interativo com nome + quantidade de faixas."""
+    try:
+        import questionary
+        choices = [
+            questionary.Choice(
+                title=f"{p['name']}  ({p['track_count']} faixas)",
+                value=p["id"],
+            )
+            for p in playlists
+        ]
+        selected = questionary.checkbox(
+            "Marque as playlists para incluir (espaço = marcar, enter = confirmar):",
+            choices=choices,
+        ).ask()
+        return selected or []
+    except Exception:
+        # Fallback: numerado + vírgulas
+        print("Playlists disponíveis:")
+        for i, p in enumerate(playlists, 1):
+            print(f"  [{i}] {p['name']} ({p['track_count']} faixas)")
+        raw = input("Números separados por vírgula (ou 'all'): ").strip()
+        if raw.lower() == "all":
+            return [p["id"] for p in playlists]
+        try:
+            idxs = [int(x.strip()) for x in raw.split(",") if x.strip()]
+            return [playlists[i - 1]["id"] for i in idxs if 1 <= i <= len(playlists)]
+        except ValueError:
+            return []
+
+
+def _humanized_no_playlists_message() -> None:
+    """Mensagem calorosa quando o usuário não tem playlists próprias."""
+    msg = (
+        "Você ainda não criou nenhuma playlist no Spotify — tudo bem, "
+        "vou aprender seus gostos ao longo das nossas interações."
+    )
+    try:
+        from rich.console import Console
+        Console().print(f"[cyan]{msg}[/cyan]")
+    except ImportError:
+        print(msg)
+
+
 def _print_report(report: dict) -> None:
     try:
         from rich.console import Console
         from rich.panel import Panel
         console = Console()
+
+        expansion = report.get("playlist_expansion") or {}
+        expansion_line = ""
+        if expansion.get("attempted"):
+            added = expansion.get("tracks_added", 0)
+            picked = expansion.get("selected_playlists", [])
+            reason = expansion.get("reason")
+            if added:
+                expansion_line = (
+                    f"Expansão:         +{added} faixas de "
+                    f"{len(picked)} playlist(s) própria(s)\n"
+                )
+            elif reason == "no_own_playlists":
+                expansion_line = "Expansão:         — (sem playlists próprias)\n"
+            elif reason == "user_skipped":
+                expansion_line = "Expansão:         — (dispensada)\n"
+
         body = (
             f"Playlist:         {report['playlist_name']} "
             f"({report.get('playlist_id') or '—'})\n"
@@ -53,7 +175,8 @@ def _print_report(report: dict) -> None:
             f"medium={report['top_medium_count']} short={report['top_short_count']}\n"
             f"Saved tracks:     {report['saved_tracks_fetched']}\n"
             f"Recently played:  {report['recent_count']}\n"
-            f"Faixas pontuadas: {report['unique_tracks_scored']}\n"
+            + expansion_line
+            + f"Faixas pontuadas: {report['unique_tracks_scored']}\n"
             f"Faixas semeadas:  {report['seeded']}\n\n"
             "[bold]Sugestões de contextos iniciais:[/bold]\n"
             + "\n".join(f"  • {s}" for s in report["context_suggestions"])
@@ -210,6 +333,9 @@ def _handle(args: argparse.Namespace, controller, taste, **_) -> int:
         except ImportError:
             pass
 
+    # v0.5.3: monta o playlist_selector conforme flags + TTY.
+    playlist_selector = _build_playlist_selector(args, progress)
+
     try:
         report = onboard.run(
             controller.sp,
@@ -219,6 +345,8 @@ def _handle(args: argparse.Namespace, controller, taste, **_) -> int:
             dry_run=args.dry_run,
             progress_cb=cb,
             existing_playlist_id=existing_playlist_id,
+            total_cap=args.total_cap,
+            playlist_selector=playlist_selector,
         )
     finally:
         if progress is not None:
@@ -251,5 +379,15 @@ def _register(subparsers: argparse._SubParsersAction) -> None:
     p.add_argument("--dry-run", action="store_true",
                    help="Não cria playlist nem escreve no taste_profile; só simula.")
     p.add_argument("--yes", action="store_true", help="Pula confirmação.")
+    # v0.5.3: expansão opcional via playlists próprias.
+    p.add_argument("--total-cap", type=int, default=5000,
+                   help="Teto desejado de faixas únicas pontuadas. Se após "
+                        "top+saved+recent ficar abaixo e modo interativo, "
+                        "oferece expansão via playlists próprias (default 5000).")
+    p.add_argument("--no-expand", action="store_true",
+                   help="Desativa a oferta de expansão por playlists.")
+    p.add_argument("--expand-playlists", default=None,
+                   help="Lista de IDs de playlist separados por vírgula para "
+                        "usar na expansão (pula o prompt interativo).")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=_handle)
