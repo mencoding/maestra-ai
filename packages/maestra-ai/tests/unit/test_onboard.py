@@ -162,6 +162,17 @@ class TestFetchPlaylistTracks:
         result = onboard._fetch_playlist_tracks(sp, "pl1", max_tracks=30)
         assert len(result) == 30
 
+    def test_passa_fields_restrito_ao_api_spotify(self):
+        """v0.5.5 #3: playlist_items é chamado com fields= restringindo
+        payload ao mínimo necessário (uri, name, artists.name + next)."""
+        from unittest.mock import MagicMock
+        sp = MagicMock()
+        sp.playlist_items.return_value = {"items": [], "next": None}
+        onboard._fetch_playlist_tracks(sp, "pl1", max_tracks=10)
+        call = sp.playlist_items.call_args
+        assert call.kwargs.get("fields") == \
+            "items(track(uri,name,artists(name))),next"
+
     def test_ignora_tracks_none(self):
         """Faixas removidas do catálogo ou locais vêm como track=None."""
         from unittest.mock import MagicMock

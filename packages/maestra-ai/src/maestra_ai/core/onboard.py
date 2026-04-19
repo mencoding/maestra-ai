@@ -124,17 +124,30 @@ def _fetch_own_playlists(sp, me_id: str) -> list[dict]:
     return collected
 
 
+_PLAYLIST_TRACKS_FIELDS = "items(track(uri,name,artists(name))),next"
+
+
 def _fetch_playlist_tracks(sp, playlist_id: str, *, max_tracks: int) -> list[dict]:
     """v0.5.3: busca tracks de uma playlist, paginação defensiva (100/call).
 
     Ignora track=None (locais ou removidas do catálogo).
     Respeita cap `max_tracks`.
+
+    v0.5.5 #3: `fields` restrito ao que taste_profile consome (uri, name,
+    artists.name) + campo de paginação. Reduz payload em ~80% — cada
+    response de playlist grande caía com metadata de álbum, imagens e
+    available_markets (~180 países) sem utilidade local.
     """
     collected: list[dict] = []
     offset = 0
     page_size = 100
     while len(collected) < max_tracks:
-        resp = sp.playlist_items(playlist_id, limit=page_size, offset=offset)
+        resp = sp.playlist_items(
+            playlist_id,
+            limit=page_size,
+            offset=offset,
+            fields=_PLAYLIST_TRACKS_FIELDS,
+        )
         items = resp.get("items", []) or []
         if not items:
             break
