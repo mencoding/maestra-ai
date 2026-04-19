@@ -169,11 +169,15 @@ def _print_report(report: dict) -> None:
             added = expansion.get("tracks_added", 0)
             picked = expansion.get("selected_playlists", [])
             reason = expansion.get("reason")
+            failed = expansion.get("failed_playlists") or []
             if added:
                 expansion_line = (
                     f"Expansão:         +{added} faixas de "
-                    f"{len(picked)} playlist(s) própria(s)\n"
+                    f"{len(picked)} playlist(s) própria(s)"
                 )
+                if failed:
+                    expansion_line += f" ({len(failed)} falhou/falharam)"
+                expansion_line += "\n"
             elif reason == "no_own_playlists":
                 expansion_line = "Expansão:         — (sem playlists próprias)\n"
             elif reason == "user_skipped":

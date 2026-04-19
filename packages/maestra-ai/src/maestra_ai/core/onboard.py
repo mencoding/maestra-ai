@@ -395,6 +395,11 @@ def run(
         "selected_playlists": [],
         "tracks_added": 0,
         "reason": None,
+        # v0.5.5 #6-#7: rastreamento de falhas parciais durante fetch.
+        # Cada entrada: {"id": str, "reason": str (até 80 chars)}. Usuário
+        # deletou playlist entre listagem e fetch, ou fetch deu timeout
+        # no meio — não engole mais silenciosamente.
+        "failed_playlists": [],
     }
     current_total_unique = len({t.get("uri") for t in
                                  (top_long + top_medium + top_short + saved + recent)
@@ -429,7 +434,14 @@ def run(
                         tracks = _fetch_playlist_tracks(
                             sp, pid, max_tracks=remaining,
                         )
-                    except Exception:
+                    except Exception as fetch_err:
+                        # v0.5.5 #6-#7: registra a falha sem abortar a
+                        # expansão. Truncamento em 80 chars evita explodir
+                        # o report com stack traces longos.
+                        expansion_info["failed_playlists"].append({
+                            "id": pid,
+                            "reason": str(fetch_err)[:80],
+                        })
                         continue
                     for t in tracks:
                         uri = t.get("uri")

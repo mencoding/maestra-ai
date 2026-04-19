@@ -450,6 +450,49 @@ class TestPlaylistExpansion:
         assert tracks.get("spotify:track:new1", {}).get("global_signal") == 2
         assert tracks.get("spotify:track:new2", {}).get("global_signal") == 2
 
+    def test_falha_em_uma_playlist_registra_em_failed_playlists(
+        self, tmp_path, monkeypatch,
+    ):
+        """v0.5.5 #6-#7: se fetch de uma playlist falha (race, timeout),
+        expansion_info.failed_playlists registra o id e a razão —
+        sem engolir silenciosamente nem abortar a expansão."""
+        from unittest.mock import MagicMock
+
+        from maestra_ai.core.taste import TasteProfile
+
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+
+        sp = self._sp_with_playlists(
+            own_playlists=[
+                self._playlist_dict("p1", "Boa", total=3),
+                self._playlist_dict("p2", "Deletada entre list+fetch", total=5),
+                self._playlist_dict("p3", "Outra boa", total=2),
+            ],
+        )
+        # playlist_items: p1 ok, p2 levanta (race), p3 ok
+        sp.playlist_items.side_effect = [
+            {"items": [{"track": {"uri": "spotify:track:a", "name": "A",
+                                   "artists": [{"name": "X"}]}}], "next": None},
+            Exception("404 Not Found — playlist deletada"),
+            {"items": [{"track": {"uri": "spotify:track:b", "name": "B",
+                                   "artists": [{"name": "Y"}]}}], "next": None},
+        ]
+
+        def selector(pls):
+            return ["p1", "p2", "p3"]
+
+        taste = TasteProfile(tmp_path / "taste.json")
+        report = onboard.run(
+            sp, taste, playlist_name="M", seed_count=0,
+            playlist_selector=selector,
+        )
+        exp = report["playlist_expansion"]
+        assert exp["tracks_added"] == 2  # p1 + p3
+        assert len(exp["failed_playlists"]) == 1
+        assert exp["failed_playlists"][0]["id"] == "p2"
+        assert "404" in exp["failed_playlists"][0]["reason"]
+
     def test_expansao_respeita_total_cap(self, tmp_path, monkeypatch):
         from maestra_ai.core.taste import TasteProfile
         monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
