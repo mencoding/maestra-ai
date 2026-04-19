@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-04-19
+
+Melhorias de onboarding e configuração. Reforça o peso do sinal
+explícito de curadoria (Liked Songs), permite apontar playlist
+existente em vez de sempre criar nova, e adiciona subcomando
+`maestra config` para setup sem edição manual de JSON.
+
+### Added
+- **`maestra config {get,set,list}`**: subcomando CLI para leitura e
+  escrita do `config.json`. `set playlist_id` aceita ID puro, URI
+  (`spotify:playlist:...`) ou URL (`open.spotify.com/playlist/...`)
+  e normaliza automaticamente para o ID canônico de 22 chars. `list`
+  redacta `client_secret`. Rejeita keys fora do whitelist.
+- **Onboard interativo** (`maestra onboard` em TTY): menu `[1]` criar
+  playlist nova ou `[2]` apontar existente. Opção 2 lista até 20
+  playlists do usuário e aceita seleção por número OU paste de
+  ID/URI/URL. Três tentativas inválidas → aborta com exit 1.
+- **Flags `--playlist-id` e `--non-interactive`** em `onboard`:
+  permitem fluxo não-interativo explícito (útil em scripts e MCP).
+  `--non-interactive` sem `--name`/`--playlist-id` erra cedo.
+- **`core.onboard.run(existing_playlist_id=...)`**: novo kwarg que
+  pula a criação de playlist e usa a existente como destino de
+  seed. Resolve nome via `sp.playlist(pid, fields="name")`.
+- **`core.config.normalize_playlist_id(value)`**: função pública que
+  consolida parsing de ID/URI/URL num único lugar. Levanta
+  `ValueError` em formato inválido.
+
+### Changed
+- **Repesagem de sinais no onboard:** `WEIGHTS["saved"]` elevado de
+  **1 → 3** (igual a `top_long_term`). Motivação: ❤️ é declaração
+  explícita de curadoria, merece peso comparável ao hábito
+  comportamental sustentado. `taste_profile` de usuários que já
+  rodaram onboard será reponderado no próximo run (não é breaking —
+  profile é regenerado).
+- **Cap da Liked Songs:** `_MAX_SAVED` de 1000 → **5000**. Evita
+  perda de sinal em bibliotecas médias/grandes. Flag nova
+  `saved_cap` em `core.onboard.run` permite override.
+
+### Tests
+- +44 testes: `test_core_config` (normalize_playlist_id),
+  `test_cli_config` (get/set/list + redação), `test_onboard`
+  (existing_playlist_id paths), `test_cli_onboard` (TTY detection,
+  interactive menu, paste paths, retry cap). Suite total: 350
+  (maestra-ai) + 35 (maestra-mcp) = **385 passed**.
+
 ## [0.4.4] - 2026-04-19
 
 Quarto hotfix da série v0.4. Fecha 2 BLOCKERs, 4 CRITICALs e 1 HIGH do

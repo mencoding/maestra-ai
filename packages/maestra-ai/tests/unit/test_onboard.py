@@ -216,6 +216,91 @@ class TestTasteRecordGlobalPositive:
         assert t.data["tracks"]["spotify:track:a"]["global_signal"] == 5
 
 
+class TestSavedRepesoEcap:
+    """v0.4.5: Liked Songs ganha peso 3 (igual ao top_long_term) e cap 5000."""
+
+    def test_saved_tem_peso_3(self):
+        assert onboard.WEIGHTS["saved"] == 3
+
+    def test_saved_cap_padrao_5000(self):
+        assert onboard._MAX_SAVED == 5000
+
+    def test_saved_cap_parametro_sobrescreve(self):
+        # max_tracks=100 limita o fetch mesmo com muitas páginas disponíveis.
+        sp = MagicMock()
+        sp.current_user_saved_tracks.side_effect = [_fake_saved(50)] * 10 + [{"items": []}]
+        result = onboard._fetch_saved(sp, max_tracks=100)
+        assert len(result) == 100
+
+    def test_compute_weights_usa_novo_peso_saved(self):
+        w = onboard._compute_weights(
+            top_long=[], top_medium=[], top_short=[],
+            saved=[{"uri": "spotify:track:only_saved"}],
+            recent=[],
+        )
+        assert w["spotify:track:only_saved"] == 3
+
+    def test_run_com_saved_cap_customizado(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+        sp = _make_sp(saved_pages=[_fake_saved(50)] * 4 + [{"items": []}])
+
+        from maestra_ai.core.taste import TasteProfile
+        taste = TasteProfile(str(tmp_path / "taste.json"))
+
+        report = onboard.run(
+            sp, taste, playlist_name="X", seed_count=0, dry_run=True,
+            saved_cap=75,
+        )
+        assert report["saved_tracks_fetched"] == 75
+
+
+class TestRunComExistingPlaylistId:
+    """v0.4.5 parte 2: onboard aceita playlist pré-existente via existing_playlist_id."""
+
+    def test_run_com_existing_playlist_id_nao_cria(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+        sp = _make_sp(saved_pages=[{"items": []}])
+        sp.playlist.return_value = {"name": "Playlist Existente"}
+
+        from maestra_ai.core.taste import TasteProfile
+        taste = TasteProfile(str(tmp_path / "taste.json"))
+
+        report = onboard.run(
+            sp, taste, playlist_name="ignorado", seed_count=0,
+            dry_run=False, existing_playlist_id="pl_X",
+        )
+
+        sp.user_playlist_create.assert_not_called()
+        sp.playlist.assert_called()
+        assert report["playlist_id"] == "pl_X"
+        assert report["playlist_name"] == "Playlist Existente"
+
+        from maestra_ai.core import storage
+        cfg = storage.read_config()
+        assert cfg.get("playlist_id") == "pl_X"
+        assert cfg.get("playlist_name") == "Playlist Existente"
+
+    def test_run_com_existing_playlist_id_semeia_nele(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+        sp = _make_sp(top_short=10, saved_pages=[{"items": []}])
+        sp.playlist.return_value = {"name": "PL"}
+
+        from maestra_ai.core.taste import TasteProfile
+        taste = TasteProfile(str(tmp_path / "taste.json"))
+
+        onboard.run(
+            sp, taste, playlist_name="ignorado", seed_count=10,
+            dry_run=False, existing_playlist_id="pl_X",
+        )
+
+        sp.playlist_add_items.assert_called_once()
+        args = sp.playlist_add_items.call_args.args
+        assert args[0] == "pl_X"
+
+
 class TestOnboardToleraTrackNone:
     """CRITICAL-4: _fetch_saved / _fetch_recent devem ignorar items com track=None."""
 

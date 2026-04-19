@@ -10,7 +10,12 @@
    semeia playlist, deriva 5 sugestões de contexto.
 
 Pesos: long=3 (gosto consolidado), medium=2, short=2 (mood recente),
-saved=1, recent=1.
+saved=3 (curadoria explícita via ❤️), recent=1.
+
+v0.4.5: Liked Songs repesado para 3 — ação de favoritar é declaração
+explícita de curadoria e merece peso igual ao top_long_term (que é
+comportamental). Cap elevado de 1000 → 5000 para cobrir bibliotecas
+longas. Parâmetro `saved_cap` na `run(...)` permite override controlado.
 """
 from __future__ import annotations
 
@@ -23,11 +28,11 @@ WEIGHTS = {
     "long_term": 3,
     "medium_term": 2,
     "short_term": 2,
-    "saved": 1,
+    "saved": 3,
     "recent": 1,
 }
 
-_MAX_SAVED = 1000
+_MAX_SAVED = 5000
 _PAGE = 50
 
 
@@ -36,15 +41,22 @@ def _fetch_top_window(sp, time_range: str) -> list[dict]:
     return resp.get("items", [])
 
 
-def _fetch_saved(sp, progress_cb: Callable | None = None) -> list[dict]:
-    """Paginação defensiva: cap _MAX_SAVED, para em página vazia ou parcial.
+def _fetch_saved(
+    sp,
+    progress_cb: Callable | None = None,
+    *,
+    max_tracks: int = _MAX_SAVED,
+) -> list[dict]:
+    """Paginação defensiva: cap `max_tracks`, para em página vazia ou parcial.
 
     v0.4.4 CRITICAL-4: ignora items com track=None (faixa removida do
     catálogo / indisponível na região).
+
+    v0.4.5: `max_tracks` parametrizável (default = _MAX_SAVED = 5000).
     """
     collected: list[dict] = []
     offset = 0
-    while len(collected) < _MAX_SAVED:
+    while len(collected) < max_tracks:
         resp = sp.current_user_saved_tracks(limit=_PAGE, offset=offset)
         items = resp.get("items", [])
         if not items:
@@ -59,7 +71,7 @@ def _fetch_saved(sp, progress_cb: Callable | None = None) -> list[dict]:
             progress_cb(len(collected))
         if len(items) < _PAGE:
             break
-    return collected[:_MAX_SAVED]
+    return collected[:max_tracks]
 
 
 def _fetch_recent(sp) -> list[dict]:
@@ -139,8 +151,23 @@ def run(
     seed_count: int = 30,
     dry_run: bool = False,
     progress_cb: Callable | None = None,
+    saved_cap: int | None = None,
+    existing_playlist_id: str | None = None,
 ) -> dict:
-    """Executa onboarding. Retorna relatório estruturado."""
+    """Executa onboarding. Retorna relatório estruturado.
+
+    `saved_cap`: override do cap de Liked Songs. Se None, usa _MAX_SAVED.
+    Para segurança, o valor é clampeado a min(saved_cap, _MAX_SAVED * 2).
+
+    `existing_playlist_id`: v0.4.5 parte 2 — se passado, pula a criação
+    de playlist e reaproveita a existente como buffer. Nome é obtido via
+    `sp.playlist(..., fields="name")` apenas para relatório.
+    """
+    # Resolução do cap efetivo para Liked Songs.
+    if saved_cap is None:
+        effective_cap = _MAX_SAVED
+    else:
+        effective_cap = min(saved_cap, _MAX_SAVED * 2)
 
     def report_step(step, name, detail=None):
         if progress_cb:
@@ -154,11 +181,24 @@ def run(
     # call barata para validar token; se falhar, _call_spotify levanta AuthError
     sp.current_user()
 
-    # Step 2: playlist
+    # Step 2: playlist (cria nova ou reaproveita existente)
     report_step(2, "Playlist", detail=playlist_name)
     playlist_id = None
     effective_name = playlist_name
-    if not dry_run:
+    if existing_playlist_id:
+        # Reaproveita playlist já existente; busca nome para relatório.
+        playlist_id = existing_playlist_id
+        try:
+            pl_meta = sp.playlist(existing_playlist_id, fields="name")
+            effective_name = (pl_meta or {}).get("name") or existing_playlist_id
+        except Exception:
+            effective_name = existing_playlist_id
+        if not dry_run:
+            cfg = storage.read_config()
+            cfg["playlist_id"] = playlist_id
+            cfg["playlist_name"] = effective_name
+            storage.write_config(cfg)
+    elif not dry_run:
         effective_name = _resolve_playlist_name(sp, playlist_name)
         me = sp.current_user()
         new_pl = sp.user_playlist_create(
@@ -183,8 +223,9 @@ def run(
     report_step(4, "Biblioteca (saved tracks)")
     saved = _fetch_saved(
         sp,
-        progress_cb=(lambda n: report_step(4, "Biblioteca", f"{n}/{_MAX_SAVED}"))
+        progress_cb=(lambda n: report_step(4, "Biblioteca", f"{n}/{effective_cap}"))
         if progress_cb else None,
+        max_tracks=effective_cap,
     )
 
     # Step 5: recently played
