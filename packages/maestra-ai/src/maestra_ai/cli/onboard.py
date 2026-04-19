@@ -80,6 +80,8 @@ def _build_playlist_selector(args, progress):
     if not sys.stdin.isatty():
         return None
 
+    total_cap = getattr(args, "total_cap", 5000)
+
     def _interactive_selector(playlists):
         # v0.5.5 #4: core já filtrou playlists vazias em _fetch_own_playlists,
         # CLI não precisa duplicar. Lista vazia aqui = usuário sem playlists
@@ -95,8 +97,11 @@ def _build_playlist_selector(args, progress):
             # onboard — top/saved/recent já foram buscados e devem ser
             # persistidos. Degrada silenciosamente para [] (sem expansão)
             # para que o core continue o fluxo normal.
+            # v0.5.5 #9: passa o cap real para o prompt — current_total
+            # fica 0 aqui (core ainda não expõe; será corrigido no item
+            # 27 com ExpansionContext).
             try:
-                confirm = _prompt_expansion_confirm()
+                confirm = _prompt_expansion_confirm(total_cap=total_cap)
             except KeyboardInterrupt:
                 return []
             if not confirm:
@@ -112,17 +117,30 @@ def _build_playlist_selector(args, progress):
     return _interactive_selector
 
 
-def _prompt_expansion_confirm() -> bool:
-    """Pergunta ao usuário se quer expandir via playlists próprias."""
+def _prompt_expansion_confirm(current_total: int = 0, total_cap: int = 5000) -> bool:
+    """v0.5.5 #9: pergunta dinâmica que reflete --total-cap real.
+
+    Antes, mensagem hard-coded "menor que 5000" mentia para usuários
+    que passavam --total-cap diferente do default. Agora o prompt
+    informa o valor efetivo e o delta.
+    """
+    if current_total > 0:
+        gap = max(0, total_cap - current_total)
+        question = (
+            f"Sua amostra inicial tem {current_total} faixas, abaixo do teto "
+            f"de {total_cap} (restam {gap} para completar). Quer expandir "
+            f"com suas próprias playlists?"
+        )
+    else:
+        question = (
+            f"Sua amostra inicial está abaixo do teto de {total_cap} faixas. "
+            f"Quer expandir com suas próprias playlists?"
+        )
     try:
         import questionary
-        return questionary.confirm(
-            "Sua amostra inicial é menor que 5000 faixas. "
-            "Quer expandir usando suas próprias playlists?",
-            default=True,
-        ).ask() or False
+        return questionary.confirm(question, default=True).ask() or False
     except Exception:
-        r = input("Expandir com suas playlists? [Y/n]: ").strip().lower()
+        r = input(f"{question} [Y/n]: ").strip().lower()
         return r != "n"
 
 

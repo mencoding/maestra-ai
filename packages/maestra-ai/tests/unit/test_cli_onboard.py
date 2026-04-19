@@ -62,6 +62,54 @@ def _fake_run_capture(captured: dict):
     return _fake
 
 
+class TestPromptExpansionConfirmDinamico:
+    """v0.5.5 #9: mensagem do prompt reflete --total-cap real,
+    não o literal '5000'."""
+
+    def test_usa_total_cap_passado(self, monkeypatch):
+        captured = {}
+
+        class FakeQ:
+            def ask(self):
+                return True
+
+        def fake_confirm(message, default):
+            captured["msg"] = message
+            return FakeQ()
+
+        fake_questionary = type("FQ", (), {"confirm": staticmethod(fake_confirm)})
+        monkeypatch.setattr(
+            "maestra_ai.cli.onboard.sys.modules",
+            {**__import__("sys").modules, "questionary": fake_questionary},
+        )
+
+        cli_onboard._prompt_expansion_confirm(current_total=0, total_cap=1000)
+        assert "1000" in captured["msg"]
+        assert "5000" not in captured["msg"]
+
+    def test_mostra_gap_quando_current_total_conhecido(self, monkeypatch):
+        captured = {}
+
+        class FakeQ:
+            def ask(self):
+                return True
+
+        def fake_confirm(message, default):
+            captured["msg"] = message
+            return FakeQ()
+
+        fake_questionary = type("FQ", (), {"confirm": staticmethod(fake_confirm)})
+        monkeypatch.setattr(
+            "maestra_ai.cli.onboard.sys.modules",
+            {**__import__("sys").modules, "questionary": fake_questionary},
+        )
+
+        cli_onboard._prompt_expansion_confirm(current_total=700, total_cap=1000)
+        # Prompt deve citar 700 (atual) e 300 (gap).
+        assert "700" in captured["msg"]
+        assert "300" in captured["msg"]
+
+
 class TestPlaylistSelector:
     """v0.5.3: _build_playlist_selector retorna callback conforme flags."""
 
@@ -139,7 +187,7 @@ class TestPlaylistSelector:
         args = _ns(non_interactive=False)
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
         monkeypatch.setattr(cli_onboard, "_prompt_expansion_confirm",
-                             lambda: True)
+                             lambda **_: True)
 
         def _raise(*_, **__):
             raise KeyboardInterrupt()
