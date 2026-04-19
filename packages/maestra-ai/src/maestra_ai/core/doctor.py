@@ -70,7 +70,11 @@ def check_disk() -> dict:
 
 
 def check_director() -> dict:
-    pidfile = storage.state_dir() / "director.pid"
+    # v0.4.4 CRITICAL-1: usa o mesmo path autoritativo do director daemon
+    # (core.director._pid_file = data_dir()/director.pid). Antes usávamos
+    # state_dir() e reportávamos "parado" para daemons vivos.
+    from maestra_ai.core.director import _pid_file as _director_pid_file
+    pidfile = _director_pid_file()
     if not pidfile.exists():
         return {
             "name": "Director",
