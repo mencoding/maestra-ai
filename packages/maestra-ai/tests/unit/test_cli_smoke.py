@@ -50,10 +50,13 @@ def test_onboard_parser_aceita_flags():
     assert args.json is True
 
 
-def test_help_sem_subcomando_falha(monkeypatch):
+def test_sem_subcomando_mostra_banner_e_retorna_zero(monkeypatch, capsys):
+    """v0.5.1: antes levantava SystemExit(2) com help do argparse.
+    Agora imprime quickstart banner e retorna 0 — UX de primeira execução."""
     monkeypatch.setattr("sys.argv", ["maestra"])
-    with pytest.raises(SystemExit):
-        cli_main()
+    rc = cli_main()
+    assert rc == 0
+    assert "maestra help onboarding" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("sub", [

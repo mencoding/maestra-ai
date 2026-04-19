@@ -80,12 +80,44 @@ def _build_parser() -> argparse.ArgumentParser:
                         help="Saída legível em vez de JSON")
     parser.add_argument("--json", action="store_true",
                         help="Força saída estruturada em JSON (erros e resultados).")
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    # required=False: quando rodado sem subcomando, main() intercepta e
+    # mostra quickstart em vez do wall-of-text do argparse help.
+    subparsers = parser.add_subparsers(dest="command", required=False)
 
     _import_subcommands()
     for fn in _REGISTRARS:
         fn(subparsers)
     return parser
+
+
+_QUICKSTART_BANNER = """\
+Maestra AI — Spotify controller para agentes de IA.
+
+Primeira vez?
+  maestra help onboarding       Fluxo completo de bootstrap (OAuth + perfil)
+  maestra doctor                Diagnóstico do ambiente
+  maestra --help                Lista todos os 28 subcomandos
+
+Já autenticado?
+  maestra onboard               Bootstrap do perfil por histórico
+  maestra now                   O que está tocando
+  maestra director start        Curador musical em background
+
+Guias: maestra help mcp | maestra help onboarding
+"""
+
+
+def _print_quickstart_banner() -> None:
+    try:
+        from rich.console import Console
+        from rich.panel import Panel
+        Console().print(Panel.fit(
+            _QUICKSTART_BANNER.rstrip(),
+            title="[bold]maestra[/bold]",
+            border_style="cyan",
+        ))
+    except ImportError:
+        print(_QUICKSTART_BANNER)
 
 
 def _print_rich_error(err: dict) -> None:
@@ -174,6 +206,11 @@ def main(argv: list[str] | None = None) -> int:
     try:
         parser = _build_parser()
         args = parser.parse_args()
+
+        # Sem subcomando → quickstart banner (não o wall-of-text do argparse).
+        if not getattr(args, "command", None):
+            _print_quickstart_banner()
+            return 0
 
         # Subcomandos com short-circuit (stubs v0.1.x) definem
         # args.skip_deps=True via set_defaults para não instanciar deps.
