@@ -61,6 +61,17 @@ def test_show_retorna_none_para_json_sem_set_at(tmp_path):
     assert ctx.show() is None
 
 
+def test_show_limpa_state_com_iso_malformado(tmp_path):
+    """HIGH-1: set_at malformado (ValueError em fromisoformat) deve
+    limpar o state e retornar None em vez de crashar."""
+    path = tmp_path / "ctx.json"
+    path.write_text('{"context": "foco", "set_at": "nao-é-iso", "ttl_minutes": 60}')
+    state = ContextState(str(path))
+    assert state.show() is None
+    # Arquivo limpo após detecção do erro
+    assert not path.exists()
+
+
 def test_show_ignora_ttl_nulo(tmp_path):
     path = tmp_path / "current_context.json"
     data = {

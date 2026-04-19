@@ -39,7 +39,12 @@ class ContextState:
         if ttl is None:
             return data
 
-        set_at = datetime.fromisoformat(data["set_at"])
+        # v0.4.4 HIGH-1: set_at malformado não deve crashar; limpa state.
+        try:
+            set_at = datetime.fromisoformat(data["set_at"])
+        except (ValueError, KeyError, TypeError):
+            self.clear()
+            return None
         if datetime.now() - set_at > timedelta(minutes=ttl):
             self.clear()
             return None
