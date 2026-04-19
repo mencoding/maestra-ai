@@ -27,6 +27,11 @@ SCOPES = " ".join([
     "playlist-modify-public",
     "playlist-modify-private",
     "playlist-read-private",
+    # v0.5.2: necessários para current_user() retornar email/country/product.
+    # Sem eles, doctor não consegue diagnosticar identidade nem validar
+    # casamento com User Management no dashboard Spotify.
+    "user-read-email",
+    "user-read-private",
 ])
 
 

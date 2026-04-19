@@ -9,6 +9,20 @@ from maestra_ai.core import auth, storage
 from maestra_ai.core.errors import AuthError, ConfigError, NonInteractiveError
 
 
+class TestScopes:
+    """v0.5.2: SCOPES inclui user-read-email e user-read-private — sem
+    eles, /v1/me retorna email/country/product como None, inviabilizando
+    diagnósticos inteligentes no doctor."""
+
+    def test_scopes_incluem_user_read_email(self):
+        from maestra_ai.core.auth import SCOPES
+        assert "user-read-email" in SCOPES
+
+    def test_scopes_incluem_user_read_private(self):
+        from maestra_ai.core.auth import SCOPES
+        assert "user-read-private" in SCOPES
+
+
 class TestAuthSetupCLINonTTY:
     """_handle_setup sem args e sem stdin-TTY → erro de categoria
     apropriada (NonInteractiveError), não 'Argumento inválido'."""
