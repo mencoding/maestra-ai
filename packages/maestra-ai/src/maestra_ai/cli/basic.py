@@ -22,10 +22,9 @@ def cmd_start(args, controller, **_):
     playlist_id = resolve_playlist_id()
     playlist_uri = f"spotify:playlist:{playlist_id}"
 
-    try:
-        controller.ensure_active_device()
-    except RuntimeError as e:
-        error(str(e), "DEVICE_ERROR")
+    # v0.5.5 #1: DeviceError (MaestraError) sobe direto para main() e
+    # renderiza painel Rich padronizado; não precisa do except local.
+    controller.ensure_active_device()
 
     try:
         controller.play(uri=playlist_uri)

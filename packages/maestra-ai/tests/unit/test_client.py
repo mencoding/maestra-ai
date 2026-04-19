@@ -14,6 +14,51 @@ import pytest
 from maestra_ai.core.client import SpotifyController
 
 
+class TestEnsureActiveDeviceError:
+    """v0.5.5 #1: ensure_active_device levanta DeviceError (MaestraError),
+    não RuntimeError. Contrato: probable_causes e suggested_actions
+    padronizados."""
+
+    def test_spotify_nao_rodando_levanta_device_error(self, monkeypatch):
+        from maestra_ai.core.errors import DeviceError, MaestraError
+        monkeypatch.setattr(
+            "maestra_ai.core.process.is_spotify_running", lambda: False,
+        )
+        sp = MagicMock()
+        controller = SpotifyController(sp=sp)
+        with pytest.raises(DeviceError) as exc:
+            controller.ensure_active_device()
+        assert isinstance(exc.value, MaestraError)
+        err = exc.value.to_human_dict()
+        assert err["title"] == "Nenhum dispositivo Spotify ativo"
+        assert err["probable_causes"]  # não vazia
+
+    def test_sem_dispositivos_disponiveis_levanta_device_error(self, monkeypatch):
+        from maestra_ai.core.errors import DeviceError
+        monkeypatch.setattr(
+            "maestra_ai.core.process.is_spotify_running", lambda: True,
+        )
+        sp = MagicMock()
+        sp.devices.return_value = {"devices": []}
+        controller = SpotifyController(sp=sp)
+        with pytest.raises(DeviceError):
+            controller.ensure_active_device()
+
+    def test_transferencia_nao_completa_levanta_device_error(self, monkeypatch):
+        from maestra_ai.core.errors import DeviceError
+        monkeypatch.setattr(
+            "maestra_ai.core.process.is_spotify_running", lambda: True,
+        )
+        monkeypatch.setattr("time.sleep", lambda *_: None)  # acelera o teste
+        sp = MagicMock()
+        sp.devices.return_value = {
+            "devices": [{"id": "d1", "is_active": False}],
+        }
+        controller = SpotifyController(sp=sp)
+        with pytest.raises(DeviceError):
+            controller.ensure_active_device()
+
+
 def test_di_com_sp_pronto_nao_instancia_oauth():
     """Com sp injetado, controller usa direto — não toca SpotifyOAuth."""
     sp = MagicMock()

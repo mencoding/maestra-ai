@@ -155,18 +155,27 @@ class SpotifyController:
         3. Se nenhum está ativo, faz transfer_playback pro primeiro
         4. Aguarda o dispositivo ficar pronto
         """
+        # v0.5.5 #1: DeviceError padroniza o contrato com probable_causes
+        # e suggested_actions; antes era RuntimeError genérico.
+        from maestra_ai.core.errors import DeviceError
+
         # 1. Processo rodando? (pré-check portável; se inconclusivo, segue
         # e deixa a API do Spotify falar — MEDIUM-2)
         from maestra_ai.core.process import is_spotify_running
         running = is_spotify_running()
         if running is False:
-            raise RuntimeError("Processo do Spotify não encontrado. Abra o Spotify primeiro.")
+            raise DeviceError(
+                "Processo do Spotify não encontrado. Abra o Spotify primeiro.",
+            )
         # running is None: não dá pra checar neste SO — prossegue
 
         # 2. Dispositivos disponíveis?
         devs = _call_spotify(self.sp.devices).get("devices", [])
         if not devs:
-            raise RuntimeError("Spotify aberto mas nenhum dispositivo visível na API. Aguarde alguns segundos e tente novamente.")
+            raise DeviceError(
+                "Spotify aberto mas nenhum dispositivo visível na API. "
+                "Aguarde alguns segundos e tente novamente.",
+            )
 
         # 3. Já tem algum ativo?
         active = [d for d in devs if d["is_active"]]
@@ -185,7 +194,9 @@ class SpotifyController:
             if active:
                 return active[0]["id"]
 
-        raise RuntimeError("Dispositivo transferido mas não ficou ativo a tempo.")
+        raise DeviceError(
+            "Dispositivo transferido mas não ficou ativo a tempo.",
+        )
 
     def now(self):
         """Retorna info da faixa atual ou None se nada toca.

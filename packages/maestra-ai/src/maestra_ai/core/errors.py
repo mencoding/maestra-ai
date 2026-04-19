@@ -204,6 +204,41 @@ class UserError(MaestraError):
     agent_hint = "Input do usuário inválido. Mostre o help do subcomando."
 
 
+class DeviceError(MaestraError):
+    """v0.5.5 #1: Spotify não tem dispositivo ativo utilizável.
+
+    Três cenários distintos cobertos por esta classe:
+    - Processo do Spotify não está rodando na máquina;
+    - App Spotify aberto mas nenhum dispositivo visível na API;
+    - Transferência para dispositivo não completou no tempo esperado.
+
+    Substitui `RuntimeError` em `SpotifyController.ensure_active_device`
+    — respeita o contrato `MaestraError` com `probable_causes` e
+    `suggested_actions` padronizados.
+    """
+
+    code = "DeviceError"
+    title = "Nenhum dispositivo Spotify ativo"
+    probable_causes = [
+        "App Spotify fechado",
+        "App aberto mas sem sessão ativa (minimizado/sem foco)",
+        "Transferência de playback para dispositivo ainda não completou",
+        "Conexão de rede instável durante a descoberta de dispositivos",
+    ]
+    suggested_actions = [
+        {"command": "abrir o app Spotify e tocar qualquer coisa",
+         "description": "Ativa o dispositivo e torna-o visível à API"},
+        {"command": "maestra devices",
+         "description": "Lista dispositivos visíveis agora"},
+        {"command": "maestra doctor",
+         "description": "Diagnóstico geral"},
+    ]
+    agent_hint = (
+        "Não há dispositivo Spotify pronto. Oriente o usuário a abrir o app "
+        "Spotify e tocar qualquer faixa; depois repita o comando."
+    )
+
+
 class NonInteractiveError(UserError):
     """Comando exige stdin interativo mas foi invocado em pipe/script/CI.
 
