@@ -89,6 +89,28 @@ class TestFetchOwnPlaylists:
         assert "p3" in ids
         assert "p2" not in ids  # seguida, não própria
 
+    def test_filtra_playlists_vazias(self):
+        """v0.5.5 #4: playlist com track_count=0 não deve ser oferecida —
+        selector perderia request chamando _fetch_playlist_tracks nela."""
+        from unittest.mock import MagicMock
+        sp = MagicMock()
+        sp.current_user_playlists.side_effect = [
+            {
+                "items": [
+                    {"id": "p1", "name": "Com faixas", "owner": {"id": "me"},
+                     "tracks": {"total": 5}},
+                    {"id": "p2", "name": "Vazia", "owner": {"id": "me"},
+                     "tracks": {"total": 0}},
+                    {"id": "p3", "name": "Sem tracks info", "owner": {"id": "me"},
+                     "tracks": None},
+                ],
+                "next": None,
+            },
+        ]
+        result = onboard._fetch_own_playlists(sp, me_id="me")
+        ids = [p["id"] for p in result]
+        assert ids == ["p1"]
+
     def test_pagina_ate_next_null(self):
         from unittest.mock import MagicMock
         sp = MagicMock()

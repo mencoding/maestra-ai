@@ -100,6 +100,11 @@ def _fetch_own_playlists(sp, me_id: str) -> list[dict]:
     retornar items=[] com next != None em rate-limit soft; sem break
     o offset fica preso.
 
+    v0.5.5 #4: filtra também playlists com `track_count == 0`. Selectors
+    externos (MCP, scripts, testes) não precisam duplicar esse filtro,
+    e `_fetch_playlist_tracks` nunca é chamado com playlist vazia
+    (economiza um request por playlist vazia que o usuário tenha).
+
     Retorna lista de dicts: {id, name, track_count}.
     """
     collected: list[dict] = []
@@ -112,12 +117,16 @@ def _fetch_own_playlists(sp, me_id: str) -> list[dict]:
             break
         for it in items:
             owner = (it.get("owner") or {}).get("id")
-            if owner == me_id:
-                collected.append({
-                    "id": it.get("id"),
-                    "name": it.get("name") or it.get("id"),
-                    "track_count": (it.get("tracks") or {}).get("total", 0),
-                })
+            if owner != me_id:
+                continue
+            track_count = (it.get("tracks") or {}).get("total", 0)
+            if track_count <= 0:
+                continue
+            collected.append({
+                "id": it.get("id"),
+                "name": it.get("name") or it.get("id"),
+                "track_count": track_count,
+            })
         offset += len(items)
         if resp.get("next") is None:
             break

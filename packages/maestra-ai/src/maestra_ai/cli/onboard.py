@@ -68,8 +68,9 @@ def _build_playlist_selector(args, progress):
         return None
 
     def _interactive_selector(playlists):
-        # Playlists sem faixas não valem — filtra.
-        playlists = [p for p in playlists if (p.get("track_count") or 0) > 0]
+        # v0.5.5 #4: core já filtrou playlists vazias em _fetch_own_playlists,
+        # CLI não precisa duplicar. Lista vazia aqui = usuário sem playlists
+        # próprias utilizáveis.
         if not playlists:
             _humanized_no_playlists_message()
             return []
