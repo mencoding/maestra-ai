@@ -95,8 +95,12 @@ def cmd_config_set(args, **_):
 
 @register
 def _register(subparsers: argparse._SubParsersAction) -> None:
+    from maestra_ai.cli import group_help_handler
     config_parser = subparsers.add_parser("config", help="Gerencia config.json")
-    sub = config_parser.add_subparsers(dest="config_command", required=True)
+    config_parser.set_defaults(
+        func=group_help_handler(config_parser), skip_deps=True,
+    )
+    sub = config_parser.add_subparsers(dest="config_command", required=False)
 
     p = sub.add_parser("list", help="Lista todas as keys (secrets redactados)")
     p.set_defaults(func=cmd_config_list, skip_deps=True)

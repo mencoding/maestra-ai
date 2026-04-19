@@ -77,8 +77,12 @@ def _handle_login(args: argparse.Namespace) -> int:
 
 @register
 def _register(subparsers: argparse._SubParsersAction) -> None:
+    from maestra_ai.cli import group_help_handler
     auth_p = subparsers.add_parser("auth", help="Autenticação Spotify")
-    sub = auth_p.add_subparsers(dest="auth_command", required=True)
+    auth_p.set_defaults(
+        func=group_help_handler(auth_p), skip_deps=True,
+    )
+    sub = auth_p.add_subparsers(dest="auth_command", required=False)
 
     setup_p = sub.add_parser(
         "setup",

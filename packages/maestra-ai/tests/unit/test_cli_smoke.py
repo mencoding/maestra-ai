@@ -50,6 +50,20 @@ def test_onboard_parser_aceita_flags():
     assert args.json is True
 
 
+@pytest.mark.parametrize("group", ["taste", "auth", "config", "playlist",
+                                     "context", "director", "flow"])
+def test_grupo_sem_sub_subcomando_mostra_help_em_vez_de_erro(group, monkeypatch, capsys):
+    """v0.5.2 (bug 6): antes, `maestra taste` sem subcomando dava argparse
+    error ("the following arguments are required: taste_command") e exit 2.
+    Agora printa help formatado do grupo e retorna 0."""
+    monkeypatch.setattr("sys.argv", ["maestra", group])
+    rc = cli_main()
+    assert rc == 0
+    out = capsys.readouterr().out
+    # Help do grupo deve listar subcomandos disponíveis.
+    assert "usage:" in out.lower() or "Usage:" in out
+
+
 def test_auth_setup_help_cita_dashboard_e_redirect_https(monkeypatch, capsys):
     """--help de `auth setup` deve explicar pré-requisito (app no dashboard,
     redirect HTTPS) para agente IA ou usuário novo não precisar adivinhar."""

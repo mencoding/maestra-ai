@@ -26,8 +26,12 @@ def cmd_context_clear(args, context_state, **_):
 
 @register
 def _register(subparsers: argparse._SubParsersAction) -> None:
+    from maestra_ai.cli import group_help_handler
     context_parser = subparsers.add_parser("context", help="Contexto musical ativo")
-    sub = context_parser.add_subparsers(dest="context_command", required=True)
+    context_parser.set_defaults(
+        func=group_help_handler(context_parser), skip_deps=True,
+    )
+    sub = context_parser.add_subparsers(dest="context_command", required=False)
 
     p = sub.add_parser("set", help="Define o contexto ativo")
     p.add_argument("context", help="Contexto: foco, energia, revisão, etc.")

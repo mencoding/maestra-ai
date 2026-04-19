@@ -103,10 +103,14 @@ def _add_director_args(p):
 
 @register
 def _register(subparsers: argparse._SubParsersAction) -> None:
+    from maestra_ai.cli import group_help_handler
     director_parser = subparsers.add_parser(
         "director", help="Diretor musical do repertorio contextual",
     )
-    sub = director_parser.add_subparsers(dest="director_command", required=True)
+    director_parser.set_defaults(
+        func=group_help_handler(director_parser), skip_deps=True,
+    )
+    sub = director_parser.add_subparsers(dest="director_command", required=False)
 
     p = sub.add_parser("once", help="Executa um ciclo do director")
     _add_director_args(p)

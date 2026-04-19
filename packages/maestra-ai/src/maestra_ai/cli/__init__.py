@@ -33,6 +33,18 @@ def register(fn: Callable[[argparse._SubParsersAction], None]) -> Callable:
     return fn
 
 
+def group_help_handler(group_parser: argparse.ArgumentParser):
+    """v0.5.2 (bug 6): fallback quando usuário chama `maestra <grupo>` sem
+    sub-subcomando. Retorna função que imprime help do grupo e retorna 0
+    (em vez de erro argparse com exit 2). Callers setam via
+    `group_parser.set_defaults(func=group_help_handler(group_parser), skip_deps=True)`.
+    """
+    def _handler(args, **_kwargs):
+        group_parser.print_help()
+        return 0
+    return _handler
+
+
 def _import_subcommands() -> None:
     """Importa os módulos de subcomando para que seus @register rodem."""
     from maestra_ai.cli import (  # noqa: F401
