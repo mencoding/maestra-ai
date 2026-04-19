@@ -107,9 +107,7 @@ def _register(subparsers: argparse._SubParsersAction) -> None:
     director_parser = subparsers.add_parser(
         "director", help="Diretor musical do repertorio contextual",
     )
-    director_parser.set_defaults(
-        func=group_help_handler(director_parser), skip_deps=True,
-    )
+    director_parser.set_defaults(func=group_help_handler(director_parser))
     sub = director_parser.add_subparsers(dest="director_command", required=False)
 
     p = sub.add_parser("once", help="Executa um ciclo do director")

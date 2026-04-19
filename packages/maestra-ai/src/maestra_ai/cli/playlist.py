@@ -124,9 +124,7 @@ def cmd_playlist_clear(args, controller, **_):
 def _register(subparsers: argparse._SubParsersAction) -> None:
     from maestra_ai.cli import group_help_handler
     playlist_parser = subparsers.add_parser("playlist", help="Gerencia Sincronia Iris")
-    playlist_parser.set_defaults(
-        func=group_help_handler(playlist_parser), skip_deps=True,
-    )
+    playlist_parser.set_defaults(func=group_help_handler(playlist_parser))
     sub = playlist_parser.add_subparsers(dest="playlist_command", required=False)
 
     p = sub.add_parser("list", help="Lista faixas da playlist")

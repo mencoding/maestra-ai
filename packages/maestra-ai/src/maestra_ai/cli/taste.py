@@ -69,9 +69,7 @@ def cmd_taste_context_map(args, taste, **_):
 def _register(subparsers: argparse._SubParsersAction) -> None:
     from maestra_ai.cli import group_help_handler
     taste_parser = subparsers.add_parser("taste", help="Perfil de gosto")
-    taste_parser.set_defaults(
-        func=group_help_handler(taste_parser), skip_deps=True,
-    )
+    taste_parser.set_defaults(func=group_help_handler(taste_parser))
     sub = taste_parser.add_subparsers(dest="taste_command", required=False)
 
     p = sub.add_parser("show", help="Resumo do perfil")

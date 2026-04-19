@@ -37,11 +37,16 @@ def group_help_handler(group_parser: argparse.ArgumentParser):
     """v0.5.2 (bug 6): fallback quando usuário chama `maestra <grupo>` sem
     sub-subcomando. Retorna função que imprime help do grupo e retorna 0
     (em vez de erro argparse com exit 2). Callers setam via
-    `group_parser.set_defaults(func=group_help_handler(group_parser), skip_deps=True)`.
+    `group_parser.set_defaults(func=group_help_handler(group_parser))`.
+
+    O handler é marcado com `_is_group_help=True` para main() identificar
+    sem precisar de `skip_deps` no set_defaults do grupo (o que vazava
+    para sub-subcomandos via herança de defaults e quebrava a dispatch).
     """
     def _handler(args, **_kwargs):
         group_parser.print_help()
         return 0
+    _handler._is_group_help = True  # type: ignore[attr-defined]
     return _handler
 
 
@@ -226,9 +231,13 @@ def main(argv: list[str] | None = None) -> int:
 
         # Subcomandos com short-circuit (stubs v0.1.x) definem
         # args.skip_deps=True via set_defaults para não instanciar deps.
+        # v0.5.2: group help fallback (bug 6) é identificado via atributo
+        # no próprio handler, não via skip_deps — este vazava para
+        # sub-subcomandos por herança de defaults do argparse.
         from maestra_ai.core.errors import MaestraError
         try:
-            if getattr(args, "skip_deps", False):
+            is_group_help = getattr(args.func, "_is_group_help", False)
+            if is_group_help or getattr(args, "skip_deps", False):
                 result = args.func(args)
             else:
                 deps = _build_deps(args)

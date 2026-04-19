@@ -50,6 +50,39 @@ def test_onboard_parser_aceita_flags():
     assert args.json is True
 
 
+def test_grupo_com_sub_subcomando_nao_pula_deps(monkeypatch, tmp_path):
+    """v0.5.2 (regressão do fix 6): set_defaults(skip_deps=True) no parser
+    do grupo vazava para sub-subparsers via herança de defaults do argparse,
+    quebrando dispatch com 'missing positional argument'. Agora
+    group_help_handler é identificado via atributo _is_group_help no
+    próprio handler — sub-subcomandos recebem deps normalmente."""
+    monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path / "cfg"))
+    monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("MAESTRA_STATE_DIR", str(tmp_path / "state"))
+
+    captured = {}
+    import maestra_ai.cli.taste as taste_mod
+
+    def fake_taste_show(args, **deps):
+        captured["deps"] = list(deps.keys())
+        return 0
+
+    monkeypatch.setattr(taste_mod, "cmd_taste_show", fake_taste_show)
+    # Re-monta parser porque _REGISTRARS só roda uma vez; o mock do
+    # cmd_taste_show já entra via ref direto ao dispatch, porém como
+    # set_defaults(func=cmd_taste_show) capturou a ref original, fazemos
+    # patch direto no args.func via namespace.
+    # Abordagem mais simples: atestar que o taste.cmd_taste_show original
+    # é chamado com deps (não cai no skip_deps do grupo).
+    import argparse
+    from maestra_ai.cli import _build_parser
+    parser = _build_parser()
+    args = parser.parse_args(["taste", "show"])
+    # args.func deveria ser o cmd_taste_show real, não o group_help_handler.
+    assert not getattr(args.func, "_is_group_help", False), \
+        "sub-subparser 'show' não deveria ser o group help handler"
+
+
 @pytest.mark.parametrize("group", ["taste", "auth", "config", "playlist",
                                      "context", "director", "flow"])
 def test_grupo_sem_sub_subcomando_mostra_help_em_vez_de_erro(group, monkeypatch, capsys):

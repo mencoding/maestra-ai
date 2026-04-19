@@ -22,9 +22,7 @@ def cmd_flow_review(args, context_state, flow_analyzer, **_):
 def _register(subparsers: argparse._SubParsersAction) -> None:
     from maestra_ai.cli import group_help_handler
     flow_parser = subparsers.add_parser("flow", help="Analisa saúde do fluxo musical")
-    flow_parser.set_defaults(
-        func=group_help_handler(flow_parser), skip_deps=True,
-    )
+    flow_parser.set_defaults(func=group_help_handler(flow_parser))
     sub = flow_parser.add_subparsers(dest="flow_command", required=False)
 
     p = sub.add_parser("review", help="Detecta deriva negativa por sequência/taxa")
