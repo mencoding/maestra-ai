@@ -7,6 +7,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-04-19
+
+Polimento pós primeira instalação end-to-end. Foco: o que bloqueou o
+Léo no first-run real e o que saiu silenciosamente errado. Fecha 6
+bugs de código + 3 gaps de documentação. Usuários existentes precisam
+rodar `maestra auth login` novamente para obter token com os novos
+scopes. Suite: 393 (maestra-ai).
+
+### Fixed
+- **Paginação de Liked Songs via campo `next`** (bug 3): heurística
+  antiga `len(items) < 50 → fim` podia parar cedo se Spotify mandasse
+  página intermediária parcial (rate limit soft, jitter), perdendo
+  resto da biblioteca silenciosamente. Agora usa `resp['next']`;
+  fallback para heurística antiga quando campo ausente.
+- **403 em create playlist traduzido para `PlaylistCreateForbiddenError`**
+  (bug 2): antes bubblava stack trace cru do spotipy. Nova classe
+  com 4 probable_causes (Development Mode, User Management,
+  propagação, Premium) e `suggested_actions` apontando dashboard e
+  contorno via `--playlist-id`.
+- **JSON mode do onboard não polui stdout** (fix colateral do bug 4):
+  Rich Progress é desligado em `--json` — antes escrevia "⠋
+  Iniciando..." antes do JSON, quebrando parsing por agente.
+
+### Changed
+- **Scopes OAuth incluem `user-read-email` e `user-read-private`**
+  (bug 1): sem eles, `/v1/me` retornava email/country/product como
+  `None`, inviabilizando diagnósticos. **Tokens antigos continuam
+  funcionando** mas com leitura restrita — refazer login recomendado.
+
+### Added
+- **Warning quando `--seed-playlist > 50`** (bug 4): Spotify limita
+  `top_short_term` a 50 faixas via API. Pedir mais era silenciosamente
+  clampeado. Warning Rich em modo human; campo `warnings` no report JSON.
+- **`--playlist-id` + `--playlist-name` renomeia no Spotify** (bug 5):
+  caso típico: usuário cria playlist vazia (Spotify nomeia como
+  "My Playlist #N"), passa link, queria rebatizar para "Maestra".
+  `playlist_change_details` é chamado se nome atual diferir. Falha
+  do rename não bloqueia onboard.
+- **Grupos sem sub-subcomando mostram help** (bug 6): `maestra taste`
+  (e `auth`/`config`/`playlist`/`context`/`director`/`flow`) sem
+  sub-subcomando agora imprime help formatado e retorna 0 em vez de
+  argparse error cru "required: taste_command" e exit 2. Novo helper
+  `cli.group_help_handler()`.
+- **Troubleshooting em `help onboarding`** (docs 7): seção com 3 casos
+  reais — 403 Forbidden + contorno, env legadas no `.bashrc`, token
+  antigo sem scopes.
+- **Aspas simples nos exemplos de `--playlist-id`** (docs 8): URLs do
+  Spotify contêm `&` e `?` que o shell consome sem aspas.
+- **Bloco Troubleshooting no README** (docs 9).
+
+### Tests
+- `test_auth.py`: +1 classe `TestScopes` (2 casos).
+- `test_onboard.py`: +1 classe `TestPlaylistCreate403` (2 casos),
+  +1 classe `TestPlaylistRename` (3 casos), `TestFetchSaved`
+  reescrita com `next`-aware fixtures (+2 casos novos).
+- `test_cli_onboard.py`: +2 casos de warning de seed.
+- `test_cli_smoke.py`: +1 parametrizado com 7 grupos.
+- Total 393 passed (era 374).
+
 ## [0.5.1] - 2026-04-19
 
 Polimento de primeira impressão. Cinco achados da simulação de usuário
