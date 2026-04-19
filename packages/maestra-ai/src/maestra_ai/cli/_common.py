@@ -71,11 +71,17 @@ def error(message, code="ERROR"):
 
 
 def safe_call(fn, error_code):
-    """Executa função e retorna valor ou erro serializável."""
+    """Executa função e retorna valor ou erro serializável.
+
+    v0.5.5 #2: `str(e)` passa por `redact_str` para evitar vazamento de
+    tokens Bearer ou client_secret embutidos em mensagens de exceção
+    (spotipy costuma incluí-los em string de erros 401/403).
+    """
     try:
         return fn()
     except Exception as e:
-        return {"error": str(e), "code": error_code}
+        from maestra_ai.core.security import redact_str
+        return {"error": redact_str(str(e)), "code": error_code}
 
 
 def _pid_running(pid):
