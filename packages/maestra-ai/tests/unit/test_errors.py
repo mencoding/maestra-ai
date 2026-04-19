@@ -15,7 +15,6 @@ from maestra_ai.core.errors import (
     UserError,
 )
 
-
 ALL_ERRORS = [
     AuthError, NetworkError, SpotifyAPIError, RateLimitError,
     NotFoundError, StorageError, ConfigError, UserError,

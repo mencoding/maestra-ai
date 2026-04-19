@@ -247,7 +247,7 @@ async def test_director_start_delega_para_core():
 async def test_director_stop_delega():
     from maestra_mcp.tools import call_tool
     with patch("maestra_ai.core.director.stop",
-               return_value={"status": "stopped"}) as m:
+               return_value={"status": "stopped"}):
         result = await call_tool("director_stop", {})
     assert result["status"] == "stopped"
 

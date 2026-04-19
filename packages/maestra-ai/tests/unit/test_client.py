@@ -59,7 +59,7 @@ def test_di_token_store_injetado_popula_cache_handler(monkeypatch, tmp_path):
 
     monkeypatch.setattr("maestra_ai.core.client.spotipy.Spotify", FakeSpotify)
 
-    controller = SpotifyController(token_store=mock_store)
+    SpotifyController(token_store=mock_store)
     # O auth_manager recebido é um SpotifyOAuth com cache_handler que tem o refresh_token
     oauth = captured["auth_manager"]
     cached = oauth.cache_handler.get_cached_token()

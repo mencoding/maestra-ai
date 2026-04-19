@@ -1,6 +1,8 @@
 """Testes do TasteProfile — perfil de gosto e feedback."""
 import json
+
 import pytest
+
 from maestra_ai.core.taste import TasteProfile
 
 

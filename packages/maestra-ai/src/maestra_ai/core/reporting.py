@@ -1,7 +1,7 @@
 """Helpers de relatório: estimativas sempre com total calculado."""
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 
 def humanize_bytes(n: int) -> str:

@@ -13,7 +13,6 @@ from typing import Any
 
 from maestra_ai.core.audit import _redact
 
-
 # Captura (a) "Bearer <token>" e (b) strings alfanuméricas longas (>=32)
 # que tipicamente são access_token, refresh_token ou API keys opacas.
 _SECRET_RE = re.compile(

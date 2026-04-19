@@ -4,7 +4,6 @@ from __future__ import annotations
 import fcntl
 import json
 import os
-import stat
 from pathlib import Path
 from typing import Any
 
@@ -78,7 +77,7 @@ def update_json_under_lock(
         fcntl.flock(lock, fcntl.LOCK_EX)
         if os.path.exists(path):
             try:
-                with open(path, "r", encoding="utf-8") as f:
+                with open(path, encoding="utf-8") as f:
                     current = json.load(f)
             except (json.JSONDecodeError, OSError):
                 current = default

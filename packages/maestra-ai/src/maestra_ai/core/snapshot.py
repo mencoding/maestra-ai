@@ -5,7 +5,7 @@ import gzip
 import json
 import re
 import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from maestra_ai.core import storage
@@ -34,7 +34,7 @@ def create(operation: str, state: dict) -> str:
     # Granularidade de microsegundos evita colisão lexicográfica em
     # snapshots criados na mesma segundo (ex.: safety-before-rollback
     # imediatamente antes do rollback).
-    ts = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d-%H%M%S-%f")
+    ts = datetime.now(UTC).astimezone().strftime("%Y-%m-%d-%H%M%S-%f")
     snap_id = f"{ts}-{operation}"
     path = _snap_dir() / f"{snap_id}.json"
     payload = {

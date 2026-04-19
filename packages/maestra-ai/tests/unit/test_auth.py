@@ -38,6 +38,7 @@ class TestNoopCacheHandler:
         spotipy 2.26+ falhava com AssertionError em SpotifyOAuth.__init__.
         """
         from spotipy.cache_handler import CacheHandler
+
         from maestra_ai.core.auth import _NoopCacheHandler
         assert issubclass(_NoopCacheHandler, CacheHandler)
 
@@ -45,7 +46,8 @@ class TestNoopCacheHandler:
         """Smoke: SpotifyOAuth real aceita o _NoopCacheHandler sem
         mockar nada. Teste fecha o gap de cobertura da v0.3.0."""
         from spotipy.oauth2 import SpotifyOAuth
-        from maestra_ai.core.auth import _NoopCacheHandler, SCOPES
+
+        from maestra_ai.core.auth import SCOPES, _NoopCacheHandler
         # Não chama Spotify; só testa que __init__ não crasha no assert.
         oauth = SpotifyOAuth(
             client_id="cid",

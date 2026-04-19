@@ -11,7 +11,6 @@ pode precisar de stores em containers sem DBus, ou em cofre externo).
 from __future__ import annotations
 
 import json
-import os
 import stat
 from pathlib import Path
 from typing import Protocol
@@ -22,7 +21,6 @@ except ImportError:
     keyring = None  # type: ignore[assignment]
 
 from maestra_ai.core.storage import atomic_write_json, config_dir
-
 
 _SERVICE = "maestra-ai"
 _USER = "spotify-refresh-token"

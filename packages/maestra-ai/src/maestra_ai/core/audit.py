@@ -8,7 +8,7 @@ from __future__ import annotations
 import gzip
 import json
 import shutil
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -34,7 +34,7 @@ def _redact(data: Any) -> Any:
 
 def log(tool: str, args: dict, result: dict) -> None:
     entry = {
-        "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "ts": datetime.now(UTC).isoformat(timespec="seconds"),
         "tool": tool,
         "args": _redact(args),
         "result_summary": _redact_result(result),
@@ -68,7 +68,7 @@ def _maybe_rotate() -> None:
     p = _path_active()
     if not p.exists():
         return
-    age = (datetime.now(timezone.utc) - datetime.fromtimestamp(p.stat().st_mtime, tz=timezone.utc)).days
+    age = (datetime.now(UTC) - datetime.fromtimestamp(p.stat().st_mtime, tz=UTC)).days
     if age >= _ACTIVE_DAYS:
         _force_rotate()
 
@@ -77,7 +77,7 @@ def _force_rotate() -> None:
     p = _path_active()
     if not p.exists():
         return
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    ts = datetime.now(UTC).strftime("%Y-%m-%d")
     archive = storage.state_dir() / f"audit.{ts}.jsonl.gz"
     with p.open("rb") as src, gzip.open(archive, "wb") as dst:
         shutil.copyfileobj(src, dst)
@@ -86,8 +86,8 @@ def _force_rotate() -> None:
 
 
 def _purge_old_archives() -> None:
-    cutoff = datetime.now(timezone.utc) - timedelta(days=_ARCHIVE_DAYS)
+    cutoff = datetime.now(UTC) - timedelta(days=_ARCHIVE_DAYS)
     for f in storage.state_dir().glob("audit.*.jsonl.gz"):
-        mtime = datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc)
+        mtime = datetime.fromtimestamp(f.stat().st_mtime, tz=UTC)
         if mtime < cutoff:
             f.unlink()

@@ -95,7 +95,7 @@ class FeedbackPrompter:
         if not os.path.exists(self.state_path):
             return {}
         try:
-            with open(self.state_path, "r", encoding="utf-8") as f:
+            with open(self.state_path, encoding="utf-8") as f:
                 data = json.load(f)
             if not isinstance(data, dict):
                 return {}

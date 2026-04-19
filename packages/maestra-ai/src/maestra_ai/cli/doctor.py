@@ -7,7 +7,6 @@ import json
 from maestra_ai.cli import register
 from maestra_ai.core import doctor
 
-
 _STATUS_SYMBOL = {"ok": "✓", "warning": "⚠", "error": "✗"}
 
 

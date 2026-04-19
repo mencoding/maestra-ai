@@ -9,8 +9,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from maestra_ai.core import onboard
 
 
@@ -191,8 +189,8 @@ class TestRun:
         monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
         sp = _make_sp(saved_pages=[{"items": []}])
 
-        from maestra_ai.core.taste import TasteProfile
         from maestra_ai.core import storage
+        from maestra_ai.core.taste import TasteProfile
         taste = TasteProfile(str(tmp_path / "taste.json"))
 
         onboard.run(sp, taste, playlist_name="X", seed_count=0, dry_run=False)

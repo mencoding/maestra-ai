@@ -28,7 +28,7 @@ class ContextState:
             return None
 
         try:
-            with open(self.path, "r", encoding="utf-8") as f:
+            with open(self.path, encoding="utf-8") as f:
                 data = json.load(f)
             if not isinstance(data, dict) or "set_at" not in data or "context" not in data:
                 return None

@@ -1,7 +1,7 @@
 """SpotifyController — wrapper da API Spotify via spotipy."""
-import os
 import subprocess
 import time
+
 import spotipy
 from spotipy.cache_handler import CacheHandler
 from spotipy.exceptions import SpotifyOauthError
@@ -273,7 +273,7 @@ class SpotifyController:
                 }
                 for t in items
             ]
-        elif type == "artist":
+        if type == "artist":
             return [
                 {
                     "name": a["name"],
@@ -282,7 +282,7 @@ class SpotifyController:
                 }
                 for a in items
             ]
-        elif type == "album":
+        if type == "album":
             return [
                 {
                     "name": a["name"],

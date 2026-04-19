@@ -7,9 +7,6 @@ jogando str(SpotifyException) cru — que pode conter tokens Bearer.
 from __future__ import annotations
 
 import json
-import sys
-from io import StringIO
-from unittest.mock import patch
 
 import pytest
 

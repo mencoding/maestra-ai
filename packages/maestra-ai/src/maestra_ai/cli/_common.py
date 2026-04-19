@@ -4,11 +4,9 @@ from __future__ import annotations
 import json
 import os
 import sys
-from collections import Counter
 
 from maestra_ai.core.curator import DEFAULT_CONTEXT
 from maestra_ai.core.storage import data_dir
-
 
 BASE_DIR = str(data_dir())
 os.makedirs(BASE_DIR, exist_ok=True)

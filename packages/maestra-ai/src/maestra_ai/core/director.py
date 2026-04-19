@@ -1,8 +1,12 @@
 """Director — gerencia repertorio dinamico sem trocar a faixa atual."""
 import json
 import os
+import signal
+import subprocess
+import sys
 from collections import Counter
 from datetime import datetime
+from pathlib import Path
 
 from maestra_ai.core.curator import DEFAULT_CONTEXT
 
@@ -208,10 +212,6 @@ class MusicDirector:
 
 
 # === Lifecycle do director daemon (funções livres) ===
-import signal
-import subprocess
-import sys
-from pathlib import Path
 
 
 def _pid_file() -> Path:
