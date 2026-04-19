@@ -255,6 +255,52 @@ class TestSavedRepesoEcap:
         assert report["saved_tracks_fetched"] == 75
 
 
+class TestRunComExistingPlaylistId:
+    """v0.4.5 parte 2: onboard aceita playlist pré-existente via existing_playlist_id."""
+
+    def test_run_com_existing_playlist_id_nao_cria(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+        sp = _make_sp(saved_pages=[{"items": []}])
+        sp.playlist.return_value = {"name": "Playlist Existente"}
+
+        from maestra_ai.core.taste import TasteProfile
+        taste = TasteProfile(str(tmp_path / "taste.json"))
+
+        report = onboard.run(
+            sp, taste, playlist_name="ignorado", seed_count=0,
+            dry_run=False, existing_playlist_id="pl_X",
+        )
+
+        sp.user_playlist_create.assert_not_called()
+        sp.playlist.assert_called()
+        assert report["playlist_id"] == "pl_X"
+        assert report["playlist_name"] == "Playlist Existente"
+
+        from maestra_ai.core import storage
+        cfg = storage.read_config()
+        assert cfg.get("playlist_id") == "pl_X"
+        assert cfg.get("playlist_name") == "Playlist Existente"
+
+    def test_run_com_existing_playlist_id_semeia_nele(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+        sp = _make_sp(top_short=10, saved_pages=[{"items": []}])
+        sp.playlist.return_value = {"name": "PL"}
+
+        from maestra_ai.core.taste import TasteProfile
+        taste = TasteProfile(str(tmp_path / "taste.json"))
+
+        onboard.run(
+            sp, taste, playlist_name="ignorado", seed_count=10,
+            dry_run=False, existing_playlist_id="pl_X",
+        )
+
+        sp.playlist_add_items.assert_called_once()
+        args = sp.playlist_add_items.call_args.args
+        assert args[0] == "pl_X"
+
+
 class TestOnboardToleraTrackNone:
     """CRITICAL-4: _fetch_saved / _fetch_recent devem ignorar items com track=None."""
 

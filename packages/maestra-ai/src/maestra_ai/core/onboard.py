@@ -152,11 +152,16 @@ def run(
     dry_run: bool = False,
     progress_cb: Callable | None = None,
     saved_cap: int | None = None,
+    existing_playlist_id: str | None = None,
 ) -> dict:
     """Executa onboarding. Retorna relatório estruturado.
 
     `saved_cap`: override do cap de Liked Songs. Se None, usa _MAX_SAVED.
     Para segurança, o valor é clampeado a min(saved_cap, _MAX_SAVED * 2).
+
+    `existing_playlist_id`: v0.4.5 parte 2 — se passado, pula a criação
+    de playlist e reaproveita a existente como buffer. Nome é obtido via
+    `sp.playlist(..., fields="name")` apenas para relatório.
     """
     # Resolução do cap efetivo para Liked Songs.
     if saved_cap is None:
@@ -176,11 +181,24 @@ def run(
     # call barata para validar token; se falhar, _call_spotify levanta AuthError
     sp.current_user()
 
-    # Step 2: playlist
+    # Step 2: playlist (cria nova ou reaproveita existente)
     report_step(2, "Playlist", detail=playlist_name)
     playlist_id = None
     effective_name = playlist_name
-    if not dry_run:
+    if existing_playlist_id:
+        # Reaproveita playlist já existente; busca nome para relatório.
+        playlist_id = existing_playlist_id
+        try:
+            pl_meta = sp.playlist(existing_playlist_id, fields="name")
+            effective_name = (pl_meta or {}).get("name") or existing_playlist_id
+        except Exception:
+            effective_name = existing_playlist_id
+        if not dry_run:
+            cfg = storage.read_config()
+            cfg["playlist_id"] = playlist_id
+            cfg["playlist_name"] = effective_name
+            storage.write_config(cfg)
+    elif not dry_run:
         effective_name = _resolve_playlist_name(sp, playlist_name)
         me = sp.current_user()
         new_pl = sp.user_playlist_create(
