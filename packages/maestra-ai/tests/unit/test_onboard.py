@@ -170,7 +170,7 @@ class TestFetchOwnPlaylists:
         taste = TasteProfile(tmp_path / "taste.json")
         report = onboard.run(
             sp, taste, playlist_name="M", seed_count=0,
-            playlist_selector=lambda pls: [],
+            playlist_selector=lambda pls, ctx: [],
         )
         exp = report["playlist_expansion"]
         assert exp["reason"] == "only_empty_playlists"
@@ -431,7 +431,7 @@ class TestPlaylistExpansion:
         sp = self._sp_with_playlists()
         selector_called = {"yes": False}
 
-        def selector(pls):
+        def selector(pls, ctx):
             selector_called["yes"] = True
             return []
 
@@ -460,7 +460,7 @@ class TestPlaylistExpansion:
         taste = TasteProfile(tmp_path / "taste.json")
         report = onboard.run(
             sp, taste, playlist_name="M", seed_count=0,
-            playlist_selector=lambda pls: ["p1"],
+            playlist_selector=lambda pls, ctx: ["p1"],
         )
         assert report["playlist_expansion"]["reason"] == "ok"
         assert report["playlist_expansion"]["tracks_added"] == 1
@@ -475,7 +475,7 @@ class TestPlaylistExpansion:
         ])
         selector_called = {"yes": False}
 
-        def selector(pls):
+        def selector(pls, ctx):
             selector_called["yes"] = True
             return []
 
@@ -500,7 +500,7 @@ class TestPlaylistExpansion:
         taste = TasteProfile(tmp_path / "taste.json")
         report = onboard.run(
             sp, taste, playlist_name="M", seed_count=0,
-            playlist_selector=lambda pls: [],
+            playlist_selector=lambda pls, ctx: [],
         )
         assert report["playlist_expansion"]["reason"] == "selector_returned_empty"
 
@@ -524,7 +524,7 @@ class TestPlaylistExpansion:
             ],
         )
 
-        def selector(pls):
+        def selector(pls, ctx):
             # agente escolhe só a primeira
             return ["p1"]
 
@@ -570,7 +570,7 @@ class TestPlaylistExpansion:
                                    "artists": [{"name": "Y"}]}}], "next": None},
         ]
 
-        def selector(pls):
+        def selector(pls, ctx):
             return ["p1", "p2", "p3"]
 
         taste = TasteProfile(tmp_path / "taste.json")
@@ -596,7 +596,7 @@ class TestPlaylistExpansion:
             ],
         )
 
-        def selector(pls):
+        def selector(pls, ctx):
             return ["p1"]
 
         taste = TasteProfile(tmp_path / "taste.json")
@@ -627,7 +627,7 @@ class TestExpansionEdgeCases:
             ],
         )
 
-        def buggy_selector(_pls):
+        def buggy_selector(_pls, _ctx):
             raise ValueError("selector com bug")
 
         taste = TasteProfile(tmp_path / "taste.json")
@@ -659,7 +659,7 @@ class TestExpansionEdgeCases:
             "404 — playlist não pertence ao usuário",
         )
 
-        def selector(_pls):
+        def selector(_pls, _ctx):
             return ["id_que_nao_esta_na_lista"]
 
         taste = TasteProfile(tmp_path / "taste.json")
