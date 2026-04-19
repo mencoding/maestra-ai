@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0-alpha.0] - 2026-04-19
+
+Primeiro bump de minor desde v0.5.0. Formaliza contrato do
+`playlist_selector` e do `expansion_info` do onboard via TypedDict.
+**Hard break** do contrato antigo (1-arg → 2-arg) — pre-1.0, 1 caller
+interno, zero agentes externos conhecidos. Sub-projeto A do backlog
+consolidado (itens #27, #29). Suite: ~462 (maestra-ai).
+
+### Breaking
+- `playlist_selector` agora é
+  `Callable[[list[OwnPlaylist], ExpansionContext], list[str]]` — 2
+  argumentos. Selectors antigos com 1 argumento levantam `TypeError`
+  em runtime. Sem deprecation path.
+
+### Added
+- **`core/onboard_types.py`** com `OwnPlaylist`, `ExpansionContext`,
+  `SelectedPlaylist`, `FailedPlaylist`, `ExpansionReason`,
+  `ExpansionInfo`, `PlaylistSelector`. Contratos centralizados para
+  consumo por core, CLI, MCP futuro e agentes externos via stubs.
+- **`ExpansionContext` passado ao selector** — `total_cap`,
+  `current_total`, `remaining`. Selector programático não precisa
+  mais descobrir esses valores fora de banda.
+- **Prompt interativo mostra current_total real**: antes caía em 0
+  porque CLI não tinha como saber; agora `_interactive_selector` usa
+  `ctx["current_total"]`.
+
+### Changed
+- `_fixed_selector` e `_interactive_selector` em `cli/onboard.py`
+  aceitam `(playlists, ctx)`. `_fixed_selector` ignora `ctx`
+  (IDs fixos via `--expand-playlists`).
+- `expansion_info` formalmente anotado como `ExpansionInfo`. Estrutura
+  runtime inalterada (flat, 7 campos).
+- `_fetch_own_playlists` retorna `tuple[list[OwnPlaylist], int]` com
+  tipo formal.
+
+### Tests
+- +3 em `TestExpansionContextShape` (total_cap, current_total, remaining).
+- +1 regressão de hard break (selector 1-arg → TypeError).
+- +1 em `TestPromptUsaCtxReal` (prompt recebe valores do ctx).
+- 23+ testes existentes atualizados para assinatura 2-arg (mesma
+  contagem).
+
 ## [0.5.7] - 2026-04-19
 
 Terceiro lote do backlog consolidado — polimento de UX, docstrings
