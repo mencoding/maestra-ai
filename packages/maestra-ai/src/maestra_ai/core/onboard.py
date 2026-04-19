@@ -24,6 +24,13 @@ from collections.abc import Callable
 
 from maestra_ai.core import storage
 from maestra_ai.core.errors import PlaylistCreateForbiddenError
+from maestra_ai.core.onboard_types import (
+    ExpansionContext,
+    ExpansionInfo,
+    FailedPlaylist,
+    OwnPlaylist,
+    SelectedPlaylist,
+)
 
 WEIGHTS = {
     "long_term": 3,
@@ -94,7 +101,7 @@ def _fetch_saved(
 
 def _fetch_own_playlists(
     sp, me_id: str, *, progress_cb: Callable | None = None,
-) -> tuple[list[dict], int]:
+) -> tuple[list[OwnPlaylist], int]:
     """v0.5.3: lista playlists criadas PELO próprio usuário (filtro
     owner.id == me_id). Exclui seguidas. Paginação via campo `next`.
 
@@ -436,7 +443,7 @@ def run(
     #   - "only_empty_playlists":    v0.5.7 — usuário tem N playlists
     #                                 próprias mas todas com track_count=0
     #   - "ok":                     expansão concluída (tracks_added > 0)
-    expansion_info: dict = {
+    expansion_info: ExpansionInfo = {
         "attempted": False,
         "offered_playlists": 0,
         "own_playlists_empty_count": 0,
@@ -481,7 +488,12 @@ def run(
                 else "no_own_playlists"
             )
         else:
-            selected_ids = playlist_selector(own_playlists) or []
+            ctx: ExpansionContext = {
+                "total_cap": total_cap,
+                "current_total": current_total_unique,
+                "remaining": total_cap - current_total_unique,
+            }
+            selected_ids = playlist_selector(own_playlists, ctx) or []
             # v0.5.7 #19: guarda objetos {id, name} em vez de só IDs.
             # Relatórios humanos e JSON podem mostrar nomes sem precisar
             # refazer lookup na API.
