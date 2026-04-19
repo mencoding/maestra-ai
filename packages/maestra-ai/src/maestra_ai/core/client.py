@@ -186,18 +186,26 @@ class SpotifyController:
         raise RuntimeError("Dispositivo transferido mas não ficou ativo a tempo.")
 
     def now(self):
-        """Retorna info da faixa atual ou None se nada toca."""
+        """Retorna info da faixa atual ou None se nada toca.
+
+        v0.4.4 CRITICAL-4: tolera payloads degradados (artists=[],
+        album sem name, device ausente) sem crashar.
+        """
         pb = _call_spotify(self.sp.current_playback)
         if not pb or not pb.get("item"):
             return None
         track = pb["item"]
+        artists = track.get("artists") or []
+        artist_name = artists[0].get("name", "Unknown") if artists else "Unknown"
+        album = track.get("album") or {}
+        device = pb.get("device") or {}
         return {
-            "track": track["name"],
-            "artist": track["artists"][0]["name"],
-            "album": track["album"]["name"],
-            "uri": track["uri"],
-            "is_playing": pb["is_playing"],
-            "device": pb["device"]["name"],
+            "track": track.get("name", "Unknown"),
+            "artist": artist_name,
+            "album": album.get("name", ""),
+            "uri": track.get("uri", ""),
+            "is_playing": pb.get("is_playing"),
+            "device": device.get("name", ""),
             "progress_ms": pb.get("progress_ms"),
             "duration_ms": track.get("duration_ms"),
         }
@@ -264,33 +272,39 @@ class SpotifyController:
                 break
 
         if type == "track":
-            return [
-                {
-                    "track": t["name"],
-                    "artist": t["artists"][0]["name"],
-                    "album": t["album"]["name"],
-                    "uri": t["uri"],
-                }
-                for t in items
-            ]
+            out = []
+            for t in items:
+                if not t:
+                    continue
+                artists = t.get("artists") or []
+                out.append({
+                    "track": t.get("name", "Unknown"),
+                    "artist": artists[0].get("name", "Unknown") if artists else "Unknown",
+                    "album": (t.get("album") or {}).get("name", ""),
+                    "uri": t.get("uri", ""),
+                })
+            return out
         if type == "artist":
             return [
                 {
-                    "name": a["name"],
-                    "uri": a["uri"],
+                    "name": a.get("name", "Unknown"),
+                    "uri": a.get("uri", ""),
                     "genres": a.get("genres", []),
                 }
-                for a in items
+                for a in items if a
             ]
         if type == "album":
-            return [
-                {
-                    "name": a["name"],
-                    "artist": a["artists"][0]["name"],
-                    "uri": a["uri"],
-                }
-                for a in items
-            ]
+            out = []
+            for a in items:
+                if not a:
+                    continue
+                artists = a.get("artists") or []
+                out.append({
+                    "name": a.get("name", "Unknown"),
+                    "artist": artists[0].get("name", "Unknown") if artists else "Unknown",
+                    "uri": a.get("uri", ""),
+                })
+            return out
         return []
 
     @staticmethod
@@ -317,28 +331,31 @@ class SpotifyController:
         return results
 
     def top_tracks(self, time_range="medium_term", limit=20):
-        """Retorna top faixas do usuário."""
+        """Retorna top faixas do usuário. Payloads degradados são filtrados."""
         raw = _call_spotify(self.sp.current_user_top_tracks, time_range=time_range, limit=limit)
-        return [
-            {
-                "track": t["name"],
-                "artist": t["artists"][0]["name"],
-                "album": t["album"]["name"],
-                "uri": t["uri"],
-            }
-            for t in raw.get("items", [])
-        ]
+        out = []
+        for t in raw.get("items", []):
+            if not t:
+                continue
+            artists = t.get("artists") or []
+            out.append({
+                "track": t.get("name", "Unknown"),
+                "artist": artists[0].get("name", "Unknown") if artists else "Unknown",
+                "album": (t.get("album") or {}).get("name", ""),
+                "uri": t.get("uri", ""),
+            })
+        return out
 
     def top_artists(self, time_range="medium_term", limit=20):
         """Retorna top artistas do usuário."""
         raw = _call_spotify(self.sp.current_user_top_artists, time_range=time_range, limit=limit)
         return [
             {
-                "name": a["name"],
-                "uri": a["uri"],
+                "name": a.get("name", "Unknown"),
+                "uri": a.get("uri", ""),
                 "genres": a.get("genres", []),
             }
-            for a in raw.get("items", [])
+            for a in raw.get("items", []) if a
         ]
 
     def playlist_tracks(self, playlist_id):
@@ -368,9 +385,12 @@ class SpotifyController:
 
     @staticmethod
     def _track_summary(track):
-        """Extrai resumo de uma faixa."""
+        """Extrai resumo de uma faixa. Tolera payloads degradados."""
+        if not track:
+            return {"track": "Unknown", "artist": "Unknown", "uri": ""}
+        artists = track.get("artists") or []
         return {
-            "track": track["name"],
-            "artist": track["artists"][0]["name"],
-            "uri": track["uri"],
+            "track": track.get("name", "Unknown"),
+            "artist": artists[0].get("name", "Unknown") if artists else "Unknown",
+            "uri": track.get("uri", ""),
         }

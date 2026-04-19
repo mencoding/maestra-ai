@@ -37,7 +37,11 @@ def _fetch_top_window(sp, time_range: str) -> list[dict]:
 
 
 def _fetch_saved(sp, progress_cb: Callable | None = None) -> list[dict]:
-    """Paginação defensiva: cap _MAX_SAVED, para em página vazia ou parcial."""
+    """Paginação defensiva: cap _MAX_SAVED, para em página vazia ou parcial.
+
+    v0.4.4 CRITICAL-4: ignora items com track=None (faixa removida do
+    catálogo / indisponível na região).
+    """
     collected: list[dict] = []
     offset = 0
     while len(collected) < _MAX_SAVED:
@@ -46,7 +50,9 @@ def _fetch_saved(sp, progress_cb: Callable | None = None) -> list[dict]:
         if not items:
             break
         for it in items:
-            track = it.get("track") or it
+            track = it.get("track")
+            if track is None or not track.get("uri"):
+                continue
             collected.append(track)
         offset += len(items)
         if progress_cb:
