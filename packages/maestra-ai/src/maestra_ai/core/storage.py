@@ -90,13 +90,20 @@ def update_json_under_lock(
     return updated
 
 
-def atomic_write_json(path: str | os.PathLike, data: Any, *, indent: int = 2) -> None:
+def atomic_write_json(
+    path: str | os.PathLike, data: Any, *, indent: int = 2, mode: int | None = None
+) -> None:
     """Escreve `data` como JSON em `path` com lock exclusivo + rename atômico.
 
     Fecha P0-5: serializa writes concorrentes entre daemon (director run) e
     CLI manual. Usa `fcntl.LOCK_EX` em `<path>.lock` durante toda a operação,
     escreve em `<path>.tmp` e faz `os.replace` (POSIX atomic rename). Leitores
     concorrentes sempre veem o conteúdo antigo ou o novo — nunca um parcial.
+
+    Se `mode` for fornecido (ex: 0o600 para secrets), o chmod é aplicado ao
+    arquivo temporário ANTES do rename — eliminando a janela TOCTOU entre
+    rename (arquivo publicado com permissões default do umask) e o chmod
+    posterior (CRITICAL-3 v0.4.4).
     """
     path = os.fspath(path)
     parent = os.path.dirname(path) or "."
@@ -107,6 +114,8 @@ def atomic_write_json(path: str | os.PathLike, data: Any, *, indent: int = 2) ->
         fcntl.flock(lock, fcntl.LOCK_EX)
         with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=indent, ensure_ascii=False)
+        if mode is not None:
+            os.chmod(tmp_path, mode)
         os.replace(tmp_path, path)
 
 

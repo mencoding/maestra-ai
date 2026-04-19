@@ -11,7 +11,6 @@ pode precisar de stores em containers sem DBus, ou em cofre externo).
 from __future__ import annotations
 
 import json
-import stat
 from pathlib import Path
 from typing import Protocol
 
@@ -93,9 +92,9 @@ class FileTokenStore:
 
     def save(self, refresh_token: str) -> None:
         path = self._path()
-        atomic_write_json(path, {"refresh_token": refresh_token})
-        # atomic_write_json cria com permissões default do umask; fixar 600 após.
-        path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+        # v0.4.4 CRITICAL-3: chmod acontece no .tmp antes do rename (sem
+        # janela world-readable). mode=0o600 = S_IRUSR | S_IWUSR.
+        atomic_write_json(path, {"refresh_token": refresh_token}, mode=0o600)
 
     def load(self) -> str | None:
         path = self._path()

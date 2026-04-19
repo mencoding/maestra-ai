@@ -86,6 +86,19 @@ class TestFileTokenStore:
         store = FileTokenStore()
         store.delete()  # não levanta mesmo sem arquivo
 
+    def test_save_com_0600_sem_janela_world_readable(self, tmp_path, monkeypatch):
+        """CRITICAL-3: antes da v0.4.4, save fazia atomic_write_json +
+        chmod 600 DEPOIS do rename — janela onde arquivo era 0644 (ou
+        qualquer coisa do umask). Agora chmod acontece no .tmp antes
+        do os.replace."""
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        store = FileTokenStore()
+        store.save("rt_secret")
+        token_file = tmp_path / "token.json"
+        assert oct(token_file.stat().st_mode)[-3:] == "600"
+        # Não deve sobrar .tmp world-readable.
+        assert not (tmp_path / "token.json.tmp").exists()
+
 
 class TestDefaultTokenStore:
     def test_prefere_keyring_quando_disponivel(self, monkeypatch):
