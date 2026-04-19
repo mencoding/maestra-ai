@@ -1,6 +1,6 @@
 [project]
 name = "maestra-ai"
-version = "0.5.2"
+version = "0.5.3"
 description = "Spotify controller with context-aware curation for AI agents"
 readme = "README.md"
 requires-python = ">=3.11"

@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-04-19
+
+Expansão do onboard: se Liked Songs + top tracks + recently played
+deixam o total abaixo do teto desejado, oferece complementar com
+playlists criadas pelo próprio usuário. Também consolida hotfix da
+regressão do fix 6 (v0.5.2) encontrada na validação end-to-end sob
+agente IA. Suite: 409 (maestra-ai).
+
+### Added
+- **Expansão opcional por playlists próprias** (solicitação do Léo):
+  quando total de faixas únicas < `--total-cap` (default 5000),
+  onboard pergunta se o usuário quer expandir e exibe checkbox
+  interativo (questionary) com suas próprias playlists (filtro
+  `owner.id == me.id` — seguidas ficam fora). Peso 2 para curadoria
+  indireta (entre recent=1 e saved=3). Nova dep: `questionary>=2.0`.
+- **Flags `--total-cap`, `--no-expand`, `--expand-playlists`** no
+  onboard. `--expand-playlists "id1,id2"` desliga o prompt e aplica
+  IDs fixos — ideal para agentes IA scriptarem o fluxo.
+- **Mensagem calorosa** quando usuário não tem playlists próprias:
+  "Você ainda não criou nenhuma playlist no Spotify — tudo bem, vou
+  aprender seus gostos ao longo das nossas interações."
+- **Novo campo `playlist_expansion`** no report de onboard
+  (`{attempted, offered_playlists, selected_playlists, tracks_added,
+  reason}`). `reason` é `no_own_playlists`, `user_skipped` ou `null`.
+
+### Fixed
+- **Regressão do fix 6 (v0.5.2)**: `set_defaults(skip_deps=True)` no
+  parser de grupos vazava para sub-subparsers via herança de defaults
+  do argparse. `maestra taste show` quebrava com
+  "cmd_taste_show() missing 1 required positional argument: taste".
+  Agora `group_help_handler` marca o próprio handler com atributo
+  `_is_group_help=True`; main() detecta via `args.func._is_group_help`.
+
+### Tests
+- `test_onboard.py`: +4 em TestFetchOwnPlaylists, +3 em
+  TestFetchPlaylistTracks, +1 em TestPlaylistWeight, +4 em
+  TestPlaylistExpansion.
+- `test_cli_onboard.py`: +5 em TestPlaylistSelector.
+- `test_cli_smoke.py`: +1 regressão (grupo com sub-sub não pula deps).
+- Total 409 passed (era 394).
+
 ## [0.5.2] - 2026-04-19
 
 Polimento pós primeira instalação end-to-end. Foco: o que bloqueou o

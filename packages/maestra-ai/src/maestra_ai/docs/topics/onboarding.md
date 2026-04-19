@@ -31,9 +31,13 @@ Em 6 etapas:
    faixas, peso **3** (curadoria explícita tem peso igual ao top
    consolidado).
 5. **Recently played** — últimas 50 ouvidas — peso **1**.
-6. **Análise** — soma pesos por URI, grava `global_signal` no
-   `taste_profile`, semeia `top_short[:N]` na playlist, deriva 5
-   contextos sugeridos a partir dos artistas dominantes.
+6. **Análise e expansão opcional** — se o total de faixas únicas ainda
+   for menor que `--total-cap` (default 5000), oferece expandir com
+   playlists criadas pelo próprio usuário (checkbox interativo). Peso
+   das faixas de playlist: **2** (curadoria explícita indireta). Depois
+   soma pesos por URI, grava `global_signal` no `taste_profile`, semeia
+   `top_short[:N]` na playlist, deriva 5 contextos sugeridos a partir
+   dos artistas dominantes.
 
 ## Custo
 
@@ -53,9 +57,14 @@ limiter local.
 - `--dry-run` — simula sem criar playlist nem escrever no taste_profile.
 - `--yes` — pula confirmação (útil em scripts).
 - `--non-interactive` — falha se faltar `--name` ou `--playlist-id`,
-  não abre prompt.
+  não abre prompt (também desliga expansão interativa).
+- `--total-cap N` — teto de faixas únicas (default 5000). Se total
+  pós-biblioteca ficar abaixo, CLI oferece expansão via playlists.
+- `--no-expand` — desativa a oferta de expansão.
+- `--expand-playlists "id1,id2"` — passa IDs pré-selecionados e pula
+  o checkbox interativo (ideal para scriptar com agente IA).
 - `--json` — output estruturado para pipe/agent (inclui campo
-  `warnings` se houver).
+  `warnings` e `playlist_expansion` se aplicáveis).
 
 ## Depois do onboard
 
