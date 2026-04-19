@@ -31,6 +31,10 @@ WEIGHTS = {
     "short_term": 2,
     "saved": 3,
     "recent": 1,
+    # v0.5.3: faixas de playlists criadas pelo usuário. Peso 2 =
+    # curadoria explícita indireta (colocou em playlist mas não
+    # necessariamente "liked"), entre recent=1 e saved=3.
+    "playlist": 2,
 }
 
 _MAX_SAVED = 5000
@@ -84,6 +88,58 @@ def _fetch_saved(
             break
         # Fallback (campo next ausente): heurística antiga.
         if not has_next_field and len(items) < _PAGE:
+            break
+    return collected[:max_tracks]
+
+
+def _fetch_own_playlists(sp, me_id: str) -> list[dict]:
+    """v0.5.3: lista playlists criadas PELO próprio usuário (filtro
+    owner.id == me_id). Exclui seguidas. Paginação via campo `next`.
+
+    Retorna lista de dicts: {id, name, track_count}.
+    """
+    collected: list[dict] = []
+    offset = 0
+    while True:
+        resp = sp.current_user_playlists(limit=_PAGE, offset=offset)
+        items = resp.get("items", []) or []
+        for it in items:
+            owner = (it.get("owner") or {}).get("id")
+            if owner == me_id:
+                collected.append({
+                    "id": it.get("id"),
+                    "name": it.get("name") or it.get("id"),
+                    "track_count": (it.get("tracks") or {}).get("total", 0),
+                })
+        offset += len(items)
+        if resp.get("next") is None:
+            break
+    return collected
+
+
+def _fetch_playlist_tracks(sp, playlist_id: str, *, max_tracks: int) -> list[dict]:
+    """v0.5.3: busca tracks de uma playlist, paginação defensiva (100/call).
+
+    Ignora track=None (locais ou removidas do catálogo).
+    Respeita cap `max_tracks`.
+    """
+    collected: list[dict] = []
+    offset = 0
+    page_size = 100
+    while len(collected) < max_tracks:
+        resp = sp.playlist_items(playlist_id, limit=page_size, offset=offset)
+        items = resp.get("items", []) or []
+        if not items:
+            break
+        for it in items:
+            if len(collected) >= max_tracks:
+                break
+            track = it.get("track")
+            if track is None or not track.get("uri"):
+                continue
+            collected.append(track)
+        offset += len(items)
+        if resp.get("next") is None:
             break
     return collected[:max_tracks]
 
@@ -157,6 +213,9 @@ def _resolve_playlist_name(sp, desired: str) -> str:
     return f"{desired} ({n})"
 
 
+_TOTAL_CAP_DEFAULT = 5000
+
+
 def run(
     sp,
     taste,
@@ -167,6 +226,8 @@ def run(
     progress_cb: Callable | None = None,
     saved_cap: int | None = None,
     existing_playlist_id: str | None = None,
+    total_cap: int = _TOTAL_CAP_DEFAULT,
+    playlist_selector: Callable | None = None,
 ) -> dict:
     """Executa onboarding. Retorna relatório estruturado.
 
@@ -176,6 +237,16 @@ def run(
     `existing_playlist_id`: v0.4.5 parte 2 — se passado, pula a criação
     de playlist e reaproveita a existente como buffer. Nome é obtido via
     `sp.playlist(..., fields="name")` apenas para relatório.
+
+    `total_cap`: v0.5.3 — teto desejado para total de faixas únicas
+    pontuadas. Se após top+saved+recent o total ficar abaixo e
+    `playlist_selector` estiver definido, oferece expansão via
+    playlists criadas pelo próprio usuário.
+
+    `playlist_selector`: v0.5.3 — callback que recebe
+    `list[dict(id, name, track_count)]` das playlists próprias do
+    usuário e retorna `list[str]` com IDs escolhidos. Retornar `[]`
+    pula a expansão. Se `None` (default), pula sempre.
     """
     # Resolução do cap efetivo para Liked Songs.
     if saved_cap is None:
@@ -282,16 +353,83 @@ def run(
     report_step(5, "Recently played")
     recent = _fetch_recent(sp)
 
+    # v0.5.3 Step 6: expansão via playlists próprias (opcional)
+    # Aplica apenas se:
+    #   - total atual < total_cap
+    #   - playlist_selector fornecido
+    # Core delega 100% da decisão ao selector (CLI decide UX). Se selector
+    # retornar [], pula silenciosamente.
+    playlist_tracks: list[dict] = []
+    expansion_info: dict = {
+        "attempted": False,
+        "offered_playlists": 0,
+        "selected_playlists": [],
+        "tracks_added": 0,
+        "reason": None,
+    }
+    current_total_unique = len({t.get("uri") for t in
+                                 (top_long + top_medium + top_short + saved + recent)
+                                 if t.get("uri")})
+    if playlist_selector is not None and current_total_unique < total_cap:
+        # Mesmo step que a análise (6), com detail para não quebrar o
+        # contrato de "6 etapas" com consumidores.
+        report_step(6, "Expansão por playlists (opcional)")
+        try:
+            me = sp.current_user()
+            own_playlists = _fetch_own_playlists(sp, me_id=me.get("id"))
+        except Exception:
+            own_playlists = []
+        expansion_info["attempted"] = True
+        expansion_info["offered_playlists"] = len(own_playlists)
+        if not own_playlists:
+            expansion_info["reason"] = "no_own_playlists"
+        else:
+            selected_ids = playlist_selector(own_playlists) or []
+            expansion_info["selected_playlists"] = list(selected_ids)
+            if selected_ids:
+                # URIs já vistos, para não duplicar trabalho de fetch nem
+                # inflar artificialmente o contador
+                seen = {t.get("uri") for t in
+                         (top_long + top_medium + top_short + saved + recent)
+                         if t.get("uri")}
+                remaining = total_cap - len(seen)
+                for pid in selected_ids:
+                    if remaining <= 0:
+                        break
+                    try:
+                        tracks = _fetch_playlist_tracks(
+                            sp, pid, max_tracks=remaining,
+                        )
+                    except Exception:
+                        continue
+                    for t in tracks:
+                        uri = t.get("uri")
+                        if uri and uri not in seen:
+                            seen.add(uri)
+                            playlist_tracks.append(t)
+                            remaining -= 1
+                            if remaining <= 0:
+                                break
+                expansion_info["tracks_added"] = len(playlist_tracks)
+            else:
+                expansion_info["reason"] = "user_skipped"
+
     # Step 6: análise + semeadura
     report_step(6, "Análise local e semeadura")
     weights = _compute_weights(
         top_long=top_long, top_medium=top_medium, top_short=top_short,
         saved=saved, recent=recent,
     )
+    # Peso playlist (v0.5.3): soma 2 para cada URI nas playlists escolhidas.
+    # A soma acumula com outras fontes (ex: faixa em top_long + playlist = 5).
+    for t in playlist_tracks:
+        uri = t.get("uri")
+        if uri:
+            weights[uri] = weights.get(uri, 0) + WEIGHTS["playlist"]
 
     # Índice uri → track para recuperar name/artist
     index: dict[str, dict] = {}
-    for t in top_long + top_medium + top_short + saved + recent:
+    for t in top_long + top_medium + top_short + saved + recent + playlist_tracks:
         uri = t.get("uri")
         if uri and uri not in index:
             index[uri] = t
@@ -332,6 +470,7 @@ def run(
         "top_short_count": len(top_short),
         "saved_tracks_fetched": len(saved),
         "recent_count": len(recent),
+        "playlist_expansion": expansion_info,
         "unique_tracks_scored": len(weights),
         "seeded": seeded,
         "context_suggestions": suggestions,

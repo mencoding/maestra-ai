@@ -63,6 +63,102 @@ class TestComputeWeights:
         assert w["spotify:track:3"] == onboard.WEIGHTS["saved"]
 
 
+class TestFetchOwnPlaylists:
+    """v0.5.3: expansão por playlists exige listar APENAS as que o
+    próprio usuário criou (owner.id == me.id), não as seguidas."""
+
+    def test_filtra_apenas_playlists_criadas_pelo_usuario(self):
+        from unittest.mock import MagicMock
+        sp = MagicMock()
+        sp.current_user_playlists.side_effect = [
+            {
+                "items": [
+                    {"id": "p1", "name": "Minha A", "owner": {"id": "me"},
+                     "tracks": {"total": 20}},
+                    {"id": "p2", "name": "Today's Top Hits",
+                     "owner": {"id": "spotify"}, "tracks": {"total": 50}},
+                    {"id": "p3", "name": "Minha B", "owner": {"id": "me"},
+                     "tracks": {"total": 10}},
+                ],
+                "next": None,
+            },
+        ]
+        result = onboard._fetch_own_playlists(sp, me_id="me")
+        ids = [p["id"] for p in result]
+        assert "p1" in ids
+        assert "p3" in ids
+        assert "p2" not in ids  # seguida, não própria
+
+    def test_pagina_ate_next_null(self):
+        from unittest.mock import MagicMock
+        sp = MagicMock()
+        sp.current_user_playlists.side_effect = [
+            {"items": [{"id": "p1", "name": "A", "owner": {"id": "me"},
+                        "tracks": {"total": 5}}],
+             "next": "url1"},
+            {"items": [{"id": "p2", "name": "B", "owner": {"id": "me"},
+                        "tracks": {"total": 5}}],
+             "next": None},
+        ]
+        result = onboard._fetch_own_playlists(sp, me_id="me")
+        assert len(result) == 2
+
+
+class TestFetchPlaylistTracks:
+    def test_pagina_tracks_via_next(self):
+        from unittest.mock import MagicMock
+        sp = MagicMock()
+        sp.playlist_items.side_effect = [
+            {"items": [
+                {"track": {"uri": f"spotify:track:p{i}", "name": f"T{i}",
+                           "artists": [{"name": "X"}]}}
+                for i in range(100)
+            ], "next": "url"},
+            {"items": [
+                {"track": {"uri": f"spotify:track:q{i}", "name": f"U{i}",
+                           "artists": [{"name": "Y"}]}}
+                for i in range(50)
+            ], "next": None},
+        ]
+        result = onboard._fetch_playlist_tracks(sp, "pl1", max_tracks=1000)
+        assert len(result) == 150
+
+    def test_respeita_max_tracks(self):
+        from unittest.mock import MagicMock
+        sp = MagicMock()
+        sp.playlist_items.return_value = {
+            "items": [
+                {"track": {"uri": f"spotify:track:z{i}", "name": f"Z{i}",
+                           "artists": [{"name": "Z"}]}}
+                for i in range(100)
+            ],
+            "next": "url",
+        }
+        result = onboard._fetch_playlist_tracks(sp, "pl1", max_tracks=30)
+        assert len(result) == 30
+
+    def test_ignora_tracks_none(self):
+        """Faixas removidas do catálogo ou locais vêm como track=None."""
+        from unittest.mock import MagicMock
+        sp = MagicMock()
+        sp.playlist_items.side_effect = [
+            {"items": [
+                {"track": None},
+                {"track": {"uri": "spotify:track:ok", "name": "OK",
+                           "artists": [{"name": "A"}]}},
+                {"track": {"uri": None}},  # track sem URI
+            ], "next": None},
+        ]
+        result = onboard._fetch_playlist_tracks(sp, "pl1", max_tracks=10)
+        assert len(result) == 1
+        assert result[0]["uri"] == "spotify:track:ok"
+
+
+class TestPlaylistWeight:
+    def test_peso_playlist_eh_2(self):
+        assert onboard.WEIGHTS.get("playlist") == 2
+
+
 def _fake_saved_with_next(n, has_next=True):
     """Página com campo `next` (Spotify manda URL da próxima página ou null)."""
     return {
@@ -192,6 +288,134 @@ class TestPlaylistRename:
         # Mantém nome atual quando rename falha, onboard segue normalmente.
         assert report["playlist_name"] == "My Playlist #7"
         assert report["status"] == "ok"
+
+
+class TestPlaylistExpansion:
+    """v0.5.3: expansão opcional por playlists próprias quando total < cap."""
+
+    def _sp_with_playlists(self, saved_pages=None, own_playlists=None,
+                            playlist_tracks=None):
+        sp = _make_sp(
+            top_long=10, top_medium=10, top_short=10,
+            saved_pages=saved_pages or [{"items": []}],
+            recent=5,
+        )
+        sp.current_user.return_value = {"id": "me"}
+        # Usa callable para tolerar múltiplas chamadas de clientes distintos
+        # (ex: _resolve_playlist_name + _fetch_own_playlists).
+        _own = list(own_playlists or [])
+
+        def _playlists_side(limit=50, offset=0):
+            if offset == 0:
+                return {"items": _own, "next": None}
+            return {"items": [], "next": None}
+
+        sp.current_user_playlists.side_effect = _playlists_side
+        if playlist_tracks is not None:
+            # Cada chamada a playlist_items devolve tracks de uma playlist
+            sp.playlist_items.side_effect = [
+                {"items": [{"track": t} for t in plts], "next": None}
+                for plts in playlist_tracks
+            ]
+        return sp
+
+    def _playlist_dict(self, pid, name, owner="me", total=10):
+        return {"id": pid, "name": name, "owner": {"id": owner},
+                "tracks": {"total": total}}
+
+    def test_expansao_pula_quando_selector_none(self, tmp_path, monkeypatch):
+        from maestra_ai.core.taste import TasteProfile
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+        sp = self._sp_with_playlists()
+        taste = TasteProfile(tmp_path / "taste.json")
+        report = onboard.run(sp, taste, playlist_name="M", seed_count=0,
+                              playlist_selector=None)
+        assert report["playlist_expansion"]["attempted"] is False
+        # current_user_playlists pode ter sido chamada por outros fluxos
+        # (ex: resolve_playlist_name), mas não pela expansão.
+
+    def test_expansao_sem_playlists_proprias_reporta_motivo(self, tmp_path, monkeypatch):
+        from maestra_ai.core.taste import TasteProfile
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+        # usuário não tem playlists próprias (só seguidas de "spotify")
+        sp = self._sp_with_playlists(own_playlists=[
+            self._playlist_dict("p1", "Today's Top Hits", owner="spotify"),
+        ])
+        selector_called = {"yes": False}
+
+        def selector(pls):
+            selector_called["yes"] = True
+            return []
+
+        taste = TasteProfile(tmp_path / "taste.json")
+        report = onboard.run(sp, taste, playlist_name="M", seed_count=0,
+                              playlist_selector=selector)
+        assert report["playlist_expansion"]["attempted"] is True
+        assert report["playlist_expansion"]["offered_playlists"] == 0
+        assert report["playlist_expansion"]["reason"] == "no_own_playlists"
+        # selector NÃO é chamado se lista vazia (evita UX confusa "escolha entre 0 opções")
+        assert selector_called["yes"] is False
+
+    def test_expansao_com_selecao_adiciona_faixas_com_peso_2(
+        self, tmp_path, monkeypatch,
+    ):
+        from maestra_ai.core.taste import TasteProfile
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+        sp = self._sp_with_playlists(
+            own_playlists=[
+                self._playlist_dict("p1", "Minha A", total=2),
+                self._playlist_dict("p2", "Minha B", total=2),
+            ],
+            playlist_tracks=[
+                # p1: 2 tracks, uma nova uma duplicada com saved
+                [{"uri": "spotify:track:new1", "name": "N1",
+                  "artists": [{"name": "A"}]},
+                 {"uri": "spotify:track:new2", "name": "N2",
+                  "artists": [{"name": "B"}]}],
+            ],
+        )
+
+        def selector(pls):
+            # agente escolhe só a primeira
+            return ["p1"]
+
+        taste = TasteProfile(tmp_path / "taste.json")
+        report = onboard.run(sp, taste, playlist_name="M", seed_count=0,
+                              playlist_selector=selector)
+        assert report["playlist_expansion"]["tracks_added"] == 2
+        assert report["playlist_expansion"]["selected_playlists"] == ["p1"]
+        # taste.data["tracks"][uri]["global_signal"] deve ter peso 2 (playlist)
+        tracks = taste.data.get("tracks", {})
+        assert tracks.get("spotify:track:new1", {}).get("global_signal") == 2
+        assert tracks.get("spotify:track:new2", {}).get("global_signal") == 2
+
+    def test_expansao_respeita_total_cap(self, tmp_path, monkeypatch):
+        from maestra_ai.core.taste import TasteProfile
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+        sp = self._sp_with_playlists(
+            own_playlists=[self._playlist_dict("p1", "Grande", total=100)],
+            playlist_tracks=[
+                [{"uri": f"spotify:track:big{i}", "name": f"B{i}",
+                  "artists": [{"name": "X"}]} for i in range(100)],
+            ],
+        )
+
+        def selector(pls):
+            return ["p1"]
+
+        taste = TasteProfile(tmp_path / "taste.json")
+        # Com total_cap baixo, só adiciona o que cabe.
+        # top+recent já trouxe 10+10+10+5 = 35 URIs únicos.
+        report = onboard.run(
+            sp, taste, playlist_name="M", seed_count=0,
+            playlist_selector=selector, total_cap=40,
+        )
+        # total_cap=40 - 35 já vistos = 5 vagas
+        assert report["playlist_expansion"]["tracks_added"] == 5
 
 
 class TestPlaylistCreate403:
