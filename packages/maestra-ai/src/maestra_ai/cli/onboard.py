@@ -196,6 +196,14 @@ def _print_report(report: dict) -> None:
 
         expansion = report.get("playlist_expansion") or {}
         expansion_line = ""
+        # v0.5.6 #10: CLI traduz reason (vocabulário técnico do core)
+        # para frases amigáveis. selector_returned_empty vira "dispensada"
+        # porque o CLI sabe que o selector é interativo aqui.
+        reason_to_text = {
+            "no_own_playlists": "— (sem playlists próprias)",
+            "selector_returned_empty": "— (dispensada)",
+            "cap_already_reached": "— (amostra já atinge o teto)",
+        }
         if expansion.get("attempted"):
             added = expansion.get("tracks_added", 0)
             picked = expansion.get("selected_playlists", [])
@@ -209,10 +217,8 @@ def _print_report(report: dict) -> None:
                 if failed:
                     expansion_line += f" ({len(failed)} falhou/falharam)"
                 expansion_line += "\n"
-            elif reason == "no_own_playlists":
-                expansion_line = "Expansão:         — (sem playlists próprias)\n"
-            elif reason == "user_skipped":
-                expansion_line = "Expansão:         — (dispensada)\n"
+            elif reason in reason_to_text:
+                expansion_line = f"Expansão:         {reason_to_text[reason]}\n"
 
         body = (
             f"Playlist:         {report['playlist_name']} "

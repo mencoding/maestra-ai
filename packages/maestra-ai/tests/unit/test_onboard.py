@@ -390,8 +390,53 @@ class TestPlaylistExpansion:
         report = onboard.run(sp, taste, playlist_name="M", seed_count=0,
                               playlist_selector=None)
         assert report["playlist_expansion"]["attempted"] is False
-        # current_user_playlists pode ter sido chamada por outros fluxos
-        # (ex: resolve_playlist_name), mas não pela expansão.
+        # v0.5.6 #10: reason sempre preenchido, vocabulário fechado.
+        assert report["playlist_expansion"]["reason"] == "selector_not_provided"
+
+    def test_reason_cap_already_reached_quando_total_ja_cobre(
+        self, tmp_path, monkeypatch,
+    ):
+        """v0.5.6 #10: usuário com biblioteca grande pode já superar o cap
+        antes da oferta — agente precisa distinguir esse caso de outros."""
+        from maestra_ai.core.taste import TasteProfile
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+        sp = self._sp_with_playlists()
+        selector_called = {"yes": False}
+
+        def selector(pls):
+            selector_called["yes"] = True
+            return []
+
+        taste = TasteProfile(tmp_path / "taste.json")
+        # total atual = 10+10+10+5 = 35 URIs únicos; total_cap=30 (menor).
+        report = onboard.run(
+            sp, taste, playlist_name="M", seed_count=0,
+            playlist_selector=selector, total_cap=30,
+        )
+        assert report["playlist_expansion"]["attempted"] is False
+        assert report["playlist_expansion"]["reason"] == "cap_already_reached"
+        assert selector_called["yes"] is False  # não foi chamado
+
+    def test_reason_ok_no_caminho_feliz(self, tmp_path, monkeypatch):
+        """v0.5.6 #10: reason='ok' quando tracks_added > 0."""
+        from maestra_ai.core.taste import TasteProfile
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+        sp = self._sp_with_playlists(
+            own_playlists=[self._playlist_dict("p1", "A", total=2)],
+            playlist_tracks=[
+                [{"uri": "spotify:track:x", "name": "X",
+                  "artists": [{"name": "Y"}]}],
+            ],
+        )
+        taste = TasteProfile(tmp_path / "taste.json")
+        report = onboard.run(
+            sp, taste, playlist_name="M", seed_count=0,
+            playlist_selector=lambda pls: ["p1"],
+        )
+        assert report["playlist_expansion"]["reason"] == "ok"
+        assert report["playlist_expansion"]["tracks_added"] == 1
 
     def test_expansao_sem_playlists_proprias_reporta_motivo(self, tmp_path, monkeypatch):
         from maestra_ai.core.taste import TasteProfile
@@ -415,6 +460,22 @@ class TestPlaylistExpansion:
         assert report["playlist_expansion"]["reason"] == "no_own_playlists"
         # selector NÃO é chamado se lista vazia (evita UX confusa "escolha entre 0 opções")
         assert selector_called["yes"] is False
+
+    def test_reason_selector_returned_empty(self, tmp_path, monkeypatch):
+        """v0.5.6 #10: 'user_skipped' virou 'selector_returned_empty' no core —
+        termo de UI (CLI traduz para "dispensada")."""
+        from maestra_ai.core.taste import TasteProfile
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+        sp = self._sp_with_playlists(
+            own_playlists=[self._playlist_dict("p1", "A", total=3)],
+        )
+        taste = TasteProfile(tmp_path / "taste.json")
+        report = onboard.run(
+            sp, taste, playlist_name="M", seed_count=0,
+            playlist_selector=lambda pls: [],
+        )
+        assert report["playlist_expansion"]["reason"] == "selector_returned_empty"
 
     def test_expansao_com_selecao_adiciona_faixas_com_peso_2(
         self, tmp_path, monkeypatch,

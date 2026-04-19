@@ -389,22 +389,34 @@ def run(
     # Core delega 100% da decisão ao selector (CLI decide UX). Se selector
     # retornar [], pula silenciosamente.
     playlist_tracks: list[dict] = []
+    # v0.5.6 #10: `reason` sempre preenchido com um dos valores de vocabulário
+    # fechado para simplificar consumidores (CLI, agentes via --json):
+    #   - "selector_not_provided": playlist_selector=None (expansão pulada)
+    #   - "cap_already_reached":   total atual >= total_cap antes da oferta
+    #   - "no_own_playlists":      selector chamou mas usuário não tem
+    #                               playlists próprias utilizáveis
+    #   - "selector_returned_empty": selector rodou e retornou []
+    #   - "ok":                     expansão concluída (tracks_added > 0)
     expansion_info: dict = {
         "attempted": False,
         "offered_playlists": 0,
         "selected_playlists": [],
         "tracks_added": 0,
-        "reason": None,
+        "reason": "selector_not_provided",
         # v0.5.5 #6-#7: rastreamento de falhas parciais durante fetch.
-        # Cada entrada: {"id": str, "reason": str (até 80 chars)}. Usuário
-        # deletou playlist entre listagem e fetch, ou fetch deu timeout
-        # no meio — não engole mais silenciosamente.
         "failed_playlists": [],
     }
     current_total_unique = len({t.get("uri") for t in
                                  (top_long + top_medium + top_short + saved + recent)
                                  if t.get("uri")})
-    if playlist_selector is not None and current_total_unique < total_cap:
+    if playlist_selector is None:
+        pass  # expansion_info["reason"] já é "selector_not_provided"
+    elif current_total_unique >= total_cap:
+        # v0.5.6 #10: caso explícito — agentes programáticos querem
+        # distinguir "não chamei" (selector None) de "chamei mas cap
+        # já estava cheio".
+        expansion_info["reason"] = "cap_already_reached"
+    else:
         # Mesmo step que a análise (6), com detail para não quebrar o
         # contrato de "6 etapas" com consumidores.
         report_step(6, "Expansão por playlists (opcional)")
@@ -452,8 +464,12 @@ def run(
                             if remaining <= 0:
                                 break
                 expansion_info["tracks_added"] = len(playlist_tracks)
+                # v0.5.6 #10: reason explícito no caminho feliz.
+                # Core usa "selector_returned_empty" em vez de "user_skipped"
+                # (termo de UI não pertence ao core — CLI traduz se quiser).
+                expansion_info["reason"] = "ok"
             else:
-                expansion_info["reason"] = "user_skipped"
+                expansion_info["reason"] = "selector_returned_empty"
 
     # Step 6: análise + semeadura
     report_step(6, "Análise local e semeadura")
