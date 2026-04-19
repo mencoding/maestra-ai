@@ -205,6 +205,35 @@ class TestPromptExpansionConfirmDinamico:
         assert "300" in captured["msg"]
 
 
+class TestPromptUsaCtxReal:
+    """v0.6.0: _interactive_selector passa ctx[current_total] e
+    ctx[total_cap] ao prompt — antes passava 0 porque CLI não tinha
+    como saber o total real."""
+
+    def test_prompt_recebe_current_total_do_ctx(self, monkeypatch):
+        captured = {}
+
+        def fake_confirm(current_total=0, total_cap=5000):
+            captured["current_total"] = current_total
+            captured["total_cap"] = total_cap
+            return False  # dispensa a expansão
+
+        monkeypatch.setattr(
+            cli_onboard, "_prompt_expansion_confirm", fake_confirm,
+        )
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+
+        args = _ns(non_interactive=False, total_cap=1200)
+        sel = cli_onboard._build_playlist_selector(args, progress=None)
+
+        playlists = [{"id": "p1", "name": "A", "track_count": 10}]
+        ctx = {"total_cap": 1200, "current_total": 700, "remaining": 500}
+        sel(playlists, ctx)
+
+        assert captured["current_total"] == 700
+        assert captured["total_cap"] == 1200
+
+
 class TestPlaylistSelector:
     """v0.5.3: _build_playlist_selector retorna callback conforme flags."""
 
