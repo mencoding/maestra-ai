@@ -17,6 +17,9 @@ from maestra_ai.core import storage
 _SECRET_KEYS = {"refresh_token", "client_secret", "access_token", "password", "token"}
 _ACTIVE_DAYS = 15
 _ARCHIVE_DAYS = 30
+# MEDIUM-3: dispara rotação mesmo antes da idade, para evitar crescer >100MB
+# em uso intensivo via MCP.
+_MAX_SIZE_BYTES = 10 * 1024 * 1024  # 10MB
 
 
 def _path_active() -> Path:
@@ -67,6 +70,13 @@ def _maybe_rotate() -> None:
     """Chama rotate se arquivo tem tamanho ou idade que justifique."""
     p = _path_active()
     if not p.exists():
+        return
+    # MEDIUM-3: checagem por tamanho (stat barato) roda antes da idade.
+    try:
+        if p.stat().st_size >= _MAX_SIZE_BYTES:
+            _force_rotate()
+            return
+    except OSError:
         return
     age = (datetime.now(UTC) - datetime.fromtimestamp(p.stat().st_mtime, tz=UTC)).days
     if age >= _ACTIVE_DAYS:
