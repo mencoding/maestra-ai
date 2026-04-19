@@ -103,7 +103,7 @@ class TestInteractiveSelectorFluxoReal:
             {"id": "p2", "name": "B", "track_count": 5},
             {"id": "p3", "name": "C", "track_count": 100},
         ]
-        result = sel(playlists)
+        result = sel(playlists, {"total_cap": 5000, "current_total": 500, "remaining": 4500})
         assert result == ["p1", "p3"]
 
     def test_confirm_negado_retorna_vazio(self, monkeypatch):
@@ -113,7 +113,10 @@ class TestInteractiveSelectorFluxoReal:
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
         args = _ns(non_interactive=False)
         sel = cli_onboard._build_playlist_selector(args, progress=None)
-        result = sel([{"id": "p1", "name": "A", "track_count": 10}])
+        result = sel(
+            [{"id": "p1", "name": "A", "track_count": 10}],
+            {"total_cap": 5000, "current_total": 500, "remaining": 4500},
+        )
         assert result == []
 
     def test_checkbox_nenhum_marcado_retorna_vazio(self, monkeypatch):
@@ -123,7 +126,10 @@ class TestInteractiveSelectorFluxoReal:
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
         args = _ns(non_interactive=False)
         sel = cli_onboard._build_playlist_selector(args, progress=None)
-        result = sel([{"id": "p1", "name": "A", "track_count": 10}])
+        result = sel(
+            [{"id": "p1", "name": "A", "track_count": 10}],
+            {"total_cap": 5000, "current_total": 500, "remaining": 4500},
+        )
         assert result == []
 
     def test_lista_vazia_retorna_sem_imprimir(self, monkeypatch, capsys):
@@ -136,7 +142,7 @@ class TestInteractiveSelectorFluxoReal:
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
         args = _ns(non_interactive=False)
         sel = cli_onboard._build_playlist_selector(args, progress=None)
-        result = sel([])
+        result = sel([], {"total_cap": 5000, "current_total": 0, "remaining": 5000})
         assert result == []
 
     def test_humanized_message_distingue_zero_de_todas_vazias(self, capsys):
@@ -212,7 +218,10 @@ class TestPlaylistSelector:
         valid_ids = "ABCDEFGHIJKLMNOPQRSTUV,123456789012345678901X"
         args = _ns(expand_playlists=valid_ids)
         sel = cli_onboard._build_playlist_selector(args, progress=None)
-        ids = sel([{"id": "xxx", "name": "Ignorada", "track_count": 5}])
+        ids = sel(
+            [{"id": "xxx", "name": "Ignorada", "track_count": 5}],
+            {"total_cap": 5000, "current_total": 100, "remaining": 4900},
+        )
         assert ids == ["ABCDEFGHIJKLMNOPQRSTUV", "123456789012345678901X"]
 
     def test_expand_playlists_aceita_url_e_uri(self):
@@ -223,7 +232,7 @@ class TestPlaylistSelector:
         )
         args = _ns(expand_playlists=preset)
         sel = cli_onboard._build_playlist_selector(args, progress=None)
-        ids = sel([])
+        ids = sel([], {"total_cap": 5000, "current_total": 0, "remaining": 5000})
         assert ids == ["ABCDEFGHIJKLMNOPQRSTUV", "123456789012345678901X"]
 
     def test_expand_playlists_id_invalido_levanta_user_error(self):
@@ -267,7 +276,10 @@ class TestPlaylistSelector:
         monkeypatch.setattr(cli_onboard, "_prompt_expansion_confirm", _raise)
         sel = cli_onboard._build_playlist_selector(args, progress=None)
         # selector deve engolir KeyboardInterrupt e retornar [].
-        result = sel([{"id": "p1", "name": "A", "track_count": 10}])
+        result = sel(
+            [{"id": "p1", "name": "A", "track_count": 10}],
+            {"total_cap": 5000, "current_total": 100, "remaining": 4900},
+        )
         assert result == []
 
     def test_keyboard_interrupt_no_checkbox_degrada_para_lista_vazia(
@@ -283,7 +295,10 @@ class TestPlaylistSelector:
 
         monkeypatch.setattr(cli_onboard, "_prompt_playlists_checkbox", _raise)
         sel = cli_onboard._build_playlist_selector(args, progress=None)
-        result = sel([{"id": "p1", "name": "A", "track_count": 10}])
+        result = sel(
+            [{"id": "p1", "name": "A", "track_count": 10}],
+            {"total_cap": 5000, "current_total": 100, "remaining": 4900},
+        )
         assert result == []
 
 
