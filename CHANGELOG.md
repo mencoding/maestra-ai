@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-04-19
+
+Patch blocker pós code-review da v0.5.3: dois críticos e um de
+segurança (PII). Suite: 414 (maestra-ai).
+
+### Fixed
+- **C1 — `KeyboardInterrupt` durante `questionary` abortava onboard
+  inteiro**: Ctrl+C no prompt de expansão quebrava toda a execução,
+  descartando top/saved/recent já buscados. Agora `_interactive_selector`
+  captura `KeyboardInterrupt` em `_prompt_expansion_confirm` e
+  `_prompt_playlists_checkbox` e degrada para `[]` — core persiste
+  normalmente o que já coletou.
+- **C2 — loop infinito potencial em `_fetch_own_playlists`**: se
+  Spotify retornar `items=[]` com `next != None` (rate-limit soft,
+  mesmo sintoma do bug 3 corrigido em `_fetch_saved`), offset ficava
+  preso em 0. Guarda `if not items: break` adicionada, consistente
+  com `_fetch_playlist_tracks`.
+- **M7 (PII) — email não era redactado em audit logs nem em
+  `MaestraError.where`**: `_SECRET_KEYS` não cobria `email`. Agora
+  cobre. `country` e `product` permanecem visíveis (metadata útil
+  para diagnóstico, não-PII).
+
+### Tests
+- `test_onboard.py`: +1 (test_guarda_contra_loop_infinito_items_vazio_com_next)
+- `test_cli_onboard.py`: +2 (KeyboardInterrupt no confirm e no checkbox)
+- `test_audit.py`: +1 classe TestRedactPII (+2 casos)
+- Total 414 passed (era 409).
+
 ## [0.5.3] - 2026-04-19
 
 Expansão do onboard: se Liked Songs + top tracks + recently played

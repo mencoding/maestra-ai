@@ -94,6 +94,41 @@ class TestPlaylistSelector:
         sel = cli_onboard._build_playlist_selector(args, progress=None)
         assert callable(sel)
 
+    def test_keyboard_interrupt_no_confirm_degrada_para_lista_vazia(
+        self, monkeypatch,
+    ):
+        """v0.5.3.1 (C1): Ctrl+C durante _prompt_expansion_confirm não pode
+        abortar o onboard — deve degradar para [] e deixar o core continuar
+        persistindo top/saved/recent já coletados.
+        """
+        args = _ns(non_interactive=False)
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+
+        def _raise(*_, **__):
+            raise KeyboardInterrupt()
+
+        monkeypatch.setattr(cli_onboard, "_prompt_expansion_confirm", _raise)
+        sel = cli_onboard._build_playlist_selector(args, progress=None)
+        # selector deve engolir KeyboardInterrupt e retornar [].
+        result = sel([{"id": "p1", "name": "A", "track_count": 10}])
+        assert result == []
+
+    def test_keyboard_interrupt_no_checkbox_degrada_para_lista_vazia(
+        self, monkeypatch,
+    ):
+        args = _ns(non_interactive=False)
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+        monkeypatch.setattr(cli_onboard, "_prompt_expansion_confirm",
+                             lambda: True)
+
+        def _raise(*_, **__):
+            raise KeyboardInterrupt()
+
+        monkeypatch.setattr(cli_onboard, "_prompt_playlists_checkbox", _raise)
+        sel = cli_onboard._build_playlist_selector(args, progress=None)
+        result = sel([{"id": "p1", "name": "A", "track_count": 10}])
+        assert result == []
+
 
 def test_seed_maior_que_50_emite_warning_em_json(monkeypatch, capsys):
     """v0.5.2 (bug 4): report JSON inclui campo warnings quando

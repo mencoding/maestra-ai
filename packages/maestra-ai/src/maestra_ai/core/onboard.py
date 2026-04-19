@@ -96,6 +96,10 @@ def _fetch_own_playlists(sp, me_id: str) -> list[dict]:
     """v0.5.3: lista playlists criadas PELO próprio usuário (filtro
     owner.id == me_id). Exclui seguidas. Paginação via campo `next`.
 
+    v0.5.3.1 (C2): guarda contra loop infinito — Spotify pode
+    retornar items=[] com next != None em rate-limit soft; sem break
+    o offset fica preso.
+
     Retorna lista de dicts: {id, name, track_count}.
     """
     collected: list[dict] = []
@@ -103,6 +107,9 @@ def _fetch_own_playlists(sp, me_id: str) -> list[dict]:
     while True:
         resp = sp.current_user_playlists(limit=_PAGE, offset=offset)
         items = resp.get("items", []) or []
+        # Guarda C2: página vazia = fim, mesmo se next disser outra coisa.
+        if not items:
+            break
         for it in items:
             owner = (it.get("owner") or {}).get("id")
             if owner == me_id:

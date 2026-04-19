@@ -77,10 +77,20 @@ def _build_playlist_selector(args, progress):
         if progress is not None:
             progress.stop()
         try:
-            confirm = _prompt_expansion_confirm()
+            # v0.5.3.1 (C1): Ctrl+C durante o prompt NÃO pode abortar o
+            # onboard — top/saved/recent já foram buscados e devem ser
+            # persistidos. Degrada silenciosamente para [] (sem expansão)
+            # para que o core continue o fluxo normal.
+            try:
+                confirm = _prompt_expansion_confirm()
+            except KeyboardInterrupt:
+                return []
             if not confirm:
                 return []
-            return _prompt_playlists_checkbox(playlists)
+            try:
+                return _prompt_playlists_checkbox(playlists)
+            except KeyboardInterrupt:
+                return []
         finally:
             if progress is not None:
                 progress.start()

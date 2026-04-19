@@ -4,6 +4,27 @@ from __future__ import annotations
 import json
 
 from maestra_ai.core import audit
+from maestra_ai.core.audit import _SECRET_KEYS, _redact
+
+
+class TestRedactPII:
+    """v0.5.3.1 (M7): email é PII e deve ser redactado em where/logs.
+
+    Motivação: PlaylistCreateForbiddenError.where inclui email do
+    usuário autenticado. Sem redaction, email vaza em stderr, stdout
+    JSON e audit log.
+    """
+
+    def test_email_e_redactado(self):
+        assert "email" in _SECRET_KEYS
+        out = _redact({"email": "user@example.com", "country": "BR"})
+        assert out["email"] == "REDACTED"
+
+    def test_country_e_product_nao_sao_redactados(self):
+        """Metadata não-PII: útil para diagnóstico (ex: 'conta Free em BR')."""
+        out = _redact({"country": "BR", "product": "premium"})
+        assert out["country"] == "BR"
+        assert out["product"] == "premium"
 
 
 def test_append_basic(monkeypatch, tmp_path):
