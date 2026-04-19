@@ -39,14 +39,19 @@ def _is_placeholder(value: str) -> bool:
 
 
 def _redirect_uri_is_placeholder(value: str) -> bool:
-    """Redirect placeholder = example.com/example.org/localhost (Spotify rejeita)."""
+    """Redirect placeholder = tokens textuais óbvios ou localhost.
+
+    example.com/example.org NÃO são tratados como placeholder: o fluxo é
+    paste-back, o domínio nem precisa existir. Registrar example.com no
+    dashboard é uso legítimo (e econômico). Já http://localhost é
+    rejeitado pelo próprio Spotify em apps criados após 2025 — aí sim
+    vale warning.
+    """
     if _is_placeholder(value):
         return True
     v = value.strip().lower()
     return (
-        "example.com" in v
-        or "example.org" in v
-        or v.startswith("http://localhost")
+        v.startswith("http://localhost")
         or v.startswith("http://127.0.0.1")
     )
 

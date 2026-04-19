@@ -30,9 +30,9 @@ def test_check_config_with_valid_credentials(monkeypatch, tmp_path):
     assert check["status"] == "ok"
 
 
-def test_check_config_rejeita_redirect_uri_example(monkeypatch, tmp_path):
-    """Se redirect_uri aponta para example.com, deve ser warning —
-    é placeholder documental, não URL real registrada no dashboard Spotify."""
+def test_check_config_aceita_redirect_example_com(monkeypatch, tmp_path):
+    """example.com/example.org são TLDs reservados (RFC 2606) e Spotify
+    aceita via paste-back. Usar é legítimo — não deve ser warning."""
     monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path / "cfg"))
     (tmp_path / "cfg").mkdir()
     from maestra_ai.core import storage
@@ -40,6 +40,20 @@ def test_check_config_rejeita_redirect_uri_example(monkeypatch, tmp_path):
         "client_id": "a" * 32,
         "client_secret": "b" * 32,
         "redirect_uri": "https://example.com/callback",
+    })
+    check = doctor.check_config()
+    assert check["status"] == "ok"
+
+
+def test_check_config_rejeita_redirect_localhost(monkeypatch, tmp_path):
+    """Spotify rejeita http://localhost em apps criados após 2025."""
+    monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path / "cfg"))
+    (tmp_path / "cfg").mkdir()
+    from maestra_ai.core import storage
+    storage.write_config({
+        "client_id": "a" * 32,
+        "client_secret": "b" * 32,
+        "redirect_uri": "http://localhost:8888/callback",
     })
     check = doctor.check_config()
     assert check["status"] == "warning"
