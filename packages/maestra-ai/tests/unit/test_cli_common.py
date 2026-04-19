@@ -8,6 +8,26 @@ from maestra_ai.core import storage
 from maestra_ai.core.errors import ConfigError
 
 
+class TestImportSemSideEffect:
+    """v0.5.6 #13: `import maestra_ai.cli._common` NÃO deve criar
+    diretório no disco. O side-effect antigo (`os.makedirs(BASE_DIR)`
+    no topo) dificultava testes que monkeypatch MAESTRA_DATA_DIR."""
+
+    def test_import_nao_cria_dir_no_path_do_env(self, tmp_path, monkeypatch):
+        import importlib
+        import sys
+
+        custom_dir = tmp_path / "maestra-data-test"
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(custom_dir))
+        # Força reimport do módulo e do storage.
+        for m in ("maestra_ai.cli._common", "maestra_ai.core.storage"):
+            sys.modules.pop(m, None)
+        importlib.import_module("maestra_ai.cli._common")
+        # O import NÃO deve ter criado custom_dir.
+        assert not custom_dir.exists(), \
+            f"import criou diretório {custom_dir} — side-effect proibido"
+
+
 class TestSafeCallRedact:
     """v0.5.5 #2: safe_call redacta str(e) antes de retornar no dict
     de erro. Antes, tokens em mensagens de SpotifyException vazavam

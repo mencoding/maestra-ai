@@ -8,8 +8,11 @@ import sys
 from maestra_ai.core.curator import DEFAULT_CONTEXT
 from maestra_ai.core.storage import data_dir
 
+# v0.5.6 #13: BASE_DIR ainda é avaliado no import, mas o side-effect
+# de filesystem (os.makedirs) foi removido. Storage cria os dirs
+# on-demand via `storage.ensure_dirs()` nos callers que escrevem —
+# assim `import maestra_ai.cli._common` não modifica disco.
 BASE_DIR = str(data_dir())
-os.makedirs(BASE_DIR, exist_ok=True)
 
 TASTE_PATH = os.path.join(BASE_DIR, "taste_profile.json")
 CONTEXT_PATH = os.path.join(BASE_DIR, "current_context.json")
