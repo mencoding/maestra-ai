@@ -265,3 +265,44 @@ class PersistentCircuitBreaker:
         with _connect(self.db_path) as conn:
             failures, _ = self._load(conn)
             return len(self._prune(failures, now))
+
+    def reset(self) -> None:
+        """HIGH-3: força fechamento do breaker (zera failures e opened_at).
+
+        Útil quando operador corrigiu a causa-raiz de falhas (credencial
+        trocada, rede restabelecida) e não quer esperar o cooldown.
+        """
+        with _connect(self.db_path) as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            self._save(conn, [], None)
+            conn.execute("COMMIT")
+
+
+# Cache lazy do breaker no caminho default (respeita MAESTRA_STATE_DIR
+# setado em testes via monkeypatch). Chave = db_path.
+_breaker_cache: dict[str, PersistentCircuitBreaker] = {}
+
+
+def _default_db_path() -> str:
+    from maestra_ai.core import storage
+    return str(storage.state_dir() / "ratelimit.db")
+
+
+def _get_breaker() -> PersistentCircuitBreaker:
+    """HIGH-3: obtém breaker persistente no caminho default.
+
+    Cache por `db_path` para tolerar alternância de MAESTRA_STATE_DIR
+    entre testes sem vazar estado entre eles.
+    """
+    path = _default_db_path()
+    if path not in _breaker_cache:
+        _breaker_cache[path] = PersistentCircuitBreaker(
+            max_failures=3, window_sec=60, cooldown_sec=300, db_path=path,
+        )
+    return _breaker_cache[path]
+
+
+def reset_breaker() -> None:
+    """HIGH-3: zera o circuit breaker persistente no caminho default."""
+    breaker = _get_breaker()
+    breaker.reset()

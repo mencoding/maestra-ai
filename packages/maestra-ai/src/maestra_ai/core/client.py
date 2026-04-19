@@ -1,5 +1,4 @@
 """SpotifyController — wrapper da API Spotify via spotipy."""
-import subprocess
 import time
 
 import spotipy
@@ -156,10 +155,13 @@ class SpotifyController:
         3. Se nenhum está ativo, faz transfer_playback pro primeiro
         4. Aguarda o dispositivo ficar pronto
         """
-        # 1. Processo rodando?
-        result = subprocess.run(["pgrep", "-x", "spotify"], capture_output=True)
-        if result.returncode != 0:
+        # 1. Processo rodando? (pré-check portável; se inconclusivo, segue
+        # e deixa a API do Spotify falar — MEDIUM-2)
+        from maestra_ai.core.process import is_spotify_running
+        running = is_spotify_running()
+        if running is False:
             raise RuntimeError("Processo do Spotify não encontrado. Abra o Spotify primeiro.")
+        # running is None: não dá pra checar neste SO — prossegue
 
         # 2. Dispositivos disponíveis?
         devs = _call_spotify(self.sp.devices).get("devices", [])

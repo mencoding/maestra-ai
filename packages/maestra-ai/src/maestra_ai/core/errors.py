@@ -164,3 +164,15 @@ class UserError(MaestraError):
         {"command": "maestra <subcomando> --help", "description": "Ver uso correto"},
     ]
     agent_hint = "Input do usuário inválido. Mostre o help do subcomando."
+
+
+class ValidationError(UserError):
+    """Payload não passou em validação de schema (HIGH-2)."""
+
+    code = "ValidationError"
+    title = "Payload inválido"
+    probable_causes = [
+        "Arquivo de backup/snapshot corrompido",
+        "Estrutura do payload não corresponde ao schema esperado",
+    ]
+    agent_hint = "Payload rejeitado antes de sobrescrever estado. Verifique origem."

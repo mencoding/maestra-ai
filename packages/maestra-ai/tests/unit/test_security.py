@@ -36,6 +36,43 @@ class TestRedactStr:
         assert isinstance(redact_str(""), str)
 
 
+class TestRedactStrContextual:
+    """MEDIUM-1: redação contextual — preserva strings inocentes."""
+
+    def test_redact_str_preserva_track_uri(self):
+        s = "tocando spotify:track:1V2aEtKkJxLyJcxAz94nLY agora"
+        assert "spotify:track:1V2aEtKkJxLyJcxAz94nLY" in redact_str(s)
+
+    def test_redact_str_preserva_playlist_id_em_contexto(self):
+        s = "playlist 1V2aEtKkJxLyJcxAz94nLY sincronizada"
+        out = redact_str(s)
+        assert "1V2aEtKkJxLyJcxAz94nLY" in out
+
+    def test_redact_str_preserva_nomes_longos(self):
+        s = "faixa: A Million Miles Away From Anywhere Anyone Has Ever Been Before"
+        assert "REDACTED" not in redact_str(s)
+
+    def test_redact_str_redacta_bearer_token(self):
+        s = "Authorization: Bearer BQC3abc123xyz987longtoken"
+        assert "BQC3abc123xyz987longtoken" not in redact_str(s)
+        assert "REDACTED" in redact_str(s)
+
+    def test_redact_str_redacta_key_value_conhecido(self):
+        cases = [
+            "access_token=BQC3abc123longvalue456",
+            "refresh_token=AQD_xyz789longvalue123",
+            "client_secret=abc123secret789longvalue",
+            "api_key=pk_live_abc123longvalue456",
+        ]
+        for s in cases:
+            out = redact_str(s)
+            assert "REDACTED" in out, f"não redatou: {s!r}"
+
+    def test_redact_str_redacta_jwt(self):
+        s = "token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjMifQ.abc123"
+        assert "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" not in redact_str(s)
+
+
 class TestRedactErrorDict:
     def test_redact_cobre_where(self):
         d = {

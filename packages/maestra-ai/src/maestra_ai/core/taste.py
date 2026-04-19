@@ -7,6 +7,40 @@ import time
 from datetime import datetime
 
 
+def _validate_restore_payload(data):
+    """HIGH-2: valida estrutura mínima antes de sobrescrever perfil.
+
+    Rejeita: não-dict, tracks não-dict, entradas de track sem estrutura
+    dict, weight não-numérico, e chaves top-level esperadas com tipo errado.
+    """
+    from maestra_ai.core.errors import ValidationError
+
+    if not isinstance(data, dict):
+        raise ValidationError(
+            f"taste.restore: payload deve ser dict, veio {type(data).__name__}",
+        )
+    tracks = data.get("tracks")
+    if tracks is not None and not isinstance(tracks, dict):
+        raise ValidationError(
+            f"taste.restore: 'tracks' deve ser dict, veio {type(tracks).__name__}",
+        )
+    if isinstance(tracks, dict):
+        for uri, entry in tracks.items():
+            if not isinstance(entry, dict):
+                raise ValidationError(
+                    f"taste.restore: track {uri!r} deve ser dict",
+                )
+            if "weight" in entry and not isinstance(entry["weight"], (int, float)):
+                raise ValidationError(
+                    f"taste.restore: track {uri!r} 'weight' deve ser numérico",
+                )
+    for key in ("global", "success_rates", "context_tokens"):
+        if key in data and not isinstance(data[key], dict):
+            raise ValidationError(
+                f"taste.restore: {key!r} deve ser dict",
+            )
+
+
 class TasteProfile:
     """Gerencia perfil de gosto musical com persistência em JSON."""
 
@@ -95,7 +129,11 @@ class TasteProfile:
             os.replace(tmp_path, self.path)
 
     def restore(self, data):
-        """Sobrescreve perfil com `data` sem merge (uso: rollback)."""
+        """Sobrescreve perfil com `data` sem merge (uso: rollback).
+
+        HIGH-2: valida schema antes; se inválido, perfil não é tocado.
+        """
+        _validate_restore_payload(data)
         self.data = self._migrate(data)
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
         lock_path = f"{self.path}.lock"
