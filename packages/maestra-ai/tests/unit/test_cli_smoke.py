@@ -50,6 +50,19 @@ def test_onboard_parser_aceita_flags():
     assert args.json is True
 
 
+def test_auth_setup_help_cita_dashboard_e_redirect_https(monkeypatch, capsys):
+    """--help de `auth setup` deve explicar pré-requisito (app no dashboard,
+    redirect HTTPS) para agente IA ou usuário novo não precisar adivinhar."""
+    monkeypatch.setattr("sys.argv", ["maestra", "auth", "setup", "--help"])
+    with pytest.raises(SystemExit):
+        cli_main()
+    out = capsys.readouterr().out
+    # Aponta o dashboard.
+    assert "developer.spotify.com" in out or "dashboard" in out.lower()
+    # Menciona que localhost é rejeitado em apps novos.
+    assert "localhost" in out.lower() or "HTTPS" in out
+
+
 def test_sem_subcomando_mostra_banner_e_retorna_zero(monkeypatch, capsys):
     """v0.5.1: antes levantava SystemExit(2) com help do argparse.
     Agora imprime quickstart banner e retorna 0 — UX de primeira execução."""

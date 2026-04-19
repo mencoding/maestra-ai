@@ -80,9 +80,25 @@ def _register(subparsers: argparse._SubParsersAction) -> None:
     auth_p = subparsers.add_parser("auth", help="Autenticação Spotify")
     sub = auth_p.add_subparsers(dest="auth_command", required=True)
 
-    setup_p = sub.add_parser("setup", help="Configura client_id/secret")
-    setup_p.add_argument("--client-id", default=None)
-    setup_p.add_argument("--client-secret", default=None)
+    setup_p = sub.add_parser(
+        "setup",
+        help="Configura client_id/secret",
+        description=(
+            "Grava credenciais do app Spotify em ~/.config/maestra/config.json.\n\n"
+            "Pré-requisitos:\n"
+            "  1. Criar app em https://developer.spotify.com/dashboard\n"
+            "  2. Copiar client_id e client_secret do app\n"
+            "  3. Registrar um Redirect URI HTTPS (ex: https://maestra.dev/callback).\n"
+            "     Spotify rejeita http://localhost e http://127.0.0.1 em apps\n"
+            "     criados após 2025 — use HTTPS mesmo que seja um domínio que\n"
+            "     você não controla; o fluxo é paste-back (veja `auth login`)."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    setup_p.add_argument("--client-id", default=None,
+                         help="Client ID do app no dashboard.")
+    setup_p.add_argument("--client-secret", default=None,
+                         help="Client Secret do app (tratado como segredo).")
     setup_p.add_argument(
         "--redirect-uri",
         default=None,
