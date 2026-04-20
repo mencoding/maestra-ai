@@ -6,7 +6,10 @@ em múltiplos módulos.
 """
 from __future__ import annotations
 
+import logging
 import re
+
+logger = logging.getLogger(__name__)
 
 # ID Spotify = 22 caracteres base62.
 # Regex canônica: prefere URIs/URLs oficiais para evitar que lixo de 22
@@ -113,3 +116,34 @@ def load_and_migrate() -> dict:
     if set(data.keys()) != original_keys:
         storage.write_config(data)
     return data
+
+
+DEFAULT_CURATE_WEIGHTS = {"taste": 0.4, "tag": 0.3, "decade": 0.2, "bpm": 0.1}
+_WEIGHT_SUM_TOLERANCE = 0.01
+
+
+def validate_curate_weights(weights: dict) -> bool:
+    """Valida weights de curação: todas as chaves obrigatórias, valores em [0,1] e soma ≈ 1.0."""
+    required = {"taste", "tag", "decade", "bpm"}
+    if not isinstance(weights, dict) or set(weights.keys()) != required:
+        return False
+    for v in weights.values():
+        if not isinstance(v, (int, float)):
+            return False
+        if v < 0 or v > 1:
+            return False
+    total = sum(weights.values())
+    if abs(total - 1.0) > _WEIGHT_SUM_TOLERANCE:
+        return False
+    return True
+
+
+def load_curate_weights(cfg: dict) -> dict:
+    """Retorna weights configurados se válidos; defaults caso contrário."""
+    raw = cfg.get("curate_weights")
+    if raw is None:
+        return dict(DEFAULT_CURATE_WEIGHTS)
+    if validate_curate_weights(raw):
+        return dict(raw)
+    logger.warning("curate_weights inválidos em config.json, usando defaults")
+    return dict(DEFAULT_CURATE_WEIGHTS)
