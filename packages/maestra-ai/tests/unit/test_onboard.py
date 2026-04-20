@@ -1332,6 +1332,140 @@ class TestPreservaMetadata:
             "artist_id precisa estar nos artists[]"
 
 
+class TestDeriveSuggestionsIntel:
+    """v0.7.0: _derive_suggestions usa gêneros + décadas + artistas + taste."""
+
+    def _mk_tracks(self, n_tracks=10, artist="Sufjan Stevens", decade="2010"):
+        return [
+            {
+                "uri": f"spotify:track:t{i}",
+                "name": f"Song {i}",
+                "artists": [{"id": f"a_{artist}", "name": artist}],
+                "release_date": f"{decade}-01-01",
+            }
+            for i in range(n_tracks)
+        ]
+
+    def test_sugestao_usa_genero_dominante_quando_disponivel(self, tmp_path):
+        from maestra_ai.core.taste import TasteProfile
+        taste = TasteProfile(tmp_path / "taste.json")
+        tracks = self._mk_tracks(n_tracks=20, artist="Sufjan Stevens")
+        weights = {t["uri"]: 5.0 for t in tracks}
+        adjusted = onboard._apply_taste_to_weights(weights, tracks, taste)
+        sorted_tracks = [t for t in tracks if t["uri"] in adjusted]
+        genres = {"Sufjan Stevens": ["indie folk", "chamber folk"]}
+
+        texts, rationale, signals = onboard._derive_suggestions(
+            sorted_tracks, adjusted, genres, taste,
+        )
+        assert any("indie folk" in t.lower() for t in texts), \
+            f"esperava indie folk em alguma sugestão, veio: {texts}"
+        assert signals["top_genres"][0][0] == "indie folk"
+
+    def test_fallback_quando_generos_vazios(self, tmp_path):
+        """Se artists_genres está vazio, cai em fallback."""
+        from maestra_ai.core.taste import TasteProfile
+        taste = TasteProfile(tmp_path / "taste.json")
+        tracks = self._mk_tracks(n_tracks=3, artist="Artist X")
+        weights = {t["uri"]: 3.0 for t in tracks}
+        texts, rationale, signals = onboard._derive_suggestions(
+            tracks, weights, {}, taste,
+        )
+        assert len(texts) == 5
+        hard_coded_tokens = ["piano minimalista", "indie folk melancólico",
+                             "eletrônica downtempo"]
+        assert any(any(tok in t for tok in hard_coded_tokens) for t in texts)
+
+    def test_cap_por_artista_evita_monotema(self, tmp_path):
+        from maestra_ai.core.taste import TasteProfile
+        taste = TasteProfile(tmp_path / "taste.json")
+        tracks = self._mk_tracks(n_tracks=50, artist="A1")
+        for i, t in enumerate(tracks):
+            t["uri"] = f"spotify:track:a1_{i}"
+        for i in range(5):
+            tracks.append({
+                "uri": f"spotify:track:a2_{i}",
+                "name": f"S2{i}",
+                "artists": [{"id": "a2", "name": "A2"}],
+                "release_date": "2018-01-01",
+            })
+        for i in range(5):
+            tracks.append({
+                "uri": f"spotify:track:a3_{i}",
+                "name": f"S3{i}",
+                "artists": [{"id": "a3", "name": "A3"}],
+                "release_date": "2019-01-01",
+            })
+        weights = {t["uri"]: 5.0 for t in tracks}
+        texts, rationale, signals = onboard._derive_suggestions(
+            tracks, weights, {}, taste, cap_per_artist=10,
+        )
+        top = dict(signals["top_artists"])
+        assert top["A1"] == 5.0 * 10  # cap aplicado
+        assert "A2" in top
+        assert "A3" in top
+
+    def test_taste_rejeitado_nao_entra_em_signals(self, tmp_path):
+        from maestra_ai.core.taste import TasteProfile
+        taste = TasteProfile(tmp_path / "taste.json")
+        tracks_a = self._mk_tracks(n_tracks=5, artist="KeepMe")
+        tracks_b = self._mk_tracks(n_tracks=5, artist="BannedArtist")
+        for i, t in enumerate(tracks_b):
+            t["uri"] = f"spotify:track:b_{i}"
+        taste.data.setdefault("rejected_artists", []).append("BannedArtist")
+        taste.save()
+        all_tracks = tracks_a + tracks_b
+        weights = {t["uri"]: 5.0 for t in all_tracks}
+        adjusted = onboard._apply_taste_to_weights(
+            weights, all_tracks, taste,
+        )
+        sorted_tracks = [t for t in all_tracks if t["uri"] in adjusted]
+        texts, rationale, signals = onboard._derive_suggestions(
+            sorted_tracks, adjusted, {}, taste,
+        )
+        top = dict(signals["top_artists"])
+        assert "BannedArtist" not in top
+        assert "KeepMe" in top
+
+    def test_decade_agregada_nos_signals(self, tmp_path):
+        from maestra_ai.core.taste import TasteProfile
+        taste = TasteProfile(tmp_path / "taste.json")
+        tracks = []
+        for i in range(10):
+            tracks.append({
+                "uri": f"spotify:track:t{i}",
+                "name": f"T{i}",
+                "artists": [{"id": "a", "name": "A"}],
+                "release_date": "2015-03-01",
+            })
+        for i in range(5):
+            tracks.append({
+                "uri": f"spotify:track:old{i}",
+                "name": f"O{i}",
+                "artists": [{"id": "a", "name": "A"}],
+                "release_date": "1985-07-01",
+            })
+        weights = {t["uri"]: 3.0 for t in tracks}
+        texts, rationale, signals = onboard._derive_suggestions(
+            tracks, weights, {}, taste,
+        )
+        decades = dict(signals["dominant_decades"])
+        assert decades.get("2010s", 0) > decades.get("1980s", 0)
+
+    def test_rationale_paralelo_as_texts(self, tmp_path):
+        from maestra_ai.core.taste import TasteProfile
+        taste = TasteProfile(tmp_path / "taste.json")
+        tracks = self._mk_tracks(n_tracks=10, artist="Bon Iver")
+        weights = {t["uri"]: 3.0 for t in tracks}
+        genres = {"Bon Iver": ["indie folk"]}
+        texts, rationale, signals = onboard._derive_suggestions(
+            tracks, weights, genres, taste,
+        )
+        assert len(texts) == len(rationale)
+        assert all("text" in r for r in rationale)
+        assert all("contributing_tracks" in r for r in rationale)
+
+
 class TestApplyTasteToWeights:
     """_apply_taste_to_weights filtra rejeitados + adjusta pesos com feedback."""
 

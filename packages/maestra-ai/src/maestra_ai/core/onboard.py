@@ -302,31 +302,273 @@ def _decade_of(release_date: str) -> str:
     return f"{decade}s"
 
 
-def _derive_suggestions(tracks_by_weight: list[dict]) -> list[str]:
-    """Deriva até 5 sugestões de contexto a partir de artistas dominantes."""
-    artist_count: Counter[str] = Counter()
-    for t in tracks_by_weight[:100]:
-        for a in t.get("artists", []):
-            artist_count[a["name"]] += 1
-    top_artists = [a for a, _ in artist_count.most_common(5)]
+# v0.7.0: mapa gênero → lista de "mood modifiers" (complementos que fazem
+# o texto final fluir). Cobertura razoável; se gênero não estiver no mapa,
+# usa _FALLBACK_MOODS.
+_GENRE_MOOD_TEMPLATES: dict[str, list[str]] = {
+    "indie folk": ["melancólico para reflexão", "acústico para manhã"],
+    "folk": ["suave para escrita", "tranquilo para fim de tarde"],
+    "chamber folk": ["intimista para leitura", "melódico para introspecção"],
+    "neo-classical": ["instrumental para concentração",
+                      "minimalista para leitura"],
+    "classical": ["orquestral para foco profundo",
+                  "sinfônico para domingo lento"],
+    "ambient": ["para trabalho analítico", "noturno para escrita"],
+    "electronic": ["downtempo para tarde tranquila",
+                   "dinâmico para treino"],
+    "downtempo": ["lento para descanso", "para fim de expediente"],
+    "jazz": ["suave para jantar", "noturno com piano"],
+    "hip hop": ["groove para estrada", "com bateria pesada para treino"],
+    "rock": ["energético para deslocamento", "clássico para garagem"],
+    "indie rock": ["para tarde ao ar livre", "com guitarras para caminhada"],
+    "pop": ["para pausa leve", "ensolarado para manhã"],
+    "r&b": ["suave para noite", "com groove para fim de tarde"],
+    "soul": ["aveludado para jantar", "clássico para domingo lento"],
+    "synthwave": ["retrô para foco criativo", "dos anos 80 para viagem"],
+    "post-rock": ["expansivo para contemplação",
+                  "instrumental para leitura longa"],
+    "techno": ["pulsante para treino", "minimalista para concentração"],
+    "house": ["ritmado para fim de semana", "deep para tarde quente"],
+    "world music": ["para despertar cultural", "para jantar com amigos"],
+}
 
+
+_FALLBACK_MOODS = [
+    "para concentração",
+    "para relaxar no fim do dia",
+    "para caminhada matinal",
+    "para pausa do trabalho",
+]
+
+
+_FALLBACK_SUGGESTIONS = [
+    "piano minimalista neoclássico para leitura",
+    "indie folk melancólico para reflexão",
+    "eletrônica downtempo para tarde tranquila",
+]
+
+
+_DEFAULT_CAP_PER_ARTIST = 10
+
+
+def _derive_suggestions(
+    tracks_by_weight: list[dict],
+    weights: dict[str, float],
+    artists_genres: dict[str, list[str]],
+    taste,
+    *,
+    top_k: int = 5,
+    cap_per_artist: int = _DEFAULT_CAP_PER_ARTIST,
+):
+    """Deriva sugestões ricas + rationale + signals (v0.7.0 B3).
+
+    Retorna (texts, rationale_entries, signals) onde:
+    - texts: list[str] de até `top_k` sugestões natural-language.
+    - rationale_entries: list[RationaleEntry] paralela — index i explica texts[i].
+    - signals: OnboardSignals com top_genres/dominant_decades/top_artists.
+    """
+    genre_counter: Counter[str] = Counter()
+    decade_counter: Counter[str] = Counter()
+    artist_counter: Counter[str] = Counter()
+    artist_track_count: Counter[str] = Counter()
+
+    ordered = sorted(
+        tracks_by_weight,
+        key=lambda t: weights.get(t.get("uri", ""), 0.0),
+        reverse=True,
+    )[:200]
+
+    for t in ordered:
+        uri = t.get("uri")
+        if not uri:
+            continue
+        w = weights.get(uri, 0.0)
+        artists = t.get("artists") or []
+        first_artist = (artists[0].get("name") if artists else "") or ""
+
+        if first_artist and artist_track_count[first_artist] >= cap_per_artist:
+            continue
+        if first_artist:
+            artist_track_count[first_artist] += 1
+            artist_counter[first_artist] += w
+
+        decade = _decade_of(t.get("release_date", ""))
+        if decade:
+            decade_counter[decade] += w
+
+        for a in artists:
+            aname = a.get("name")
+            if not aname:
+                continue
+            for g in artists_genres.get(aname, []):
+                genre_counter[g.lower()] += w / max(len(artists), 1)
+
+    signals = {
+        "top_genres": [(g, round(s, 2)) for g, s in genre_counter.most_common(10)],
+        "dominant_decades": [(d, round(s, 2)) for d, s in decade_counter.most_common(3)],
+        "top_artists": [(a, round(s, 2)) for a, s in artist_counter.most_common(10)],
+    }
+
+    texts: list[str] = []
+    rationale: list[dict] = []
+
+    if not signals["top_genres"]:
+        texts, rationale = _fallback_suggestions(
+            signals["top_artists"], ordered, taste, top_k,
+        )
+        return texts, rationale, signals
+
+    used_genres: list[str] = []
+    for genre, _score in signals["top_genres"][:3]:
+        mood = _pick_mood_for_genre(genre, seed=genre)
+        text = f"{genre} {mood}"
+        texts.append(text)
+        used_genres.append(genre)
+        rationale.append(_build_rationale(
+            text, based_on={"genres": [genre], "decades": [], "artists": []},
+            ordered=ordered, artists_genres=artists_genres, taste=taste,
+            match_genre=genre,
+        ))
+
+    if signals["dominant_decades"]:
+        top_decade = signals["dominant_decades"][0][0]
+        second_genre = (signals["top_genres"][1][0]
+                        if len(signals["top_genres"]) > 1
+                        else signals["top_genres"][0][0])
+        mood = _pick_mood_for_genre(second_genre, seed=f"{top_decade}-{second_genre}")
+        text = f"{top_decade} — faixas {second_genre} {mood}"
+        if text not in texts:
+            texts.append(text)
+            rationale.append(_build_rationale(
+                text,
+                based_on={"genres": [second_genre], "decades": [top_decade], "artists": []},
+                ordered=ordered, artists_genres=artists_genres, taste=taste,
+                match_genre=second_genre, match_decade=top_decade,
+            ))
+
+    if signals["top_artists"]:
+        top_artist = signals["top_artists"][0][0]
+        text = f"{top_artist} e similares para foco profundo"
+        if text not in texts and len(texts) < top_k:
+            texts.append(text)
+            rationale.append(_build_rationale(
+                text,
+                based_on={"genres": [], "decades": [], "artists": [top_artist]},
+                ordered=ordered, artists_genres=artists_genres, taste=taste,
+                match_artist=top_artist,
+            ))
+
+    while len(texts) < top_k:
+        fallback_idx = len(texts) - len([t for t in texts if t in _FALLBACK_SUGGESTIONS])
+        if fallback_idx >= len(_FALLBACK_SUGGESTIONS):
+            break
+        fallback_text = _FALLBACK_SUGGESTIONS[fallback_idx]
+        if fallback_text in texts:
+            break
+        texts.append(fallback_text)
+        rationale.append({
+            "text": fallback_text,
+            "based_on": {"genres": [], "decades": [], "artists": []},
+            "contributing_tracks": [],
+        })
+
+    return texts[:top_k], rationale[:top_k], signals
+
+
+def _pick_mood_for_genre(genre: str, *, seed: str) -> str:
+    """Seleciona um mood determinístico (stable seed) para um gênero."""
+    moods = _GENRE_MOOD_TEMPLATES.get(genre.lower(), _FALLBACK_MOODS)
+    idx = hash(seed) % len(moods)
+    return moods[idx]
+
+
+def _fallback_suggestions(
+    top_artists, ordered, taste, top_k,
+):
+    """Comportamento v0.5.x: 2 personalizadas + 3 genéricas."""
+    texts: list[str] = []
+    rationale: list[dict] = []
     if len(top_artists) >= 2:
-        sug1 = f"ambient instrumental inspirado em {top_artists[0]} e {top_artists[1]}"
-        sug2 = f"faixas melódicas no estilo de {top_artists[0]}"
+        a1, a2 = top_artists[0][0], top_artists[1][0]
+        sug1 = f"ambient instrumental inspirado em {a1} e {a2}"
+        sug2 = f"faixas melódicas no estilo de {a1}"
     elif top_artists:
         sug1 = "ambient instrumental para trabalho analítico"
-        sug2 = f"faixas melódicas no estilo de {top_artists[0]}"
+        sug2 = f"faixas melódicas no estilo de {top_artists[0][0]}"
     else:
         sug1 = "ambient instrumental para trabalho analítico"
         sug2 = "faixas melódicas para foco profundo"
+    for t in (sug1, sug2):
+        texts.append(t)
+        rationale.append({
+            "text": t,
+            "based_on": {"genres": [], "decades": [],
+                         "artists": [a for a, _ in top_artists[:2]]},
+            "contributing_tracks": [],
+        })
+    for ft in _FALLBACK_SUGGESTIONS:
+        if len(texts) >= top_k:
+            break
+        texts.append(ft)
+        rationale.append({
+            "text": ft,
+            "based_on": {"genres": [], "decades": [], "artists": []},
+            "contributing_tracks": [],
+        })
+    return texts, rationale
 
-    return [
-        sug1,
-        sug2,
-        "piano minimalista neoclássico para leitura",
-        "indie folk melancólico para reflexão",
-        "eletrônica downtempo para tarde tranquila",
-    ][:5]
+
+def _build_rationale(
+    text: str,
+    *,
+    based_on: dict,
+    ordered: list[dict],
+    artists_genres: dict[str, list[str]],
+    taste,
+    match_genre: str | None = None,
+    match_decade: str | None = None,
+    match_artist: str | None = None,
+    limit: int = 10,
+) -> dict:
+    """Escolhe até `limit` tracks que matcham o critério e compõe RationaleEntry."""
+    contributing = []
+    for t in ordered:
+        if len(contributing) >= limit:
+            break
+        artists = t.get("artists") or []
+        first_artist = (artists[0].get("name") if artists else "") or ""
+
+        matched = False
+        if match_genre:
+            for a in artists:
+                aname = a.get("name")
+                if aname and match_genre.lower() in [
+                    g.lower() for g in artists_genres.get(aname, [])
+                ]:
+                    matched = True
+                    break
+        if match_decade and _decade_of(t.get("release_date", "")) == match_decade:
+            matched = True
+        if match_artist and first_artist == match_artist:
+            matched = True
+        if not matched:
+            continue
+
+        uri = t.get("uri", "")
+        profile_track = taste.data.get("tracks", {}).get(uri, {})
+        contributing.append({
+            "uri": uri,
+            "name": t.get("name") or "",
+            "artist": first_artist,
+            "weight": 0.0,
+            "feedback": profile_track.get("feedback"),
+            "skip_count": profile_track.get("skip_count", 0) or 0,
+        })
+    return {
+        "text": text,
+        "based_on": based_on,
+        "contributing_tracks": contributing,
+    }
 
 
 def _resolve_playlist_name(sp, desired: str) -> str:
