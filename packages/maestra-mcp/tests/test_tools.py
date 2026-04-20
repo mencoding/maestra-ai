@@ -170,13 +170,14 @@ async def test_history_import_outside_propaga_signal():
 
 @pytest.mark.asyncio
 async def test_history_import_outside_rejeita_signal_invalido():
-    """Signal inválido: core levanta ValueError, call_tool converte em erro."""
+    """Signal inválido: jsonschema rejeita no boundary MCP (MCPInvalidArgsError).
+
+    Antes de v0.6.1 o erro vinha do core (ValueError). Agora a validação de
+    schema captura o enum inválido antes de invocar o handler.
+    """
     from maestra_mcp.tools import call_tool
 
     mock_history = MagicMock()
-    mock_history.import_outside.side_effect = ValueError(
-        "signal inválido: 'invalido'. Use 'good', 'bad' ou 'skip'."
-    )
     mock_taste = MagicMock()
     mock_ctx = MagicMock()
     mock_ctx.show.return_value = {"context": "foco"}
@@ -191,7 +192,7 @@ async def test_history_import_outside_rejeita_signal_invalido():
         result = await call_tool("history_import_outside", {"signal": "invalido"})
 
     assert "error" in result
-    assert result["error"]["code"] == "ValueError"
+    assert result["error"]["code"] == "MCPInvalidArgsError"
 
 
 @pytest.mark.asyncio

@@ -37,13 +37,50 @@ def iter_tool_defs() -> list[ToolDef]:
     return list(_REGISTRY.values())
 
 
+def _format_schema_hint(err) -> str:
+    """Converte jsonschema.ValidationError em dica curta para o agente.
+
+    Usa só o nome do campo e o validator; nunca vaza o valor (redaction).
+    """
+    path = ".".join(str(p) for p in err.absolute_path) or "<root>"
+    validator = err.validator
+    value = err.validator_value
+    if validator == "minimum":
+        return f"campo `{path}` deve ser >= {value}"
+    if validator == "maximum":
+        return f"campo `{path}` deve ser <= {value}"
+    if validator == "required":
+        return f"campo obrigatório ausente: {value}"
+    if validator == "additionalProperties":
+        return "campo desconhecido (use apenas os documentados no inputSchema)"
+    if validator == "type":
+        return f"campo `{path}` deve ser {value}"
+    if validator == "enum":
+        return f"campo `{path}` deve ser um de: {value}"
+    return f"validação falhou em `{path}` ({validator})"
+
+
 async def call_tool(name: str, args: dict) -> Any:
-    """Dispatch para o handler registrado. Captura MaestraError e genéricas."""
+    """Dispatch para o handler registrado. Valida args contra inputSchema
+    antes de invocar; captura MaestraError e genéricas."""
     td = _REGISTRY.get(name)
     if td is None:
         from maestra_ai.core.errors import UserError
         err = UserError(f"Tool '{name}' não existe.")
         return {"error": err.to_human_dict()}
+
+    # I5 v0.6.1: boundary MCP valida args antes de chamar o handler.
+    import jsonschema
+    from maestra_ai.core.errors import MCPInvalidArgsError
+    try:
+        jsonschema.validate(args, td.schema)
+    except jsonschema.ValidationError as ve:
+        err = MCPInvalidArgsError(
+            f"{name}: {ve.message}",
+            hint=_format_schema_hint(ve),
+        )
+        return {"error": err.to_human_dict()}
+
     try:
         return await td.handler(args)
     except Exception as e:
