@@ -68,30 +68,21 @@ def cmd_devices(args, controller, **_):
 
 
 def cmd_play(args, controller, **_):
-    try:
-        controller.play(uri=args.uri if args.uri else None)
-        result = controller.now()
-        output(result or {"status": "playing"}, args.human)
-    except Exception as e:
-        error(str(e), "PLAYBACK_ERROR")
+    controller.play(uri=args.uri if args.uri else None)
+    result = controller.now()
+    output(result or {"status": "playing"}, args.human)
 
 
 def cmd_pause(args, controller, **_):
-    try:
-        controller.pause()
-        output({"status": "paused"}, args.human)
-    except Exception as e:
-        error(str(e), "PLAYBACK_ERROR")
+    controller.pause()
+    output({"status": "paused"}, args.human)
 
 
 def cmd_next(args, controller, **_):
-    try:
-        controller.next_track()
-        time.sleep(0.5)
-        result = controller.now()
-        output(result or {"status": "next"}, args.human)
-    except Exception as e:
-        error(str(e), "PLAYBACK_ERROR")
+    controller.next_track()
+    time.sleep(0.5)
+    result = controller.now()
+    output(result or {"status": "next"}, args.human)
 
 
 def cmd_search(args, controller, **_):
@@ -107,26 +98,27 @@ def cmd_queue(args, controller, **_):
 
 
 def cmd_queue_add(args, controller, **_):
-    try:
-        controller.queue_add(args.uri)
-        output({"status": "added", "uri": args.uri}, args.human)
-    except Exception as e:
-        error(str(e), "QUEUE_ERROR")
+    controller.queue_add(args.uri)
+    output({"status": "added", "uri": args.uri}, args.human)
 
 
 def cmd_queue_context(args, controller, taste, curator, context_state, **_):
+    from maestra_ai.core.errors import MaestraError
+
     context, context_source = _curation_context(args, context_state)
     results, queries_used = curator.curate(context, count=args.count)
     if not results:
         error("Sem resultados para esse contexto.", "NO_RESULTS")
 
     added = []
+    failed = []
     for track in results:
         try:
             controller.queue_add(track["uri"])
             added.append(track)
-        except Exception as e:
-            error(str(e), "QUEUE_ERROR")
+        except MaestraError as e:
+            # M7 v0.6.2: falha em uma track não aborta o batch.
+            failed.append({"uri": track["uri"], "error": e.to_human_dict()})
 
     _record_curated_tracks(taste, added, context, queries_used)
     output({
@@ -135,6 +127,7 @@ def cmd_queue_context(args, controller, taste, curator, context_state, **_):
         "context_source": context_source,
         "added": len(added),
         "tracks": added,
+        "failed": failed,
     }, args.human)
 
 
@@ -145,10 +138,7 @@ def cmd_play_context(args, controller, taste, curator, context_state, **_):
         error("Sem resultados para esse contexto.", "NO_RESULTS")
 
     track = results[0]
-    try:
-        controller.play(track["uri"])
-    except Exception as e:
-        error(str(e), "PLAYBACK_ERROR")
+    controller.play(track["uri"])
 
     _record_curated_tracks(taste, [track], context, queries_used)
     output({
