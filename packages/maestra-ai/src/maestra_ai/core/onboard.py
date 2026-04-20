@@ -216,6 +216,21 @@ def _compute_weights(
     return dict(w)
 
 
+def _decade_of(release_date: str) -> str:
+    """Converte 'YYYY-MM-DD', 'YYYY-MM' ou 'YYYY' em string da década.
+
+    Ex.: '2015-04-13' → '2010s'. String vazia ou inválida → ''.
+    """
+    if not release_date or len(release_date) < 4:
+        return ""
+    year_str = release_date[:4]
+    if not year_str.isdigit():
+        return ""
+    year = int(year_str)
+    decade = (year // 10) * 10
+    return f"{decade}s"
+
+
 def _derive_suggestions(tracks_by_weight: list[dict]) -> list[str]:
     """Deriva até 5 sugestões de contexto a partir de artistas dominantes."""
     artist_count: Counter[str] = Counter()

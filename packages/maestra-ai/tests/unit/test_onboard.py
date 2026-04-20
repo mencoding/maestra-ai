@@ -1200,3 +1200,26 @@ class TestFetchOwnPlaylistsCap:
         collected, _empty = onboard._fetch_own_playlists(sp, me_id="me")
         assert call_count["n"] <= 200
         assert len(collected) == 200
+
+
+class TestDecadeOf:
+    """_decade_of converte release_date em década legível."""
+
+    def test_formato_yyyy_mm_dd(self):
+        assert onboard._decade_of("2015-04-13") == "2010s"
+
+    def test_formato_yyyy(self):
+        assert onboard._decade_of("1995") == "1990s"
+
+    def test_formato_yyyy_mm(self):
+        assert onboard._decade_of("2023-07") == "2020s"
+
+    def test_string_vazia_retorna_vazia(self):
+        assert onboard._decade_of("") == ""
+
+    def test_string_invalida_retorna_vazia(self):
+        assert onboard._decade_of("abcd") == ""
+
+    def test_decada_de_virada_de_seculo(self):
+        assert onboard._decade_of("2000-01-01") == "2000s"
+        assert onboard._decade_of("1999-12-31") == "1990s"
