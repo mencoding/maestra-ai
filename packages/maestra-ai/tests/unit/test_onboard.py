@@ -1725,3 +1725,61 @@ class TestSkipKwargs:
         assert report["status"] == "ok"
 
 
+class TestDeriveMoodFromTags:
+    def test_vazio_retorna_none(self):
+        from maestra_ai.core.onboard import _derive_mood_from_tags
+        assert _derive_mood_from_tags([], seed="x") is None
+
+    def test_sem_match_retorna_none(self):
+        from maestra_ai.core.onboard import _derive_mood_from_tags
+        assert _derive_mood_from_tags(["british", "70s", "seen live"], seed="x") is None
+
+    def test_match_aggressive_gera_mood_de_treino(self):
+        from maestra_ai.core.onboard import _derive_mood_from_tags
+        result = _derive_mood_from_tags(["aggressive", "metal"], seed="x")
+        assert result is not None
+        assert any(w in result for w in ("treino", "energia"))
+
+    def test_match_dark_gera_mood_noturno_ou_foco(self):
+        from maestra_ai.core.onboard import _derive_mood_from_tags
+        result = _derive_mood_from_tags(["dark ambient", "heavy"], seed="x")
+        assert result is not None
+
+    def test_deterministico_com_mesmo_seed(self):
+        from maestra_ai.core.onboard import _derive_mood_from_tags
+        tags = ["aggressive", "dark", "heavy"]
+        assert _derive_mood_from_tags(tags, seed="abc") == _derive_mood_from_tags(tags, seed="abc")
+
+
+class TestSelectMood:
+    def test_genre_no_mapa_usa_mapa_curado(self):
+        from maestra_ai.core.onboard import _select_mood
+        result = _select_mood(
+            "ambient", seed="ambient",
+            artists_tags=None,
+            genre_to_top_artist_id={},
+        )
+        # ambient está no _GENRE_MOOD_TEMPLATES
+        assert any(w in result for w in ("trabalho", "escrita", "noturno"))
+
+    def test_genre_fora_do_mapa_usa_tags(self):
+        from maestra_ai.core.onboard import _select_mood
+        result = _select_mood(
+            "metal", seed="metal",
+            artists_tags={"artist-1": ["aggressive", "heavy", "intense"]},
+            genre_to_top_artist_id={"metal": "artist-1"},
+        )
+        # Deve vir do _MOOD_CONTEXT (aggressive/heavy/intense), não do fallback genérico.
+        assert any(w in result for w in ("treino", "garagem", "direção", "energia", "foco"))
+
+    def test_genre_fora_do_mapa_sem_tags_cai_em_fallback(self):
+        from maestra_ai.core.onboard import _select_mood
+        result = _select_mood(
+            "unknown-genre", seed="x",
+            artists_tags=None,
+            genre_to_top_artist_id={},
+        )
+        # Cai no _FALLBACK_MOODS
+        assert any(w in result for w in ("concentração", "relaxar", "caminhada", "pausa"))
+
+

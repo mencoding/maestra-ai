@@ -323,6 +323,70 @@ _FALLBACK_MOODS = [
 ]
 
 
+# v0.9.0-alpha.3 (B): mood derivado de tags MB quando gênero não está no
+# mapa curado. Whitelist de keywords que aparecem em tags MB e mapa de
+# mood → contexto de uso. Ordem de prioridade:
+# _GENRE_MOOD_TEMPLATES > _derive_mood_from_tags > _FALLBACK_MOODS.
+
+MOOD_TAG_KEYWORDS = frozenset({
+    "aggressive", "angry", "intense",
+    "chill", "relaxing", "calm", "peaceful",
+    "dark", "melancholic", "sad", "melancholy", "gloomy",
+    "uplifting", "happy", "joyful", "cheerful",
+    "energetic", "energy", "upbeat", "driving",
+    "contemplative", "introspective", "reflective",
+    "romantic", "sensual", "sexy",
+    "epic", "cinematic", "grandiose",
+    "mellow", "soft", "gentle",
+    "heavy", "hard", "brutal",
+    "dreamy", "ethereal", "atmospheric",
+})
+
+
+# Mapa mood → lista de contextos de uso (texto que vai depois do gênero).
+# Sem duplicata do _GENRE_MOOD_TEMPLATES — esses vêm de mood, não gênero.
+_MOOD_CONTEXT: dict[str, list[str]] = {
+    "aggressive": ["para treino intenso", "para energia alta"],
+    "angry":      ["para treino intenso", "para liberar tensão"],
+    "intense":    ["para foco profundo", "para direção noturna"],
+    "chill":      ["para pausa tranquila", "para fim de tarde"],
+    "relaxing":   ["para descanso", "para tarde quieta"],
+    "calm":       ["para leitura", "para respiração lenta"],
+    "peaceful":   ["para meditação", "para amanhecer"],
+    "dark":       ["noturno para foco", "para concentração intensa"],
+    "melancholic":["para reflexão", "para introspecção"],
+    "sad":        ["para processar o dia", "para reflexão"],
+    "melancholy": ["para reflexão", "para contemplação"],
+    "gloomy":     ["para dia chuvoso", "noturno para leitura"],
+    "uplifting":  ["para começar o dia", "para manhã ensolarada"],
+    "happy":      ["para manhã alegre", "para energia positiva"],
+    "joyful":     ["para manhã alegre", "para bom humor"],
+    "cheerful":   ["para manhã alegre", "para leveza do dia"],
+    "energetic":  ["para treino", "para caminhada enérgica"],
+    "energy":     ["para treino", "para despertar"],
+    "upbeat":     ["para corrida", "para manhã ativa"],
+    "driving":    ["para estrada", "para direção longa"],
+    "contemplative":["para leitura longa", "para reflexão"],
+    "introspective":["para escrita pessoal", "para introspecção"],
+    "reflective": ["para fim de tarde contemplativo", "para reflexão"],
+    "romantic":   ["para jantar a dois", "para noite romântica"],
+    "sensual":    ["para noite tranquila", "para momento íntimo"],
+    "sexy":       ["para noite tranquila", "para momento íntimo"],
+    "epic":       ["para foco profundo", "para imersão criativa"],
+    "cinematic":  ["para foco imersivo", "para contemplação"],
+    "grandiose":  ["para imersão", "para momento épico"],
+    "mellow":     ["para relaxar no fim do dia", "para tarde tranquila"],
+    "soft":       ["para descanso", "para noite suave"],
+    "gentle":     ["para descanso", "para despertar suave"],
+    "heavy":      ["para garagem", "para direção intensa"],
+    "hard":       ["para garagem", "para treino pesado"],
+    "brutal":     ["para treino pesado", "para liberar energia"],
+    "dreamy":     ["para trabalho criativo", "para entardecer"],
+    "ethereal":   ["para entardecer contemplativo", "para leitura"],
+    "atmospheric":["para trabalho analítico", "para foco silencioso"],
+}
+
+
 _FALLBACK_SUGGESTIONS = [
     "piano minimalista neoclássico para leitura",
     "indie folk melancólico para reflexão",
@@ -341,6 +405,7 @@ def _derive_suggestions(
     *,
     top_k: int = 5,
     cap_per_artist: int = _DEFAULT_CAP_PER_ARTIST,
+    artists_tags: dict[str, list[str]] | None = None,
 ) -> tuple[list[str], list[RationaleEntry], OnboardSignals]:
     """Deriva sugestões ricas + rationale + signals (v0.7.0 B3).
 
@@ -353,6 +418,11 @@ def _derive_suggestions(
     decade_counter: Counter[str] = Counter()
     artist_counter: Counter[str] = Counter()
     artist_track_count: Counter[str] = Counter()
+
+    # v0.9.0-alpha.3 (B): para cada gênero, lembrar o artist_id que mais
+    # contribuiu. Usado depois para derivar mood das tags desse artista.
+    genre_to_top_artist_id: dict[str, str] = {}
+    genre_artist_score: dict[tuple[str, str], float] = {}
 
     ordered = sorted(
         tracks_by_weight,
@@ -384,6 +454,14 @@ def _derive_suggestions(
                 continue
             for g in artists_genres.get(aid, []):
                 genre_counter[g.lower()] += w / max(len(artists), 1)
+                # NEW: track top artist per genre for mood derivation
+                key = (g.lower(), aid)
+                genre_artist_score[key] = genre_artist_score.get(key, 0.0) + w
+
+    for (genre, aid), score in genre_artist_score.items():
+        current = genre_to_top_artist_id.get(genre)
+        if current is None or genre_artist_score.get((genre, current), 0) < score:
+            genre_to_top_artist_id[genre] = aid
 
     signals: OnboardSignals = {
         "top_genres": [(g, round(s, 2)) for g, s in genre_counter.most_common(10)],
@@ -402,7 +480,11 @@ def _derive_suggestions(
 
     used_genres: list[str] = []
     for genre, _score in signals["top_genres"][:3]:
-        mood = _pick_mood_for_genre(genre, seed=genre)
+        mood = _select_mood(
+            genre, seed=genre,
+            artists_tags=artists_tags,
+            genre_to_top_artist_id=genre_to_top_artist_id,
+        )
         text = f"{genre} {mood}"
         texts.append(text)
         used_genres.append(genre)
@@ -417,7 +499,11 @@ def _derive_suggestions(
         second_genre = (signals["top_genres"][1][0]
                         if len(signals["top_genres"]) > 1
                         else signals["top_genres"][0][0])
-        mood = _pick_mood_for_genre(second_genre, seed=f"{top_decade}-{second_genre}")
+        mood = _select_mood(
+            second_genre, seed=f"{top_decade}-{second_genre}",
+            artists_tags=artists_tags,
+            genre_to_top_artist_id=genre_to_top_artist_id,
+        )
         text = f"{top_decade} — faixas {second_genre} {mood}"
         if text not in texts:
             texts.append(text)
@@ -463,6 +549,58 @@ def _pick_mood_for_genre(genre: str, *, seed: str) -> str:
     moods = _GENRE_MOOD_TEMPLATES.get(genre.lower(), _FALLBACK_MOODS)
     idx = hash(seed) % len(moods)
     return moods[idx]
+
+
+def _derive_mood_from_tags(tags: list[str], *, seed: str) -> str | None:
+    """Deriva um contexto de uso a partir de tags MB.
+
+    Procura em `tags` palavras que casam com `MOOD_TAG_KEYWORDS`. Se
+    nenhuma casar, retorna None. Se uma ou mais casam, escolhe
+    deterministicamente uma via hash(seed) e devolve um dos contextos
+    do `_MOOD_CONTEXT` para essa mood (também via hash).
+    """
+    if not tags:
+        return None
+    matched_moods: list[str] = []
+    for tag in tags:
+        if not tag:
+            continue
+        lowered = tag.lower()
+        for mood_key in MOOD_TAG_KEYWORDS:
+            if mood_key in lowered and mood_key not in matched_moods:
+                matched_moods.append(mood_key)
+    if not matched_moods:
+        return None
+    primary = matched_moods[hash(seed) % len(matched_moods)]
+    contexts = _MOOD_CONTEXT.get(primary, [])
+    if not contexts:
+        return None
+    return contexts[hash(seed + primary) % len(contexts)]
+
+
+def _select_mood(
+    genre: str,
+    *,
+    seed: str,
+    artists_tags: dict[str, list[str]] | None,
+    genre_to_top_artist_id: dict[str, str],
+) -> str:
+    """Escolhe mood em três níveis: mapa curado → tags MB → fallback."""
+    # 1. Mapa curado
+    if genre.lower() in _GENRE_MOOD_TEMPLATES:
+        return _pick_mood_for_genre(genre, seed=seed)
+
+    # 2. Tags MB do artista dominante deste gênero
+    if artists_tags:
+        top_aid = genre_to_top_artist_id.get(genre.lower())
+        if top_aid:
+            tags = artists_tags.get(top_aid) or []
+            mood_from_tags = _derive_mood_from_tags(tags, seed=seed)
+            if mood_from_tags:
+                return mood_from_tags
+
+    # 3. Fallback genérico
+    return _pick_mood_for_genre(genre, seed=seed)  # cai em _FALLBACK_MOODS
 
 
 def _fallback_suggestions(
@@ -1017,6 +1155,7 @@ def run(
     )
     # G1: artists_genres é preenchido pelo MB após enhance_many (Spotify depreciou /v1/artists genres em 2025)
     artists_genres: dict[str, list[str]] = {}
+    artists_tags: dict[str, list[str]] = {}
 
     external_enhanced_count = 0
     external_sources_used: list[str] = []
@@ -1071,8 +1210,12 @@ def run(
                 spotify_aid = t_info.get("spotify_artist_id")
                 mb = enhanced_track.get("musicbrainz") or {}
                 mb_genres = mb.get("genres") or []
-                if spotify_aid and mb_genres:
-                    artists_genres[spotify_aid] = mb_genres
+                mb_tags = mb.get("tags") or []
+                if spotify_aid:
+                    if mb_genres:
+                        artists_genres[spotify_aid] = mb_genres
+                    if mb_tags:
+                        artists_tags[spotify_aid] = mb_tags
 
     sorted_tracks = sorted(
         [t for t in tracks_list if t.get("uri") in adjusted_weights],
@@ -1081,6 +1224,7 @@ def run(
     )
     suggestions, rationale_entries, signals = _derive_suggestions(
         sorted_tracks, adjusted_weights, artists_genres, taste,
+        artists_tags=artists_tags,
     )
     rationale_path = _persist_rationale(rationale_entries)
 
