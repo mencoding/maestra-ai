@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0-alpha.1] - 2026-04-20
+
+Cleanup + segurança pós-v0.7.0-alpha.0. Fecha 10 itens S* (segurança)
+e 14 itens D* (dead code / refactor) identificados no review, com
+suíte ruff zerada.
+
+### Fixed
+- **CRÍTICO (S1):** MCP boundary redige secrets antes de retornar
+  erros ao cliente (`redact_error_dict` + `redact_str` em todos os
+  caminhos de erro). Antes, tokens Bearer do spotipy podiam vazar
+  via `str(e)` para o agente LLM.
+- **S2:** `PlaybackObserver._append_events` usa `append_jsonl_locked`
+  para prevenir intercalação sob writes concorrentes.
+- **S3:** `maestra help <topic>` valida topic com regex âncora
+  (`^[a-z][a-z0-9_-]*$`) — defesa-em-profundidade contra traversal.
+- **S4:** `director.start` envolve `open(log_path)` em context
+  manager — fecha o fd no pai após `Popen` (fix fd leak em MCP
+  long-lived).
+- **S5:** chave `authorization` adicionada ao redactor de audit.
+- **S8:** IDs de snapshot usam UTC puro (sem `.astimezone()`) —
+  ordenação lexicográfica determinística entre TZs.
+- **S9:** tool MCP `onboard_rationale` valida shape (dict com chave
+  `suggestions`) e converte `JSONDecodeError` em `UserError`.
+- **S10:** `normalize_playlist_id` prefere URIs/URLs canônicas do
+  Spotify; fallback permissivo mantido.
+
+### Removed
+- `_stub` em `cli/config.py`, `_pid_running` e `_signal_weight` em
+  `cli/_common.py` (shims obsoletos).
+- Alias `_prune_candidates_fn` em `core/taste.py` (parâmetro de
+  `review()` renomeado para `prune_candidates_override`).
+- `_flag_keyring_used` e `_flag_keyring_used_get` em `core/storage.py`
+  (flag file sem consumidor).
+- `_keyring_backend_ok` duplicado em `core/storage.py` (consolidado
+  em `core/token_store.py`; doctor usa a versão mais robusta que
+  reconhece `null.Keyring`).
+- Shims `_prune_candidates` e `_context_review` em `cli/_common.py`
+  (inlined em `cli/taste.py`).
+
+### Refactored
+- `core/onboard.py` aplica TypedDicts exportados (`SelectedPlaylist`,
+  `FailedPlaylist`, `OnboardSignals`, `TrackRationale`,
+  `RationaleEntry`).
+- `core/curator.curate` usa `TasteProfile.filter_with_artist_info`
+  em vez do segundo loop inline.
+- `_context_query_candidates` marcado para rework v0.8 + guard
+  `len(genres) < 3 → {}`.
+- `core/security.py`: docstring documenta limite do regex JWT (S6).
+
+### Style
+- Suíte ruff de 26 → 0 erros. `ruff check --fix` + ajustes manuais
+  em N806, N818 (noqa justificado), F821 (`from pathlib import Path`
+  movido para topo).
+
 ## [0.7.0-alpha.0] - 2026-04-20
 
 Fecha item B3 do backlog consolidado — `_derive_suggestions`
