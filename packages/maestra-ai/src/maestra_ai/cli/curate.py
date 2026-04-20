@@ -7,12 +7,37 @@ from maestra_ai.cli import register
 from maestra_ai.cli._common import _curation_context, error, output
 
 
+def _maybe_print_external_attribution():
+    """Imprime bloco de atribuição se fontes externas estão em uso."""
+    from rich.console import Console
+
+    from maestra_ai.core import storage
+    from maestra_ai.core.external import cache as ext_cache
+    from maestra_ai.core.external.attribution import render_attribution
+
+    cfg = storage.read_config()
+    if not cfg.get("external_sources_enabled"):
+        return
+    cache = ext_cache.load_cache()
+    sources_used: set[str] = set()
+    for entry in cache.get("tracks", {}).values():
+        for s in entry.get("sources", []) or []:
+            sources_used.add(s)
+    if not sources_used:
+        return
+    text = render_attribution(sorted(sources_used))
+    if text:
+        Console().print(text)
+
+
 def cmd_curate(args, curator, context_state, **_):
     context, _ = _curation_context(args, context_state)
     results, _ = curator.curate(context, count=args.count)
     if not results:
         error("Sem resultados para esse contexto.", "NO_RESULTS")
     output(results, args.human)
+    if getattr(args, "human", False):
+        _maybe_print_external_attribution()
 
 
 @register
