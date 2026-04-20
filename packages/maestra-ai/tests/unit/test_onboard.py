@@ -1329,7 +1329,7 @@ class TestOnboardRunWarnings:
         )
         assert "warnings" in report
         assert isinstance(report["warnings"], list)
-        assert any("artists" in w.lower() or "gêneros" in w.lower() or "generos" in w.lower()
+        assert any("artistas" in w.lower() or "gêneros" in w.lower() or "generos" in w.lower() or "bloqueou" in w.lower()
                    for w in report["warnings"])
 
 
@@ -1879,7 +1879,7 @@ class TestArtistsFallback:
             "a2": ["genre-of-a2"],
             "a3": ["genre-of-a3"],
         }
-        assert any("fallback" in w.lower() or "item-a-item" in w.lower() for w in warnings)
+        assert any("buscar" in w.lower() or "lote" in w.lower() or "bloqueou" in w.lower() for w in warnings)
 
     def test_fallback_3_falhas_consecutivas_aborta(self, monkeypatch):
         """Se os primeiros 3 item-a-item também falharem, aborta com {}."""
@@ -1897,7 +1897,7 @@ class TestArtistsFallback:
             FakeSP(), artist_ids=["a1", "a2", "a3", "a4", "a5"], warnings=warnings,
         )
         assert result == {}
-        assert any("abort" in w.lower() or "impossível" in w.lower() or "indisponível" in w.lower() for w in warnings)
+        assert any("consegui" in w.lower() or "bloqueou" in w.lower() for w in warnings)
 
     def test_fallback_pula_artista_individual_que_falha(self):
         """Se item específico falhar mas os outros respondem, pular e continuar."""

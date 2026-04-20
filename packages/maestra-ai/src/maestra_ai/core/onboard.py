@@ -296,8 +296,8 @@ def _fetch_artists_genres(
         response = sp.artists(ids)
     except MaestraError:
         raise
-    except Exception as e:
-        batch_err = f"{type(e).__name__}: {e}"
+    except Exception:
+        pass
     else:
         result: dict[str, list[str]] = {}
         for artist in (response or {}).get("artists", []) or []:
@@ -308,8 +308,8 @@ def _fetch_artists_genres(
     # 2. Fallback item-a-item
     if warnings is not None:
         warnings.append(
-            f"batch artists falhou ({batch_err}); usando fallback "
-            f"item-a-item (mais lento).",
+            "O Spotify bloqueou a busca em lote de informações dos artistas. "
+            "Vou tentar buscar um de cada vez (mais lento).",
         )
 
     out: dict[str, list[str]] = {}
@@ -328,8 +328,8 @@ def _fetch_artists_genres(
             if consecutive_failures >= 3:
                 if warnings is not None:
                     warnings.append(
-                        "item-a-item também falhou 3x consecutivas; "
-                        "gênero indisponível para este onboard (abort).",
+                        "O Spotify também bloqueou as buscas individuais. "
+                        "Não consegui obter os gêneros das suas músicas desta vez.",
                     )
                 return {}
             # falha individual: segue em frente
@@ -1117,8 +1117,8 @@ def run(
     # fallback rodou mas não trouxe nenhum gênero, avisa o usuário.
     if top_artist_ids and artists_genres and not any(artists_genres.values()):
         warnings.append(
-            "Spotify deprecou o campo 'genres' em /v1/artists/{id}; "
-            "sugestões serão baseadas em décadas e artistas.",
+            "O Spotify não fornece mais gêneros musicais na API pública. "
+            "As sugestões serão baseadas em décadas e artistas favoritos.",
         )
 
     sorted_tracks = sorted(
