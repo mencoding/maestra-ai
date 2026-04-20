@@ -192,9 +192,8 @@ class MusicDirector:
             "component": "maestra-director",
             **decision,
         }
-        os.makedirs(os.path.dirname(self.log_path) or ".", exist_ok=True)
-        with open(self.log_path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(decision, ensure_ascii=False) + "\n")
+        from maestra_ai.core.storage import append_jsonl_locked
+        append_jsonl_locked(self.log_path, decision)
         return decision
 
     @staticmethod
