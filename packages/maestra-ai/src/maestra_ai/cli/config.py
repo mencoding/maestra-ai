@@ -26,13 +26,6 @@ _ALLOWED_KEYS: tuple[str, ...] = (
 )
 
 
-def _stub(args):
-    # Fallback quando o usuário digita `maestra config` sem subcomando.
-    # argparse já exige subparser (required=True) — mas manter por segurança.
-    print("uso: maestra config {get,set,list} ...", file=sys.stderr)
-    sys.exit(2)
-
-
 def cmd_config_list(args, **_):
     """Imprime config.json com secrets redactados."""
     cfg = storage.read_config()

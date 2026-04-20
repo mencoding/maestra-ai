@@ -550,11 +550,7 @@ def prune_candidates(tracks, profile, context):
     return candidates
 
 
-# Alias para uso interno em `review`, onde o parâmetro homônimo ocultaria a função.
-_prune_candidates_fn = prune_candidates
-
-
-def review(profile, playlist_tracks, context, *, prune_candidates=None, top=10):
+def review(profile, playlist_tracks, context, *, prune_candidates_override=None, top=10):
     """Review contextual da playlist — top positivos/negativos, candidatos de poda,
     artistas dominantes, fontes de contexto, faixas fora da playlist com sinal.
 
@@ -610,10 +606,10 @@ def review(profile, playlist_tracks, context, *, prune_candidates=None, top=10):
         key=lambda row: (row["score"], row["track"]),
     )
     unscored_rows = [row for row in rows if row["score"] == 0]
-    if prune_candidates is None:
-        prunable = _prune_candidates_fn(playlist_tracks, profile, context)
+    if prune_candidates_override is None:
+        prunable = prune_candidates(playlist_tracks, profile, context)
     else:
-        prunable = prune_candidates
+        prunable = prune_candidates_override
 
     return {
         "context": context,

@@ -87,14 +87,6 @@ def safe_call(fn, error_code):
         return {"error": redact_str(str(e)), "code": error_code}
 
 
-def _pid_running(pid):
-    try:
-        os.kill(pid, 0)
-        return True
-    except OSError:
-        return False
-
-
 def _curation_context(args, context_state):
     """Resolve contexto de curadoria: argumento, contexto ativo ou fallback."""
     raw_context = getattr(args, "context", None)
@@ -150,10 +142,6 @@ def taste_summary(taste):
 def _context_review(tracks, taste, context, prune_candidates=None, top=10):
     """Delega para core.taste.review — mantido como shim para callers em cli."""
     from maestra_ai.core import taste as taste_mod
-    return taste_mod.review(taste, tracks, context, prune_candidates=prune_candidates, top=top)
+    return taste_mod.review(taste, tracks, context, prune_candidates_override=prune_candidates, top=top)
 
 
-def _signal_weight(signal):
-    """Shim — delega para core.taste.signal_weight."""
-    from maestra_ai.core import taste as taste_mod
-    return taste_mod.signal_weight(signal)
