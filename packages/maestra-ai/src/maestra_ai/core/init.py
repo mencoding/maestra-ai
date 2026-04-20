@@ -7,8 +7,64 @@ from __future__ import annotations
 
 import json
 
+from rich.console import Console
+from rich.panel import Panel
+
 from maestra_ai.core import storage
 from maestra_ai.core.init_types import InitState
+
+_console = Console()
+
+
+_MENU_MESSAGES: dict[InitState, tuple[str, list[str]]] = {
+    "A": (
+        "Olá! Vamos configurar sua Maestra.",
+        ["[1] Começar agora", "[2] Sair"],
+    ),
+    "A2": (
+        "Sua app Spotify já está configurada. Só falta autorizar o acesso.",
+        [
+            "[1] Continuar — autorizar e analisar preferências",
+            "[2] Recomeçar — apagar config e começar de novo",
+            "[3] Sair",
+        ],
+    ),
+    "B": (
+        "Sua conta Spotify já está conectada. Só falta analisar suas preferências "
+        "musicais para eu poder sugerir contextos.",
+        [
+            "[1] Continuar — analisar preferências agora",
+            "[2] Recomeçar — apagar conexão e começar de novo",
+            "[3] Sair",
+        ],
+    ),
+    "C": (
+        "Tudo pronto por aqui! O que você quer fazer?",
+        [
+            "[1] Atualizar preferências — re-analisar seu histórico recente",
+            "[2] Recomeçar — apagar tudo e refazer",
+            "[3] Sair",
+        ],
+    ),
+}
+
+
+def render_menu(state: InitState) -> None:
+    """Imprime o menu apropriado para o estado."""
+    header, options = _MENU_MESSAGES[state]
+    body = header + "\n\n" + "\n".join(f"  {o}" for o in options)
+    _console.print(Panel(body, border_style="cyan", padding=(1, 2)))
+
+
+def render_update_submenu() -> None:
+    """Sub-menu de C→[1]."""
+    body = (
+        "O que você quer atualizar?\n\n"
+        "  [1] Só mood recente (últimas 4 semanas + histórico recente)\n"
+        "  [2] Tudo (pode demorar mais)\n"
+        "  [3] Voltar"
+    )
+    _console.print(Panel(body, border_style="cyan", padding=(1, 2)))
 
 
 def _has_token() -> bool:

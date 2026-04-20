@@ -99,3 +99,46 @@ class TestDetectState:
         monkeypatch.setattr(storage, "state_dir", lambda: tmp_path / "state")
         monkeypatch.setattr(init, "_has_token", lambda: True)
         assert init.detect_state() == "B"
+
+
+class TestMenuRendering:
+    def test_menu_A_mostra_saudacao_e_duas_opcoes(self, capsys):
+        from maestra_ai.core import init
+        init.render_menu("A")
+        out = capsys.readouterr().out
+        assert "Olá" in out
+        assert "[1]" in out and "Começar agora" in out
+        assert "[2]" in out and "Sair" in out
+
+    def test_menu_A2_mostra_app_configurada(self, capsys):
+        from maestra_ai.core import init
+        init.render_menu("A2")
+        out = capsys.readouterr().out
+        assert "app Spotify já está configurada" in out or "app já está configurad" in out
+        assert "[1]" in out and "autorizar" in out.lower()
+        assert "[2]" in out and "Recomeçar" in out
+        assert "[3]" in out and "Sair" in out
+
+    def test_menu_B_mostra_conta_conectada(self, capsys):
+        from maestra_ai.core import init
+        init.render_menu("B")
+        out = capsys.readouterr().out
+        assert "conta Spotify já está conectada" in out
+        assert "analisar preferências" in out
+        assert "[3]" in out
+
+    def test_menu_C_mostra_tudo_pronto(self, capsys):
+        from maestra_ai.core import init
+        init.render_menu("C")
+        out = capsys.readouterr().out
+        assert "Tudo pronto" in out
+        assert "Atualizar preferências" in out
+        assert "[2]" in out and "Recomeçar" in out
+
+    def test_render_update_submenu(self, capsys):
+        from maestra_ai.core import init
+        init.render_update_submenu()
+        out = capsys.readouterr().out
+        assert "mood recente" in out.lower()
+        assert "Tudo" in out
+        assert "Voltar" in out
