@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0-alpha.3] — 2026-04-20
+
+### Adicionado
+- **Mood derivado de tags do MusicBrainz** para gêneros fora do mapa
+  curado. Antes, gêneros como `metal`, `alternative metal`, `central
+  asian throat singing` caíam em `_FALLBACK_MOODS` (4 opções genéricas),
+  gerando sugestões como "metal para pausa do trabalho" — cômico e
+  impreciso. Agora há uma cadeia de prioridade em 3 níveis:
+  1. `_GENRE_MOOD_TEMPLATES` (mapa curado, 20 gêneros) — se o gênero
+     está no mapa, usa.
+  2. `_derive_mood_from_tags(artist_tags, seed)` — se as tags do MB
+     do artista dominante daquele gênero contêm alguma keyword de
+     mood (`aggressive`, `dark`, `contemplative`, `heavy`, etc.,
+     35 no total), deriva o contexto dali.
+  3. `_FALLBACK_MOODS` (4 genéricos) — último recurso.
+- Constante `MOOD_TAG_KEYWORDS` (35 keywords de mood em inglês)
+  e mapa `_MOOD_CONTEXT` (37 moods → 2 contextos cada, ~74 frases).
+- `_derive_suggestions` aceita novo parâmetro `artists_tags` (dict
+  `spotify_artist_id → list[str]`) e constrói internamente
+  `genre_to_top_artist_id` para casar gênero com o artista que mais
+  contribuiu para ele.
+- `onboard.run` popula `artists_tags` a partir do cache do MB e
+  propaga para `_derive_suggestions`.
+
+### Exemplos práticos
+- Antes: "metal para pausa do trabalho" (fallback genérico).
+- Depois: "metal para treino intenso" (se tags do The HU contêm
+  `aggressive`), ou "metal para garagem" (se contêm `heavy`).
+
 ## [0.9.0-alpha.2] — 2026-04-20
 
 ### Removido
