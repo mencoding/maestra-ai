@@ -470,11 +470,23 @@ def _print_onboard_results(report: dict) -> None:
     sources_used = report.get("external_sources_used") or []
     if "musicbrainz" in sources_used:
         total = report.get("external_enhanced_count", 0)
+        matched = report.get("external_mb_matched", 0)
         with_genres = report.get("external_mb_with_genres", 0)
-        _console.print(
-            f"Melhoramento externo: {with_genres} de {total} "
-            "faixas com gêneros do MusicBrainz."
-        )
+        with_tags_only = report.get("external_mb_with_tags_only", 0)
+        _console.print("\n[bold]Melhoramento externo (MusicBrainz):[/bold]")
+        _console.print(f"  • {matched} de {total} faixas encontradas na base.")
+        if with_genres:
+            _console.print(f"  • {with_genres} com gêneros canônicos.")
+        if with_tags_only:
+            _console.print(
+                f"  • {with_tags_only} com tags descritivas "
+                "(sem gênero canônico)."
+            )
+        if matched == 0:
+            _console.print(
+                "  [dim]Base pública do MusicBrainz não tem as suas faixas "
+                "mainstream ainda; considere contribuir em musicbrainz.org.[/dim]"
+            )
 
     suggestions = report.get("context_suggestions") or report.get("suggestions") or []
     if suggestions:
