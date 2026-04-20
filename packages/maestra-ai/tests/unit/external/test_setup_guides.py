@@ -46,3 +46,31 @@ def test_guide_lastfm_invalid_then_skip(mocker):
     enabled, key = guide_lastfm()
     assert enabled is False
     assert key is None
+
+
+def test_validate_getsongbpm_key_accepts_length_ge_8():
+    from maestra_ai.core.external.setup_guides import _validate_getsongbpm_key
+    assert _validate_getsongbpm_key("abc12345") is True
+
+
+def test_validate_getsongbpm_key_rejects_short():
+    from maestra_ai.core.external.setup_guides import _validate_getsongbpm_key
+    assert _validate_getsongbpm_key("abc") is False
+
+
+def test_guide_getsongbpm_skip_empty(mocker):
+    mock_prompt = mocker.patch("maestra_ai.core.external.setup_guides.questionary.text")
+    mock_prompt.return_value.ask.return_value = ""
+    from maestra_ai.core.external.setup_guides import guide_getsongbpm
+    enabled, key = guide_getsongbpm()
+    assert enabled is False
+    assert key is None
+
+
+def test_guide_getsongbpm_valid_key(mocker):
+    mock_prompt = mocker.patch("maestra_ai.core.external.setup_guides.questionary.text")
+    mock_prompt.return_value.ask.return_value = "validkey123"
+    from maestra_ai.core.external.setup_guides import guide_getsongbpm
+    enabled, key = guide_getsongbpm()
+    assert enabled is True
+    assert key == "validkey123"
