@@ -28,7 +28,7 @@ def _sample_track(uri: str):
 def test_load_cache_empty(tmp_path, monkeypatch):
     monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path))
     cache = load_cache()
-    assert cache == {"version": CACHE_SCHEMA_VERSION, "tracks": {}}
+    assert cache == {"version": CACHE_SCHEMA_VERSION, "tracks": {}, "similar_artists": {}}
 
 
 def test_put_and_get_track(tmp_path, monkeypatch):
@@ -58,7 +58,7 @@ def test_load_corrupted_cache_resets_to_default(tmp_path, monkeypatch):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("{ not json")
     cache = load_cache()
-    assert cache == {"version": CACHE_SCHEMA_VERSION, "tracks": {}}
+    assert cache == {"version": CACHE_SCHEMA_VERSION, "tracks": {}, "similar_artists": {}}
 
 
 def test_missing_uri_returns_none(tmp_path, monkeypatch):

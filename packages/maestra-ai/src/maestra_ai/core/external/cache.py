@@ -1,7 +1,8 @@
 """Cache persistente de metadata externa por URI Spotify.
 
-Schema v1: {"version": 1, "tracks": {uri: EnhancedTrack}}. Lock + rename
-atômico via `storage.atomic_write_json`.
+Schema v2: {"version": 2, "tracks": {uri: EnhancedTrack}, "similar_artists": {mbid: ...}}.
+Lock + rename atômico via `storage.atomic_write_json`.
+Migração automática de v1 → v2.
 """
 from __future__ import annotations
 
@@ -11,7 +12,7 @@ from typing import Any, cast
 from maestra_ai.core import storage
 from maestra_ai.core.external.types import EnhancedTrack
 
-CACHE_SCHEMA_VERSION = 1
+CACHE_SCHEMA_VERSION = 2
 
 
 def _cache_path():
@@ -19,11 +20,29 @@ def _cache_path():
 
 
 def _default_cache() -> dict[str, Any]:
-    return {"version": CACHE_SCHEMA_VERSION, "tracks": {}}
+    return {"version": CACHE_SCHEMA_VERSION, "tracks": {}, "similar_artists": {}}
+
+
+def _migrate(data: dict[str, Any]) -> dict[str, Any]:
+    """Migra shape antigo para o atual. Retorna default se shape irreconhecível."""
+    if not isinstance(data, dict):
+        return _default_cache()
+    version = data.get("version")
+    if version == CACHE_SCHEMA_VERSION:
+        data.setdefault("tracks", {})
+        data.setdefault("similar_artists", {})
+        return data
+    if version == 1:
+        return {
+            "version": CACHE_SCHEMA_VERSION,
+            "tracks": data.get("tracks", {}) or {},
+            "similar_artists": {},
+        }
+    return _default_cache()
 
 
 def load_cache() -> dict[str, Any]:
-    """Carrega o cache; retorna default vazio se ausente ou corrompido."""
+    """Carrega o cache; migra shapes antigos; retorna default se inválido."""
     path = _cache_path()
     if not path.exists():
         return _default_cache()
@@ -32,10 +51,7 @@ def load_cache() -> dict[str, Any]:
             data = json.load(f)
     except (OSError, json.JSONDecodeError):
         return _default_cache()
-    if not isinstance(data, dict) or data.get("version") != CACHE_SCHEMA_VERSION:
-        return _default_cache()
-    data.setdefault("tracks", {})
-    return data
+    return _migrate(data)
 
 
 def save_cache(cache: dict[str, Any]) -> None:
