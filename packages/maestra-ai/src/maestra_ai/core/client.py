@@ -15,28 +15,29 @@ def _ratelimit_db_path() -> str:
     return str(state_dir() / "ratelimit.db")
 
 
-# Singletons compartilhados entre daemon (director run) e CLI manual via SQLite.
-# Preguiçosos para respeitar MAESTRA_STATE_DIR setado em testes via monkeypatch.
-_bucket: PersistentTokenBucket | None = None
-_breaker: PersistentCircuitBreaker | None = None
+# M4 v0.6.2: cache por db_path em vez de singletons globais. Testes que
+# mudam MAESTRA_STATE_DIR entre cenários ganham instâncias novas sem
+# reset manual; produção tem 1 db_path → dict de 1 entry (overhead nulo).
+_BUCKETS: dict[str, PersistentTokenBucket] = {}
+_BREAKERS: dict[str, PersistentCircuitBreaker] = {}
 
 
 def _get_bucket() -> PersistentTokenBucket:
-    global _bucket
-    if _bucket is None:
-        _bucket = PersistentTokenBucket(
-            capacity=60, refill_per_sec=1.0, db_path=_ratelimit_db_path()
+    path = _ratelimit_db_path()
+    if path not in _BUCKETS:
+        _BUCKETS[path] = PersistentTokenBucket(
+            capacity=60, refill_per_sec=1.0, db_path=path
         )
-    return _bucket
+    return _BUCKETS[path]
 
 
 def _get_breaker() -> PersistentCircuitBreaker:
-    global _breaker
-    if _breaker is None:
-        _breaker = PersistentCircuitBreaker(
-            max_failures=3, window_sec=60, cooldown_sec=300, db_path=_ratelimit_db_path()
+    path = _ratelimit_db_path()
+    if path not in _BREAKERS:
+        _BREAKERS[path] = PersistentCircuitBreaker(
+            max_failures=3, window_sec=60, cooldown_sec=300, db_path=path
         )
-    return _breaker
+    return _BREAKERS[path]
 
 
 def _call_spotify(fn, *args, **kwargs):

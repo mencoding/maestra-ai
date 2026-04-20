@@ -281,3 +281,49 @@ def test_playlist_tracks_filtra_track_none(monkeypatch):
     tracks = controller.playlist_tracks("pl")
     assert len(tracks) == 1
     assert tracks[0]["track"] == "OK"
+
+
+class TestBucketCache:
+    """M4 v0.6.2: rate limiter singletons são cacheados por db_path,
+    não por global mutável. Permite testes com tmp_path distintos
+    sem reset manual."""
+
+    def test_get_bucket_instancia_nova_quando_db_path_muda(
+        self, tmp_path, monkeypatch,
+    ):
+        from maestra_ai.core import client
+
+        # Reset explícito para não depender de ordem de testes.
+        if hasattr(client, "_BUCKETS"):
+            client._BUCKETS.clear()
+        else:
+            client._bucket = None
+            client._breaker = None
+
+        monkeypatch.setenv("MAESTRA_STATE_DIR", str(tmp_path / "a"))
+        b1 = client._get_bucket()
+
+        monkeypatch.setenv("MAESTRA_STATE_DIR", str(tmp_path / "b"))
+        b2 = client._get_bucket()
+
+        assert id(b1) != id(b2), (
+            "bucket deveria ser uma instância nova quando o db_path muda"
+        )
+
+    def test_get_bucket_mesma_instancia_para_mesmo_db_path(
+        self, tmp_path, monkeypatch,
+    ):
+        from maestra_ai.core import client
+
+        if hasattr(client, "_BUCKETS"):
+            client._BUCKETS.clear()
+        else:
+            client._bucket = None
+            client._breaker = None
+
+        monkeypatch.setenv("MAESTRA_STATE_DIR", str(tmp_path / "a"))
+        b1 = client._get_bucket()
+        b2 = client._get_bucket()
+        assert id(b1) == id(b2), (
+            "chamadas repetidas com mesmo db_path devem retornar o cacheado"
+        )
