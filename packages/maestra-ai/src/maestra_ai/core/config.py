@@ -9,7 +9,56 @@ from __future__ import annotations
 import logging
 import re
 
+try:
+    import keyring  # type: ignore[import-untyped]
+except ImportError:
+    keyring = None  # type: ignore[assignment]
+
 logger = logging.getLogger(__name__)
+
+# --- Keyring: API keys de fontes externas ---
+
+_KEYRING_SERVICE = "maestra-ai"
+_KEY_USERNAMES: dict[str, str] = {
+    "lastfm": "lastfm-api-key",
+    "getsongbpm": "getsongbpm-api-key",
+}
+
+
+def get_source_key(source: str) -> str | None:
+    """Lê API key de uma source via keyring. None se não configurada."""
+    username = _KEY_USERNAMES.get(source)
+    if not username:
+        return None
+    if keyring is None:
+        return None
+    try:
+        return keyring.get_password(_KEYRING_SERVICE, username)
+    except Exception:
+        return None
+
+
+def set_source_key(source: str, key: str) -> None:
+    """Grava API key no keyring. Levanta ValueError se source desconhecida."""
+    username = _KEY_USERNAMES.get(source)
+    if not username:
+        raise ValueError(f"source sem keyring: {source}")
+    if keyring is None:
+        raise RuntimeError("keyring não disponível neste ambiente")
+    keyring.set_password(_KEYRING_SERVICE, username, key)
+
+
+def delete_source_key(source: str) -> None:
+    """Remove API key do keyring. Idempotente — não levanta se ausente."""
+    username = _KEY_USERNAMES.get(source)
+    if not username:
+        return
+    if keyring is None:
+        return
+    try:
+        keyring.delete_password(_KEYRING_SERVICE, username)
+    except Exception:
+        pass  # PasswordDeleteError se inexistente, ou backend indisponível
 
 # ID Spotify = 22 caracteres base62.
 # Regex canônica: prefere URIs/URLs oficiais para evitar que lixo de 22
@@ -50,24 +99,57 @@ def normalize_playlist_id(value: str) -> str:
 def _default_external_sources() -> dict:
     return {
         "musicbrainz": {"enabled": False},
-        "lastfm":      {"enabled": False, "api_key": None},
-        "getsongbpm":  {"enabled": False, "api_key": None},
+        "lastfm":      {"enabled": False},
+        "getsongbpm":  {"enabled": False},
     }
 
 
-def migrate_external_sources(cfg: dict) -> dict:
-    """Migra `external_sources_enabled: bool` flat para `external_sources: {...}` nested.
+def _migrate_plaintext_key(cfg_sources: dict, source: str) -> None:
+    """Move api_key plaintext de cfg_sources[source] para keyring (best-effort).
 
-    Muta `cfg` in-place e retorna o mesmo objeto. Idempotente: se já estiver
-    nested, completa campos faltantes in-place.
+    Se keyring estiver indisponível, mantém o valor em plaintext e emite
+    warning. Nunca loga o valor da key.
+    """
+    entry = cfg_sources.get(source, {})
+    raw_key = entry.get("api_key")
+    if not raw_key:
+        # Sem chave ou já removida — noop
+        entry.pop("api_key", None)
+        return
+    try:
+        set_source_key(source, raw_key)
+        entry.pop("api_key")
+        logger.debug("API key de '%s' migrada para keyring.", source)
+    except Exception:
+        logger.warning(
+            "Keyring indisponível: API key de '%s' permanece em config.json "
+            "(melhorar segurança configurando o keyring do SO).",
+            source,
+        )
+
+
+def migrate_external_sources(cfg: dict) -> dict:
+    """Migra config de fontes externas para o shape v0.10.4+.
+
+    Operações realizadas (todas idempotentes):
+    1. `external_sources_enabled: bool` flat → `external_sources: {...}` nested.
+    2. `api_key` plaintext em nested → keyring (best-effort; fallback graceful).
+    3. Completa campos faltantes com defaults.
+
+    Muta `cfg` in-place e retorna o mesmo objeto.
     """
     if "external_sources" in cfg and isinstance(cfg["external_sources"], dict):
+        # Migrar api_keys em plaintext para keyring
+        for source in ("lastfm", "getsongbpm"):
+            if source in cfg["external_sources"]:
+                _migrate_plaintext_key(cfg["external_sources"], source)
+
+        # Completar campos faltantes (sem tocar em api_key — gerenciada por _migrate_plaintext_key)
         defaults = _default_external_sources()
         for source, default_val in defaults.items():
             cfg["external_sources"].setdefault(source, default_val)
-            if source in ("lastfm", "getsongbpm"):
-                cfg["external_sources"][source].setdefault("api_key", None)
             cfg["external_sources"][source].setdefault("enabled", False)
+
         cfg.pop("external_sources_enabled", None)
         return cfg
 

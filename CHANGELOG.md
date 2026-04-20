@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.4] — 2026-04-20
+
+### Segurança
+- **API keys de Last.fm e GetSongBPM migradas para keyring do SO.** As chaves
+  `api_key` que anteriormente viviam em plaintext em `~/.config/maestra/config.json`
+  agora são armazenadas via `python-keyring` (Secret Service em Linux, Keychain
+  no macOS, Credential Manager no Windows), sob o serviço `maestra-ai` com
+  usernames `lastfm-api-key` e `getsongbpm-api-key`.
+
+### Adicionado
+- **`core/config.py` — três helpers de keyring:**
+  - `get_source_key(source)` — lê API key via keyring; `None` se ausente ou
+    backend indisponível.
+  - `set_source_key(source, key)` — grava no keyring; levanta `ValueError` para
+    source desconhecida, `RuntimeError` se keyring indisponível.
+  - `delete_source_key(source)` — remove do keyring; idempotente.
+- **`cmd_config_external_status`** agora inclui campo `has_key: bool` para cada
+  source com API key (`lastfm`, `getsongbpm`), sem expor o valor.
+
+### Modificado
+- **`migrate_external_sources`** estendida: ao encontrar `api_key` em plaintext
+  no `config.json`, migra automaticamente para keyring e remove o campo do JSON.
+  Comportamento best-effort: se keyring estiver indisponível (ex: Docker sem DBus),
+  mantém o plaintext com `WARNING` em log e não interrompe o boot.
+- **`default_enhancer`** lê keys via `get_source_key` em vez de
+  `cfg["external_sources"][source]["api_key"]`. Se `enabled=True` mas keyring
+  retorna `None`, a source é pulada com log `DEBUG`.
+- **CLI `config external set-key`** grava no keyring (não mais no JSON). Saída
+  não revela o valor da key.
+- **CLI `config external clear-key`** deleta do keyring e marca `enabled=False`.
+- **CLI `config external enable-source`** valida presença de key via keyring (não
+  mais via campo `api_key` no JSON).
+- **CLI `config external guide`** grava a key retornada pelo guia via keyring.
+- **`init.py::_prompt_external_sources_optin`** grava keys via keyring ao concluir
+  guia interativo; dict retornado não contém mais `api_key`.
+
+### Shape de configuração (breaking interno)
+O campo `api_key` é removido de `config.json` na primeira execução após upgrade.
+Usuários com `api_key` em plaintext têm migração automática e transparente.
+Config target pós-migração:
+```json
+{
+  "external_sources": {
+    "musicbrainz": {"enabled": true},
+    "lastfm": {"enabled": true},
+    "getsongbpm": {"enabled": true}
+  }
+}
+```
+
 ## [0.10.3] — 2026-04-20
 
 ### Corrigido

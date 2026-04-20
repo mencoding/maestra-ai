@@ -24,12 +24,20 @@ def _call(fn_name, **kwargs):
     fn(a)
 
 
-def test_external_status_default(isolated, capsys):
+def test_external_status_default(isolated, monkeypatch, capsys):
+    # Mockar get_source_key para isolar de keyring real do sistema
+    from maestra_ai.cli import config as cli_cfg
+    monkeypatch.setattr(cli_cfg, "get_source_key", lambda source: None)
     _call("cmd_config_external_status", human=False)
     out = capsys.readouterr().out
     data = json.loads(out)
     assert data["enabled"] is False
-    assert data["musicbrainz"] == "available"
+    # v0.10.4: status retorna per_source com has_key para sources keyed
+    assert "per_source" in data
+    assert "musicbrainz" in data["per_source"]
+    assert "lastfm" in data["per_source"]
+    assert "has_key" in data["per_source"]["lastfm"]
+    assert data["per_source"]["lastfm"]["has_key"] is False
 
 
 def test_external_enable_persists(isolated, capsys):

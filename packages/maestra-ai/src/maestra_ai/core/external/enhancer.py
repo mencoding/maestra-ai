@@ -11,7 +11,7 @@ from collections.abc import Callable, Iterable
 from datetime import datetime
 from typing import cast
 
-from maestra_ai.core.config import load_and_migrate
+from maestra_ai.core.config import get_source_key, load_and_migrate
 from maestra_ai.core.external import cache as cache_mod
 from maestra_ai.core.external.types import (
     EnhancedTrack,
@@ -115,7 +115,9 @@ def _load_cfg() -> dict:
 def default_enhancer() -> Enhancer:
     """Monta enhancer com sources habilitadas conforme config.
 
-    v0.10: MusicBrainz + Last.fm (quando ativo + api_key presente).
+    v0.10.4: API keys lidas via keyring (não mais via config.json plaintext).
+    Se enabled=True mas get_source_key retornar None, a source é pulada com
+    log de debug.
     """
     from maestra_ai import __version__
     from maestra_ai.core.external.getsongbpm import GetSongBpmSource
@@ -128,11 +130,19 @@ def default_enhancer() -> Enhancer:
     ext = cfg.get("external_sources") or {}
     if ext.get("musicbrainz", {}).get("enabled"):
         sources.append(MusicBrainzSource(app_version=__version__))
-    lf = ext.get("lastfm") or {}
-    if lf.get("enabled") and lf.get("api_key"):
-        sources.append(LastfmSource(api_key=lf["api_key"]))
-    gsb = ext.get("getsongbpm") or {}
-    if gsb.get("enabled") and gsb.get("api_key"):
-        sources.append(GetSongBpmSource(api_key=gsb["api_key"]))
+
+    if ext.get("lastfm", {}).get("enabled"):
+        lf_key = get_source_key("lastfm")
+        if lf_key:
+            sources.append(LastfmSource(api_key=lf_key))
+        else:
+            logger.debug("lastfm habilitado mas sem API key no keyring — pulando.")
+
+    if ext.get("getsongbpm", {}).get("enabled"):
+        gsb_key = get_source_key("getsongbpm")
+        if gsb_key:
+            sources.append(GetSongBpmSource(api_key=gsb_key))
+        else:
+            logger.debug("getsongbpm habilitado mas sem API key no keyring — pulando.")
 
     return Enhancer(sources=sources)

@@ -16,8 +16,11 @@ from maestra_ai.core import storage
 from maestra_ai.core.audit import _redact
 from maestra_ai.core.config import (
     any_source_enabled,
+    delete_source_key,
+    get_source_key,
     migrate_external_sources,
     normalize_playlist_id,
+    set_source_key,
     source_enabled,
 )
 
@@ -97,11 +100,16 @@ def cmd_config_external_status(args, **_):
         {
             "enabled": any_source_enabled(cfg),
             "per_source": {
-                "musicbrainz": source_enabled(cfg, "musicbrainz"),
-                "lastfm":      source_enabled(cfg, "lastfm"),
-                "getsongbpm":  source_enabled(cfg, "getsongbpm"),
+                "musicbrainz": {"enabled": source_enabled(cfg, "musicbrainz")},
+                "lastfm": {
+                    "enabled": source_enabled(cfg, "lastfm"),
+                    "has_key": get_source_key("lastfm") is not None,
+                },
+                "getsongbpm": {
+                    "enabled": source_enabled(cfg, "getsongbpm"),
+                    "has_key": get_source_key("getsongbpm") is not None,
+                },
             },
-            "musicbrainz": "available",
         },
         getattr(args, "human", False),
     )
@@ -152,9 +160,15 @@ def cmd_config_external_set_key(args, **_):
     if source not in _VALID_KEYED_SOURCES:
         output({"error": f"source inválido: {source}. Use um de {_VALID_KEYED_SOURCES}"}, getattr(args, "human", False))
         return
+    try:
+        set_source_key(source, args.key)
+    except Exception as exc:
+        output({"error": f"falha ao gravar no keyring: {exc}"}, getattr(args, "human", False))
+        return
     cfg = _load_cfg()
     cfg = _ensure_nested(cfg)
-    cfg["external_sources"][source]["api_key"] = args.key
+    # Garantir que não haja api_key em plaintext após gravar no keyring
+    cfg["external_sources"][source].pop("api_key", None)
     cfg["external_sources"][source]["enabled"] = True
     _save_cfg(cfg)
     output({"status": "set", "source": source, "enabled": True}, getattr(args, "human", False))
@@ -165,9 +179,10 @@ def cmd_config_external_clear_key(args, **_):
     if source not in _VALID_KEYED_SOURCES:
         output({"error": f"source inválido: {source}"}, getattr(args, "human", False))
         return
+    delete_source_key(source)
     cfg = _load_cfg()
     cfg = _ensure_nested(cfg)
-    cfg["external_sources"][source]["api_key"] = None
+    cfg["external_sources"][source].pop("api_key", None)
     cfg["external_sources"][source]["enabled"] = False
     _save_cfg(cfg)
     output({"status": "cleared", "source": source}, getattr(args, "human", False))
@@ -177,7 +192,7 @@ def cmd_config_external_enable_source(args, **_):
     source = args.source
     cfg = _load_cfg()
     cfg = _ensure_nested(cfg)
-    if source in _VALID_KEYED_SOURCES and not cfg["external_sources"][source].get("api_key"):
+    if source in _VALID_KEYED_SOURCES and get_source_key(source) is None:
         output({"error": f"{source} precisa de API key. Use 'maestra config external set-key {source} <key>' ou 'guide {source}'."}, getattr(args, "human", False))
         return
     cfg["external_sources"][source]["enabled"] = True
@@ -205,9 +220,15 @@ def cmd_config_external_guide(args, **_):
     if not enabled:
         output({"status": "skipped", "source": source}, getattr(args, "human", False))
         return
+    if key:
+        try:
+            set_source_key(source, key)
+        except Exception as exc:
+            output({"error": f"falha ao gravar no keyring: {exc}"}, getattr(args, "human", False))
+            return
     cfg = _load_cfg()
     cfg = _ensure_nested(cfg)
-    cfg["external_sources"][source]["api_key"] = key
+    cfg["external_sources"][source].pop("api_key", None)
     cfg["external_sources"][source]["enabled"] = True
     _save_cfg(cfg)
     output({"status": "configured", "source": source}, getattr(args, "human", False))

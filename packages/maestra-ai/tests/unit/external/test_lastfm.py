@@ -107,16 +107,17 @@ def test_name_is_lastfm():
 
 
 def test_default_enhancer_includes_lastfm_when_enabled(mocker):
-    """default_enhancer lê config nested e instancia LastfmSource quando ativo."""
+    """default_enhancer instancia LastfmSource quando ativo e key no keyring."""
     mocker.patch("maestra_ai.core.external.lastfm.pylast.LastFMNetwork")
     cfg = {
         "external_sources": {
             "musicbrainz": {"enabled": True},
-            "lastfm": {"enabled": True, "api_key": "a" * 32},
-            "getsongbpm": {"enabled": False, "api_key": None},
+            "lastfm": {"enabled": True},
+            "getsongbpm": {"enabled": False},
         }
     }
     mocker.patch("maestra_ai.core.external.enhancer._load_cfg", return_value=cfg)
+    mocker.patch("maestra_ai.core.external.enhancer.get_source_key", return_value="a" * 32)
     from maestra_ai.core.external.enhancer import default_enhancer
 
     enh = default_enhancer()
@@ -126,15 +127,17 @@ def test_default_enhancer_includes_lastfm_when_enabled(mocker):
 
 
 def test_default_enhancer_skips_lastfm_when_no_key(mocker):
+    """default_enhancer pula lastfm quando enabled=True mas keyring retorna None."""
     mocker.patch("maestra_ai.core.external.lastfm.pylast.LastFMNetwork")
     cfg = {
         "external_sources": {
             "musicbrainz": {"enabled": True},
-            "lastfm": {"enabled": True, "api_key": None},
-            "getsongbpm": {"enabled": False, "api_key": None},
+            "lastfm": {"enabled": True},
+            "getsongbpm": {"enabled": False},
         }
     }
     mocker.patch("maestra_ai.core.external.enhancer._load_cfg", return_value=cfg)
+    mocker.patch("maestra_ai.core.external.enhancer.get_source_key", return_value=None)
     from maestra_ai.core.external.enhancer import default_enhancer
 
     enh = default_enhancer()

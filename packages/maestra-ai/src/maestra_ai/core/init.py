@@ -6,6 +6,7 @@ escolhido. Delega I/O externo para `core.auth` e `core.onboard`.
 from __future__ import annotations
 
 import json
+import logging
 import webbrowser
 from collections.abc import Callable
 from typing import Literal, TypeVar
@@ -17,9 +18,11 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 
 from maestra_ai.core import storage
-from maestra_ai.core.config import migrate_external_sources, normalize_playlist_id
+from maestra_ai.core.config import migrate_external_sources, normalize_playlist_id, set_source_key
 from maestra_ai.core.external.setup_guides import guide_getsongbpm, guide_lastfm
 from maestra_ai.core.init_types import InitReport, InitState
+
+logger = logging.getLogger(__name__)
 
 # URLs e valores padrão usados nos fluxos
 _DASHBOARD_URL = "https://developer.spotify.com/dashboard"
@@ -190,8 +193,8 @@ def _prompt_external_sources_optin() -> dict:
 
     result = {
         "musicbrainz": {"enabled": False},
-        "lastfm":      {"enabled": False, "api_key": None},
-        "getsongbpm":  {"enabled": False, "api_key": None},
+        "lastfm":      {"enabled": False},
+        "getsongbpm":  {"enabled": False},
     }
 
     if choice == choice_skip or choice is None:
@@ -203,10 +206,19 @@ def _prompt_external_sources_optin() -> dict:
     if choice == choice_all:
         enabled, key = guide_lastfm()
         result["lastfm"]["enabled"] = enabled
-        result["lastfm"]["api_key"] = key if enabled else None
+        if enabled and key:
+            try:
+                set_source_key("lastfm", key)
+            except Exception:
+                logger.warning("Falha ao gravar API key de lastfm no keyring.")
+
         enabled, key = guide_getsongbpm()
         result["getsongbpm"]["enabled"] = enabled
-        result["getsongbpm"]["api_key"] = key if enabled else None
+        if enabled and key:
+            try:
+                set_source_key("getsongbpm", key)
+            except Exception:
+                logger.warning("Falha ao gravar API key de getsongbpm no keyring.")
 
     return result
 
