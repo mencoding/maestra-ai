@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0-alpha.2] — 2026-04-20
+
+### Removido
+- `onboard._fetch_artists_genres` (~75 linhas) e toda a cascata de busca
+  de gêneros pelo Spotify. Motivo: o Spotify depreciou o campo `genres`
+  em 2025 — a chamada sempre falhava ou retornava vazio, e vazava a URL
+  completa no stderr via `print` interno do spotipy. Quem quiser gêneros
+  agora habilita MusicBrainz via `maestra config external enable`.
+- Dois warnings mortos ("Spotify bloqueou a busca em lote", "não fornece
+  mais gêneros"). Com a remoção do fetch, deixaram de ser gerados.
+- Testes de `_fetch_artists_genres` (classes `TestFetchArtistsGenres`,
+  `TestArtistsFallback`, 1 teste em `TestOnboardRunWarnings`).
+
+### Adicionado
+- **Promoção de tags do MusicBrainz para gêneros (G5)**: quando o MB
+  retorna `tag-list` mas `genre-list` vazio para um artista, tags que
+  contêm qualquer keyword da whitelist `GENRE_KEYWORDS` (30 termos:
+  rock, pop, jazz, indie, folk, metal, punk, etc.) são promovidas para
+  o campo efetivo de gêneros. Tags como "classic rock", "folk rock",
+  "indie folk" passam a enriquecer a curadoria; "70s", "american",
+  "seen live" ficam de fora (preservadas como tags puras).
+- **4 métricas granulares no report de `onboard.run` (G2)**:
+  - `external_mb_matched` — faixas encontradas no MB
+  - `external_mb_artist_resolved` — faixas com artist_mbid
+  - `external_mb_with_genres` — faixas com pelo menos 1 gênero
+  - `external_mb_with_tags_only` — faixas com tags mas sem gêneros
+- Relatório pós-análise (`_print_onboard_results`) mostra breakdown
+  detalhado em bullet list em vez de uma linha só (G4).
+
+### Alterado
+- `onboard.run` agora alimenta `artists_genres` diretamente do cache do
+  MusicBrainz (via `spotify_artist_id` ↔ MB artist_mbid) em vez de buscar
+  no Spotify. Quando external não está habilitado, `artists_genres = {}`
+  e as sugestões caem para o fallback baseado em artista+década.
+- `_to_track_info_for_enhancer` ganha o campo `spotify_artist_id` para
+  permitir a ponte Spotify→MB no re-ranking.
+
+### Nota técnica
+- A remoção da chamada de batch ao Spotify também silencia o `HTTP Error
+  for GET to ...` que o spotipy imprime direto no stderr antes da
+  exceção subir — era impossível suprimir via `except`.
+
 ## [0.9.0-alpha.1] — 2026-04-20
 
 ### Corrigido
