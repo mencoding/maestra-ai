@@ -11,7 +11,7 @@ from collections.abc import Callable, Iterable
 from datetime import datetime
 from typing import cast
 
-from maestra_ai.core.config import any_source_enabled, load_and_migrate
+from maestra_ai.core.config import load_and_migrate
 from maestra_ai.core.external import cache as cache_mod
 from maestra_ai.core.external.types import (
     EnhancedTrack,
@@ -107,15 +107,28 @@ def _apply_source_result(merged: dict, source_name: str, result: SourceResult) -
     merged["sources"].append(source_name)
 
 
-def default_enhancer() -> Enhancer:
-    """Constrói um Enhancer com as fontes disponíveis nesta release.
+def _load_cfg() -> dict:
+    """Hook de carregamento — facilita mock em teste."""
+    return load_and_migrate()
 
-    v0.9: só MusicBrainz quando `external_sources_enabled: true`.
+
+def default_enhancer() -> Enhancer:
+    """Monta enhancer com sources habilitadas conforme config.
+
+    v0.10: MusicBrainz + Last.fm (quando ativo + api_key presente).
     """
-    from maestra_ai import __version__ as app_version
+    from maestra_ai import __version__
+    from maestra_ai.core.external.lastfm import LastfmSource
     from maestra_ai.core.external.musicbrainz import MusicBrainzSource
 
-    cfg = load_and_migrate()
-    if not any_source_enabled(cfg):
-        return Enhancer(sources=[])
-    return Enhancer(sources=[MusicBrainzSource(app_version=app_version)])
+    cfg = _load_cfg()
+    sources: list[EnhancementSource] = []
+
+    ext = cfg.get("external_sources") or {}
+    if ext.get("musicbrainz", {}).get("enabled"):
+        sources.append(MusicBrainzSource(app_version=__version__))
+    lf = ext.get("lastfm") or {}
+    if lf.get("enabled") and lf.get("api_key"):
+        sources.append(LastfmSource(api_key=lf["api_key"]))
+
+    return Enhancer(sources=sources)

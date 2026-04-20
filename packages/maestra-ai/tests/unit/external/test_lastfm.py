@@ -75,3 +75,39 @@ def test_rate_limit_blocks_second_call_within_window(mocker):
 def test_name_is_lastfm():
     source = LastfmSource(api_key="key")
     assert source.name == "lastfm"
+
+
+def test_default_enhancer_includes_lastfm_when_enabled(mocker):
+    """default_enhancer lê config nested e instancia LastfmSource quando ativo."""
+    mocker.patch("maestra_ai.core.external.lastfm.pylast.LastFMNetwork")
+    cfg = {
+        "external_sources": {
+            "musicbrainz": {"enabled": True},
+            "lastfm": {"enabled": True, "api_key": "a" * 32},
+            "getsongbpm": {"enabled": False, "api_key": None},
+        }
+    }
+    mocker.patch("maestra_ai.core.external.enhancer._load_cfg", return_value=cfg)
+    from maestra_ai.core.external.enhancer import default_enhancer
+
+    enh = default_enhancer()
+    names = [s.name for s in enh._sources]
+    assert "musicbrainz" in names
+    assert "lastfm" in names
+
+
+def test_default_enhancer_skips_lastfm_when_no_key(mocker):
+    mocker.patch("maestra_ai.core.external.lastfm.pylast.LastFMNetwork")
+    cfg = {
+        "external_sources": {
+            "musicbrainz": {"enabled": True},
+            "lastfm": {"enabled": True, "api_key": None},
+            "getsongbpm": {"enabled": False, "api_key": None},
+        }
+    }
+    mocker.patch("maestra_ai.core.external.enhancer._load_cfg", return_value=cfg)
+    from maestra_ai.core.external.enhancer import default_enhancer
+
+    enh = default_enhancer()
+    names = [s.name for s in enh._sources]
+    assert "lastfm" not in names
