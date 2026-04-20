@@ -6,14 +6,21 @@ escolhido. Delega I/O externo para `core.auth` e `core.onboard`.
 from __future__ import annotations
 
 import json
+import webbrowser
 from collections.abc import Callable
 from typing import TypeVar
 
 from rich.console import Console
 from rich.panel import Panel
+from rich.prompt import Prompt
 
 from maestra_ai.core import storage
 from maestra_ai.core.init_types import InitState
+
+
+# URLs e valores padrão usados nos fluxos
+_DASHBOARD_URL = "https://developer.spotify.com/dashboard"
+_DEFAULT_REDIRECT_URI = "https://example.com/callback"
 
 T = TypeVar("T")
 
@@ -200,3 +207,76 @@ def _retry_loop(
 
             if not _ask_retry():
                 raise UserAbort("Usuário escolheu sair")
+
+
+def _open_url(url: str) -> bool:
+    """Tenta abrir URL no navegador. Retorna True se abriu."""
+    try:
+        return webbrowser.open(url)
+    except Exception:
+        return False
+
+
+def _flow_A_collect_credentials() -> None:
+    """Fluxo de criação de app Spotify + coleta de credenciais (estado A → [1]).
+
+    Abre o dashboard no navegador, guia o usuário através da criação do app,
+    coleta client_id / client_secret / redirect_uri e persiste em config.json
+    via `storage.write_config`.
+    """
+    _console.print(
+        "\nPara a Maestra funcionar, você precisa criar um app no painel de "
+        "desenvolvedor do Spotify. É grátis e leva ~2 minutos.\n"
+    )
+    opened = _open_url(_DASHBOARD_URL)
+    if opened:
+        _console.print("Acabei de abrir o painel no seu navegador.\n")
+    else:
+        _console.print(f"Abra no seu navegador: {_DASHBOARD_URL}\n")
+    _console.print(
+        "Passos no painel:\n"
+        "  1) Clique em 'Create app'.\n"
+        "  2) Preencha nome e descrição (qualquer coisa).\n"
+        "  3) Em 'Redirect URI' cole: [bold]https://example.com/callback[/bold]\n"
+        "  4) Aceite os termos e salve.\n"
+        "  5) Volte aqui.\n"
+    )
+
+    # Loop até o usuário confirmar que o app foi criado
+    while True:
+        resp = Prompt.ask("Você criou o app?", choices=["s", "n"], default="s")
+        if resp == "s":
+            break
+        _console.print("Sem pressa. Quando estiver pronto, digite 's'.")
+
+    _console.print(
+        "\nAgora vou precisar de três coisas do painel do app recém-criado.\n"
+    )
+    client_id = (Prompt.ask("Cole o [bold]Client ID[/bold]") or "").strip()
+    client_secret = (
+        Prompt.ask(
+            "Cole o [bold]Client Secret[/bold] (clique em 'View client secret')",
+            password=True,
+        )
+        or ""
+    ).strip()
+    redirect_raw = Prompt.ask(
+        f"Qual o [bold]Redirect URI[/bold]? [dim](Enter = {_DEFAULT_REDIRECT_URI})[/dim]",
+        default=_DEFAULT_REDIRECT_URI,
+    )
+    redirect_uri = (redirect_raw or "").strip() or _DEFAULT_REDIRECT_URI
+
+    # Validações — em falha, ValueError. Retry interativo fica para T5/T6.
+    if not client_id or not client_secret:
+        raise ValueError("Client ID e Client Secret não podem estar vazios.")
+    if not redirect_uri.startswith("https://"):
+        raise ValueError("Redirect URI precisa começar com https://")
+
+    storage.write_config(
+        {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "redirect_uri": redirect_uri,
+        }
+    )
+    _console.print("\nConfiguração salva.\n")

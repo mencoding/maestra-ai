@@ -199,3 +199,26 @@ class TestRetryLoop:
             )
         out = capsys.readouterr().out
         assert "terceira tentativa" in out.lower() or "3" in out
+
+
+class TestFlowA:
+    def test_collect_credentials_persist_config(self, tmp_path, monkeypatch):
+        from maestra_ai.core import init, storage
+        cfg_dir = tmp_path / "cfg"
+        monkeypatch.setattr(storage, "config_dir", lambda: cfg_dir)
+
+        prompts = iter([
+            "s",  # Você criou o app?
+            "abc123",  # client_id
+            "def456",  # client_secret
+            "",  # redirect_uri (Enter = default)
+        ])
+        monkeypatch.setattr("rich.prompt.Prompt.ask", lambda *a, **k: next(prompts))
+        monkeypatch.setattr(init, "_open_url", lambda url: None)
+
+        init._flow_A_collect_credentials()
+
+        cfg = json.loads((cfg_dir / "config.json").read_text())
+        assert cfg["client_id"] == "abc123"
+        assert cfg["client_secret"] == "def456"
+        assert cfg["redirect_uri"] == "https://example.com/callback"
