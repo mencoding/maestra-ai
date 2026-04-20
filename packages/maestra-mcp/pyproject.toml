@@ -1,6 +1,6 @@
 [project]
 name = "maestra-mcp"
-version = "0.6.1a0"
+version = "0.6.2a0"
 description = "MCP stdio server for Maestra AI Spotify controller"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -9,7 +9,7 @@ authors = [
     { name = "Leonardo Menzani Silva" }
 ]
 dependencies = [
-    "maestra-ai==0.6.1a0",
+    "maestra-ai==0.6.2a0",
     "mcp>=1.0,<2.0",
     "jsonschema>=4.0,<5.0",
 ]

@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2-alpha.0] - 2026-04-19
+
+Release só de correção — fecha os 8 Minors do review
+pós-v0.6.0-alpha.0. Foco no pipeline central de erros:
+`MaestraError` propaga para `main()` em `cli/__init__.py:246` onde
+`redact_error_dict` + `_print_rich_error` produzem saída estruturada
+com `suggested_actions` e `agent_hint`. Zero feature nova.
+
+### Changed (breaking — output de erros no CLI)
+- Handlers `cmd_play`, `cmd_pause`, `cmd_next`, `cmd_queue_add`,
+  `cmd_play_context` em `cli/basic.py` não engolem mais
+  `MaestraError` em `{"error": str(e), "code": "PLAYBACK_ERROR"}`.
+  Erros agora seguem o schema `to_human_dict` (`{"error": {"code":
+  "RateLimitError", "title": ..., "suggested_actions": [...],
+  "agent_hint": ...}}`). **Zero consumidor externo conhecido
+  (pre-alpha); impacto restrito à UX de CLI.**
+- `cli/onboard._interactive_choose`: `print` + `SystemExit(1)`
+  substituído por propagação de `MaestraError` / tradução para
+  `SpotifyAPIError`.
+- `core/client.py` — `_bucket`/`_breaker` globals → `_BUCKETS` /
+  `_BREAKERS` dict keyed por `db_path`. API pública do módulo
+  inalterada (`_get_bucket`/`_get_breaker` permanecem).
+
+### Fixed
+- **M1** — `onboard._resolve_playlist_name` agora propaga
+  `MaestraError` (AuthError/RateLimit/API) em vez de silenciar.
+  Fallback `except Exception: return desired` mantido apenas para
+  shape inesperada da API.
+- **M2** — mesmo padrão em `onboard.run` no bloco de
+  `_fetch_own_playlists`: AuthError propaga; fallback reservado
+  para erros de parse.
+- **M3** — `cli/basic.cmd_status` captura apenas `ConfigError`
+  em vez de `Exception` genérico.
+- **M4** — rate limiter resets corretamente quando
+  `MAESTRA_STATE_DIR` muda entre testes (dict cache por `db_path`).
+- **M6** — `onboard._fetch_own_playlists` tem cap de 200 páginas
+  (10_000 playlists, hard limit Spotify). Defense-in-depth contra
+  loop infinito por `next` fixo de servidor bugado.
+- **M7** — ver Changed.
+- **M8** — ver Changed.
+
+### Docs
+- **M5** — `audit._redact` docstring explicita exact-match
+  lowercase em `_SECRET_KEYS` (variantes como `"user_email"` NÃO
+  casam).
+
+### Added
+- `cli/basic.cmd_queue_context` output agora inclui campo `failed`
+  listando tracks que não puderam ser adicionadas à fila (cada
+  entry: `{uri, error: to_human_dict(...)}`). Batch não é mais
+  abortado pela primeira falha.
+
 ## [0.6.1-alpha.0] - 2026-04-19
 
 Release só de correção — fecha os 7 itens Important do review

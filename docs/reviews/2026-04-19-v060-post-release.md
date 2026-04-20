@@ -85,6 +85,9 @@ Uso de `taste._is_rejected`, `taste_mod._prune_candidates`, `_signal_weight` atr
 
 ---
 
+> **Status v0.6.2-alpha.0 (2026-04-19):** todos os 8 Minors (M1-M8)
+> foram fechados. Detalhes no CHANGELOG [0.6.2-alpha.0].
+
 ## Minor (7)
 
 ### M1. `onboard._resolve_playlist_name` silencia `current_user_playlists`
