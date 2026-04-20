@@ -25,7 +25,7 @@ from datetime import UTC
 from pathlib import Path
 
 from maestra_ai.core import storage
-from maestra_ai.core.config import any_source_enabled
+from maestra_ai.core.config import any_source_enabled, load_and_migrate
 from maestra_ai.core.errors import MaestraError, PlaylistCreateForbiddenError
 from maestra_ai.core.external.mood_mappings import (  # noqa: F401
     _FALLBACK_MOODS,
@@ -979,7 +979,7 @@ def run(
             effective_name = current_name
 
         if not dry_run:
-            cfg = storage.read_config()
+            cfg = load_and_migrate()
             cfg["playlist_id"] = playlist_id
             cfg["playlist_name"] = effective_name
             storage.write_config(cfg)
@@ -1013,7 +1013,7 @@ def run(
                 ) from e
             raise
         playlist_id = new_pl["id"]
-        cfg = storage.read_config()
+        cfg = load_and_migrate()
         cfg["playlist_id"] = playlist_id
         cfg["playlist_name"] = effective_name
         storage.write_config(cfg)
@@ -1237,7 +1237,7 @@ def run(
     external_lf_matched = 0
     external_lf_with_tags = 0
     external_gsb_matched = 0
-    cfg = storage.read_config()
+    cfg = load_and_migrate()
     if any_source_enabled(cfg) and enhance_external:
         from maestra_ai.core.external import default_enhancer
         enhancer = default_enhancer()

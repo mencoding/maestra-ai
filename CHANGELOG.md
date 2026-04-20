@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.5] — 2026-04-20
+
+### Corrigido
+- **Migração de keyring não disparava via CLI.** v0.10.4 introduziu
+  `migrate_external_sources` que move `api_key` plaintext para keyring,
+  mas os handlers em `cli/config.py` (status, set-key, clear-key,
+  enable/disable, guide), `cli/curate.py` e `core/onboard.py` ainda
+  chamavam `storage.read_config()` direto — que não dispara migração.
+  Resultado: keyring recebia as keys corretamente via enhancer, mas o
+  plaintext em `config.json` persistia indefinidamente. Substituído
+  por `load_and_migrate()` em 10 pontos — a migração (e consequente
+  write-back) agora acontece na primeira leitura do config por
+  qualquer caminho da CLI.
+
 ## [0.10.4] — 2026-04-20
 
 ### Segurança

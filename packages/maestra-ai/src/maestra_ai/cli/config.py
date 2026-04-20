@@ -18,6 +18,7 @@ from maestra_ai.core.config import (
     any_source_enabled,
     delete_source_key,
     get_source_key,
+    load_and_migrate,
     migrate_external_sources,
     normalize_playlist_id,
     set_source_key,
@@ -36,14 +37,14 @@ _ALLOWED_KEYS: tuple[str, ...] = (
 
 def cmd_config_list(args, **_):
     """Imprime config.json com secrets redactados."""
-    cfg = storage.read_config()
+    cfg = load_and_migrate()
     redacted = _redact(cfg)
     output(redacted, getattr(args, "human", False))
 
 
 def cmd_config_get(args, **_):
     """Retorna o valor de uma key. Para playlist_id, normaliza o retorno."""
-    cfg = storage.read_config()
+    cfg = load_and_migrate()
     value = cfg.get(args.key)
     # Se for playlist_id e houver valor, garante que saia já normalizado
     # (config pode ter sido escrito manualmente com URL/URI legada).
@@ -88,14 +89,14 @@ def cmd_config_set(args, **_):
             )
             sys.exit(1)
 
-    cfg = storage.read_config()
+    cfg = load_and_migrate()
     cfg[key] = value
     storage.write_config(cfg)
     output({"status": "set", "key": key}, getattr(args, "human", False))
 
 
 def cmd_config_external_status(args, **_):
-    cfg = storage.read_config()
+    cfg = load_and_migrate()
     output(
         {
             "enabled": any_source_enabled(cfg),
@@ -116,7 +117,7 @@ def cmd_config_external_status(args, **_):
 
 
 def cmd_config_external_enable(args, **_):
-    cfg = storage.read_config()
+    cfg = load_and_migrate()
     cfg = migrate_external_sources(cfg)
     cfg["external_sources"]["musicbrainz"]["enabled"] = True
     storage.write_config(cfg)
@@ -124,7 +125,7 @@ def cmd_config_external_enable(args, **_):
 
 
 def cmd_config_external_disable(args, **_):
-    cfg = storage.read_config()
+    cfg = load_and_migrate()
     cfg = migrate_external_sources(cfg)
     cfg["external_sources"]["musicbrainz"]["enabled"] = False
     storage.write_config(cfg)
