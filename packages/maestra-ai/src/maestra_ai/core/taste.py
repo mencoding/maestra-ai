@@ -514,7 +514,12 @@ class TasteProfile:
         return self.data.get("rejected_artists", [])
 
 
-def _signal_weight(signal):
+def signal_weight(signal):
+    """Retorna peso numérico do sinal de feedback.
+
+    **API pública** — consumida por `cli/_common.py` e testes.
+    Mapa: good→1, bad/skip→-1, outros→0.
+    """
     if signal == "good":
         return 1
     if signal in ("bad", "skip"):

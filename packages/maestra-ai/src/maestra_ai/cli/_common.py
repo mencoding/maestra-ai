@@ -154,6 +154,6 @@ def _context_review(tracks, taste, context, prune_candidates=None, top=10):
 
 
 def _signal_weight(signal):
-    """Shim — delega para core.taste._signal_weight."""
+    """Shim — delega para core.taste.signal_weight."""
     from maestra_ai.core import taste as taste_mod
-    return taste_mod._signal_weight(signal)
+    return taste_mod.signal_weight(signal)

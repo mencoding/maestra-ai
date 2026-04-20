@@ -198,7 +198,7 @@ class TestHistoryImportOutside:
         args_pos = taste.record_context_signal.call_args.args
         # segundo argumento posicional é o signal
         assert args_pos[1] == "bad"
-        # weight alinhado com _signal_weight('bad') == -1
+        # weight alinhado com signal_weight('bad') == -1
         assert kwargs.get("weight") == -1
 
     def test_import_outside_rejeita_signal_invalido(self):

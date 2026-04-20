@@ -167,7 +167,7 @@ class HistoryAnalyzer:
         Parâmetros:
         - signal: um de {"good", "bad", "skip"}. Default "good". Usado
           no registro de sinais contextuais via `taste.record_context_signal`.
-          Peso é derivado de `core.taste._signal_weight(signal)`.
+          Peso é derivado de `core.taste.signal_weight(signal)`.
 
         Filtros aplicados:
         - faixa não pode estar na playlist;
@@ -176,7 +176,7 @@ class HistoryAnalyzer:
           ser não-negativo (ignora faixas com sinal contextual negativo).
         """
         from maestra_ai.core import snapshot
-        from maestra_ai.core.taste import _signal_weight
+        from maestra_ai.core.taste import signal_weight
 
         # Validação do signal — evita gravar sinal inválido silenciosamente
         if signal not in ("good", "bad", "skip"):
@@ -222,7 +222,7 @@ class HistoryAnalyzer:
         if uris:
             self.controller.playlist_add(playlist_id, uris)
             if taste is not None:
-                weight = _signal_weight(signal)
+                weight = signal_weight(signal)
                 for c in candidates:
                     event_id = f"outside-playlist-auto-safe:{context}:{c['uri']}"
                     if taste.record_context_signal(
