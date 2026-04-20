@@ -86,6 +86,31 @@ def cmd_config_set(args, **_):
     output({"status": "set", "key": key}, getattr(args, "human", False))
 
 
+def cmd_config_external_status(args, **_):
+    cfg = storage.read_config()
+    output(
+        {
+            "enabled": bool(cfg.get("external_sources_enabled")),
+            "musicbrainz": "available",
+        },
+        getattr(args, "human", False),
+    )
+
+
+def cmd_config_external_enable(args, **_):
+    cfg = storage.read_config()
+    cfg["external_sources_enabled"] = True
+    storage.write_config(cfg)
+    output({"status": "enabled"}, getattr(args, "human", False))
+
+
+def cmd_config_external_disable(args, **_):
+    cfg = storage.read_config()
+    cfg["external_sources_enabled"] = False
+    storage.write_config(cfg)
+    output({"status": "disabled"}, getattr(args, "human", False))
+
+
 @register
 def _register(subparsers: argparse._SubParsersAction) -> None:
     from maestra_ai.cli import group_help_handler
@@ -104,3 +129,19 @@ def _register(subparsers: argparse._SubParsersAction) -> None:
     p.add_argument("key", help=f"Keys aceitas: {', '.join(_ALLOWED_KEYS)}")
     p.add_argument("value", help="Valor a gravar")
     p.set_defaults(func=cmd_config_set, skip_deps=True)
+
+    ext = sub.add_parser("external", help="Fontes externas de metadata")
+    ext.set_defaults(func=group_help_handler(ext))
+    ext_sub = ext.add_subparsers(dest="config_external_command", required=False)
+
+    p = ext_sub.add_parser("status", help="Mostra estado das fontes externas")
+    p.add_argument("--human", action="store_true")
+    p.set_defaults(func=cmd_config_external_status, skip_deps=True)
+
+    p = ext_sub.add_parser("enable", help="Ativa fontes externas")
+    p.add_argument("--human", action="store_true")
+    p.set_defaults(func=cmd_config_external_enable, skip_deps=True)
+
+    p = ext_sub.add_parser("disable", help="Desativa fontes externas")
+    p.add_argument("--human", action="store_true")
+    p.set_defaults(func=cmd_config_external_disable, skip_deps=True)
