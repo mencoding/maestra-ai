@@ -22,6 +22,7 @@ FEEDBACK_PROMPT_STATE_PATH = os.path.join(BASE_DIR, "feedback_prompt_state.json"
 DIRECTOR_PID_PATH = os.path.join(BASE_DIR, "director.pid")
 DIRECTOR_STDOUT_LOG_PATH = os.path.join(BASE_DIR, "director.log")
 DIRECTOR_DECISIONS_PATH = os.path.join(BASE_DIR, "director_decisions.jsonl")
+EXTERNAL_CACHE_PATH = os.path.join(BASE_DIR, "external_cache.json")
 
 def resolve_playlist_id() -> str:
     """Resolve o playlist_id a partir do config persistido.

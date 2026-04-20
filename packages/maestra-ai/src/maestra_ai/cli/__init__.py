@@ -55,6 +55,7 @@ def _import_subcommands() -> None:
     from maestra_ai.cli import (  # noqa: F401
         auth,
         basic,
+        cache,
         curate,
         director,
         doctor,
@@ -80,7 +81,7 @@ def _import_subcommands() -> None:
     from maestra_ai.cli import (
         init as init_cmd,
     )
-    _ = (auth, basic, config_cmd, context_cmd, curate, director, doctor,
+    _ = (auth, basic, cache, config_cmd, context_cmd, curate, director, doctor,
          feedback, flow, help_cmd, history, init_cmd, onboard, playback,
          playlist, profile, rollback, taste)
 
