@@ -46,9 +46,7 @@ def log(tool: str, args: dict, result: dict) -> None:
         "args": _redact(args),
         "result_summary": _redact_result(result),
     }
-    _path_active().parent.mkdir(parents=True, exist_ok=True)
-    with _path_active().open("a", encoding="utf-8") as f:
-        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    storage.append_jsonl_locked(_path_active(), entry)
     _maybe_rotate()
 
 
