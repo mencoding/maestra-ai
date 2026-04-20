@@ -222,3 +222,54 @@ class TestFlowA:
         assert cfg["client_id"] == "abc123"
         assert cfg["client_secret"] == "def456"
         assert cfg["redirect_uri"] == "https://example.com/callback"
+
+
+class TestFlowA2:
+    def test_oauth_paste_back_persist_token(self, monkeypatch, capsys):
+        from maestra_ai.core import init
+
+        monkeypatch.setattr(init, "_open_url", lambda url: True)
+        monkeypatch.setattr(init, "_build_authorization_url", lambda: "https://accounts.spotify.com/authorize?x=1")
+
+        # Simula URL de retorno com code
+        paste_url = "https://example.com/callback?code=AQD_abc123&state=xyz"
+        monkeypatch.setattr("rich.prompt.Prompt.ask", lambda *a, **k: paste_url)
+
+        saved = {}
+
+        def fake_exchange(code):
+            saved["code"] = code
+            return "refresh_tok_xyz"
+
+        monkeypatch.setattr(init, "_exchange_code_for_refresh_token", fake_exchange)
+        monkeypatch.setattr(init, "_persist_refresh_token", lambda t: saved.setdefault("token", t))
+
+        init._flow_A2_oauth_paste_back()
+
+        assert saved["code"] == "AQD_abc123"
+        assert saved["token"] == "refresh_tok_xyz"
+
+    def test_paste_url_sem_code_entra_retry(self, monkeypatch):
+        from maestra_ai.core import init
+
+        monkeypatch.setattr(init, "_build_authorization_url", lambda: "https://accounts.spotify.com/authorize?x=1")
+        monkeypatch.setattr(init, "_open_url", lambda url: True)
+        attempts = iter([
+            "https://example.com/callback?state=xyz",  # sem code
+            "https://example.com/callback?code=AQD_ok",  # ok
+        ])
+        monkeypatch.setattr("rich.prompt.Prompt.ask", lambda *a, **k: next(attempts))
+        monkeypatch.setattr(init, "_ask_retry", lambda: True)
+
+        saved = {}
+
+        def fake_exchange(code):
+            saved["code"] = code
+            return "tok"
+
+        monkeypatch.setattr(init, "_exchange_code_for_refresh_token", fake_exchange)
+        monkeypatch.setattr(init, "_persist_refresh_token", lambda t: saved.setdefault("token", t))
+
+        init._flow_A2_oauth_paste_back()
+        assert saved["code"] == "AQD_ok"
+        assert saved["token"] == "tok"

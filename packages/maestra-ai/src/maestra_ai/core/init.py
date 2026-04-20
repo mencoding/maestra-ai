@@ -9,6 +9,7 @@ import json
 import webbrowser
 from collections.abc import Callable
 from typing import TypeVar
+from urllib.parse import parse_qs, urlparse
 
 from rich.console import Console
 from rich.panel import Panel
@@ -280,3 +281,111 @@ def _flow_A_collect_credentials() -> None:
         }
     )
     _console.print("\nConfiguração salva.\n")
+
+
+def _build_spotify_oauth():
+    """Constrói um `SpotifyOAuth` a partir do config.json atual.
+
+    Delegado comum para construção de URL de autorização e troca de code.
+    """
+    from spotipy.oauth2 import SpotifyOAuth
+
+    from maestra_ai.core.auth import SCOPES, _NoopCacheHandler
+
+    cfg = storage.read_config()
+    return SpotifyOAuth(
+        client_id=cfg["client_id"],
+        client_secret=cfg["client_secret"],
+        redirect_uri=cfg["redirect_uri"],
+        scope=SCOPES,
+        cache_handler=_NoopCacheHandler(),
+        open_browser=False,
+    )
+
+
+def _build_authorization_url() -> str:
+    """Constrói URL de autorização OAuth (delega para `core.auth`)."""
+    return _build_spotify_oauth().get_authorize_url()
+
+
+def _exchange_code_for_refresh_token(code: str) -> str:
+    """Troca o `code` do callback por um `refresh_token` (via spotipy)."""
+    oauth = _build_spotify_oauth()
+    tok = oauth.get_access_token(code, as_dict=True, check_cache=False)
+    refresh = tok.get("refresh_token")
+    if not refresh:
+        raise ValueError("OAuth completou sem refresh_token. Verifique o app Spotify.")
+    return refresh
+
+
+def _persist_refresh_token(token: str) -> None:
+    """Persiste o refresh_token no token store default (keyring ou fallback)."""
+    from maestra_ai.core.token_store import default_token_store
+
+    default_token_store().save(token)
+
+
+def _extract_code_from_url(url: str) -> str:
+    """Extrai o parâmetro `code` de uma URL de callback OAuth.
+
+    Levanta `ValueError` se não houver `code` na query string.
+    """
+    parsed = urlparse(url.strip())
+    qs = parse_qs(parsed.query)
+    codes = qs.get("code", [])
+    if not codes or not codes[0]:
+        raise ValueError(
+            "Não encontrei o parâmetro 'code' na URL. Cole a URL completa da "
+            "barra de endereços do navegador, depois de clicar em 'Agree'."
+        )
+    return codes[0]
+
+
+def _flow_A2_oauth_paste_back() -> None:
+    """Fluxo A2 → [1]: autorização OAuth via paste-back.
+
+    Constrói URL de autorização, abre no navegador, pede a URL de retorno
+    colada pelo usuário, extrai `code`, troca por refresh_token e persiste.
+    Em erros, entra no `_retry_loop` com classificação e hints específicas.
+    """
+    _console.print(
+        "\nAgora vou pedir autorização para acessar sua conta. Vou abrir uma "
+        "página do Spotify no navegador.\n\n"
+        "Você autoriza o app, o Spotify redireciona para uma URL que começa "
+        "com seu Redirect URI, e você cola essa URL de volta aqui.\n"
+    )
+    auth_url = _build_authorization_url()
+    opened = _open_url(auth_url)
+    if not opened:
+        _console.print(f"Abra manualmente: {auth_url}\n")
+
+    def do_oauth() -> str:
+        paste = Prompt.ask(
+            "Cole a URL completa (a que começa com seu Redirect URI)"
+        )
+        code = _extract_code_from_url(paste)
+        return _exchange_code_for_refresh_token(code)
+
+    def classify(err: Exception) -> str:
+        try:
+            from spotipy.oauth2 import SpotifyOauthError  # type: ignore
+        except ImportError:  # pragma: no cover — spotipy sempre presente
+            SpotifyOauthError = ()  # type: ignore
+        if isinstance(err, ValueError):
+            return "bad_url"
+        if SpotifyOauthError and isinstance(err, SpotifyOauthError):
+            return "bad_code"
+        return "unknown"
+
+    hints = {
+        "bad_url": "A URL precisa começar com seu Redirect URI e conter '?code='.",
+        "bad_code": (
+            "O código expirou ou o Client ID/Secret está errado. "
+            "Gere uma nova URL de autorização no navegador."
+        ),
+        "unknown": "Tente novamente em alguns segundos.",
+    }
+
+    token = _retry_loop(do_oauth, classifier=classify, hints=hints)
+    _persist_refresh_token(token)
+    _console.print("\nAutorização concluída.\n")
