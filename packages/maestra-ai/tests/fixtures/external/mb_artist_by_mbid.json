@@ -3,10 +3,6 @@
     "id": "bd13909f-1c29-4c27-a874-d4aaf27c5b1a",
     "name": "Fleetwood Mac",
     "sort-name": "Fleetwood Mac",
-    "genre-list": [
-      {"name": "rock", "count": "42"},
-      {"name": "soft rock", "count": "17"}
-    ],
     "tag-list": [
       {"name": "70s", "count": "9"},
       {"name": "classic rock", "count": "12"}
