@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0-alpha.0] — 2026-04-20
+
+### Adicionado
+- **Last.fm como fonte externa de metadata** (`LastfmSource` via
+  `pylast>=5.3`). Lookup por artista+track (Last.fm não aceita ISRC no
+  endpoint público), retorna `top_tags`, `playcount`, `listeners`.
+  Rate limit ~5 req/s via Lock + monotonic.
+- **`SeedExpander`** — expansão on-demand de artistas similares via
+  `LastfmSource.get_similar_artists`. Cache por artista (chave
+  normalizada lowercase), TTL 60 dias, fallback silencioso quando
+  Last.fm não configurado.
+- **Guia interativo Last.fm** (`setup_guides.guide_lastfm`) — passos
+  numerados, instruções literais, validação leve da chave (32 hex),
+  retry + skip. Padrão inspirado em `_flow_A_collect_credentials`.
+- **Cache schema v2** — `{version: 2, tracks: {...}, similar_artists: {...}}`
+  com migração automática a partir de v1 ao load.
+- **Config nested `external_sources`** — `{musicbrainz, lastfm, getsongbpm}`
+  cada um com `{enabled, api_key?}`. Migração automática do shape legacy
+  `external_sources_enabled: bool` ao load (write-back apenas se houve
+  mudança real).
+- **Opt-in estendido no `maestra init`** com 3 opções (MB-only /
+  configurar LF+GSB agora / pular tudo). Orquestra guias.
+- **CLI**: `maestra config external set-key/clear-key/guide <source>` e
+  `enable-source/disable-source` por fonte. Comandos antigos
+  `enable`/`disable` (bulk) mantidos por compatibilidade.
+- **Atribuição OSC 8** estende para Last.fm (`https://www.last.fm/about`).
+- **Integration live test** para Last.fm (opt-in via env
+  `MAESTRA_LASTFM_KEY` + marker `integration_live`).
+
+### Nota
+- `default_enhancer()` agora considera config nested para instanciar
+  as sources habilitadas. MB-only users continuam funcionando sem
+  mudança de configuração — migração é idempotente.
+- Scoring composto, cascade do `Curator` e GetSongBPM vêm em alpha.1/alpha.2.
+
 ## [0.9.0] — 2026-04-20
 
 Consolidação do ciclo alpha.0 → alpha.6. Promoção para estável após
