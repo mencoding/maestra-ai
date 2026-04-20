@@ -268,81 +268,6 @@ def _apply_taste_to_weights(
     return out
 
 
-def _fetch_artists_genres(
-    sp,
-    *,
-    artist_ids: list[str],
-    warnings: list[str] | None = None,
-    progress_cb: Callable[[dict], None] | None = None,
-) -> dict[str, list[str]]:
-    """Enriquecimento de gêneros por artist_id.
-
-    Tenta batch primeiro (`sp.artists`). Em falha (Dev Mode bloqueia
-    `/v1/artists?ids=...`), cai em loop item-a-item (`sp.artist(id)`),
-    que funciona em todos os modos. 3 falhas consecutivas item-a-item
-    abortam com dict vazio + warning.
-
-    v0.8.0-alpha.4: chave do dict é `artist["id"]` (não `name`), para
-    permitir lookup estável mesmo quando o fallback item-a-item retorna
-    uma resposta sem o mesmo shape do batch.
-    MaestraError sempre propaga (auth/rate limit → pipeline central).
-    """
-    if not artist_ids:
-        return {}
-    ids = list(dict.fromkeys(artist_ids))
-
-    # 1. Tenta batch
-    try:
-        response = sp.artists(ids)
-    except MaestraError:
-        raise
-    except Exception:
-        pass
-    else:
-        result: dict[str, list[str]] = {}
-        for artist in (response or {}).get("artists", []) or []:
-            if artist and artist.get("id"):
-                result[artist["id"]] = list(artist.get("genres", []) or [])
-        return result
-
-    # 2. Fallback item-a-item
-    if warnings is not None:
-        warnings.append(
-            "O Spotify bloqueou a busca em lote de informações dos artistas. "
-            "Vou tentar buscar um de cada vez (mais lento).",
-        )
-
-    out: dict[str, list[str]] = {}
-    consecutive_failures = 0
-    total = len(ids)
-    for i, aid in enumerate(ids, 1):
-        try:
-            artist = sp.artist(aid)
-            if artist and artist.get("id"):
-                out[artist["id"]] = list(artist.get("genres", []) or [])
-            consecutive_failures = 0
-        except MaestraError:
-            raise
-        except Exception:
-            consecutive_failures += 1
-            if consecutive_failures >= 3:
-                if warnings is not None:
-                    warnings.append(
-                        "O Spotify também bloqueou as buscas individuais. "
-                        "Não consegui obter os gêneros das suas músicas desta vez.",
-                    )
-                return {}
-            # falha individual: segue em frente
-
-        if progress_cb and i % 5 == 0:
-            progress_cb({
-                "step": -1,
-                "name": "artists_fallback",
-                "detail": f"lendo gênero {i}/{total}...",
-            })
-
-    return out
-
 
 def _decade_of(release_date: str) -> str:
     """Converte 'YYYY-MM-DD', 'YYYY-MM' ou 'YYYY' em string da década.
@@ -694,11 +619,16 @@ def _build_top_100_for_enhancement(
 
 def _to_track_info_for_enhancer(t: dict) -> dict:
     """Adapta dict de track do spotipy para TrackInfo."""
+    first_spotify_aid = next(
+        (a.get("id") for a in (t.get("artists") or []) if a.get("id")),
+        None,
+    )
     return {
         "uri": t.get("uri", ""),
         "name": t.get("name") or "",
         "artists": [a.get("name", "") for a in (t.get("artists") or []) if a.get("name")],
         "isrc": ((t.get("external_ids") or {}).get("isrc")),
+        "spotify_artist_id": first_spotify_aid,
     }
 
 
@@ -1085,55 +1015,15 @@ def run(
         tracks_list,
         taste,
     )
-    # Fetch genres do top 50 artistas (por peso agregado pré-signals)
-    pre_artist_counter: Counter[str] = Counter()
-    for uri, w in adjusted_weights.items():
-        t = index.get(uri, {})
-        artists = t.get("artists") or []
-        if artists:
-            first = artists[0]
-            if first.get("name"):
-                pre_artist_counter[first["name"]] += w
-    top_artist_ids: list[str] = []
-    seen_ids: set[str] = set()
-    for aname, _ in pre_artist_counter.most_common(50):
-        for t in tracks_list:
-            for a in t.get("artists") or []:
-                if (a.get("name") == aname
-                        and a.get("id")
-                        and a["id"] not in seen_ids):
-                    top_artist_ids.append(a["id"])
-                    seen_ids.add(a["id"])
-                    break
-            if aname in {a.get("name") for a in t.get("artists") or []}:
-                break
-    artists_genres = _fetch_artists_genres(
-        sp, artist_ids=top_artist_ids, warnings=warnings,
-        progress_cb=progress_cb,
-    )
-    # v0.8.0-alpha.6: Spotify deprecou silenciosamente o campo `genres`
-    # em GET /v1/artists/{id} em 2025 (community.spotify.com). A chamada
-    # tem sucesso mas retorna genres=[] para ~todos os artistas. Se o
-    # fallback rodou mas não trouxe nenhum gênero, avisa o usuário.
-    if top_artist_ids and artists_genres and not any(artists_genres.values()):
-        warnings.append(
-            "O Spotify não fornece mais gêneros musicais na API pública. "
-            "As sugestões serão baseadas em décadas e artistas favoritos.",
-        )
-
-    sorted_tracks = sorted(
-        [t for t in tracks_list if t.get("uri") in adjusted_weights],
-        key=lambda t: adjusted_weights.get(t.get("uri", ""), 0),
-        reverse=True,
-    )
-    suggestions, rationale_entries, signals = _derive_suggestions(
-        sorted_tracks, adjusted_weights, artists_genres, taste,
-    )
-    rationale_path = _persist_rationale(rationale_entries)
+    # G1: artists_genres é preenchido pelo MB após enhance_many (Spotify depreciou /v1/artists genres em 2025)
+    artists_genres: dict[str, list[str]] = {}
 
     external_enhanced_count = 0
     external_sources_used: list[str] = []
     external_mb_with_genres = 0
+    external_mb_matched = 0
+    external_mb_artist_resolved = 0
+    external_mb_with_tags_only = 0
     cfg = storage.read_config()
     if cfg.get("external_sources_enabled") and enhance_external:
         from maestra_ai.core.external import default_enhancer
@@ -1156,12 +1046,43 @@ def run(
             )
             external_enhanced_count = len(enhanced)
             external_sources_used = active
+
+            # G2: métricas granulares do MB para diagnóstico + exibição
+            external_mb_matched = sum(
+                1 for t in enhanced if t.get("musicbrainz")
+            )
+            external_mb_artist_resolved = sum(
+                1 for t in enhanced if t.get("artist_mbid")
+            )
             external_mb_with_genres = sum(
                 1 for t in enhanced
-                if t.get("musicbrainz") and (
-                    t["musicbrainz"].get("genres") or t["musicbrainz"].get("tags")
-                )
+                if t.get("musicbrainz") and t["musicbrainz"].get("genres")
             )
+            external_mb_with_tags_only = sum(
+                1 for t in enhanced
+                if t.get("musicbrainz")
+                and not t["musicbrainz"].get("genres")
+                and t["musicbrainz"].get("tags")
+            )
+
+            # G1: artists_genres agora vem do MB (via spotify_artist_id),
+            # não mais do Spotify /v1/artists (que foi depreciado).
+            for t_info, enhanced_track in zip(track_infos, enhanced, strict=False):
+                spotify_aid = t_info.get("spotify_artist_id")
+                mb = enhanced_track.get("musicbrainz") or {}
+                mb_genres = mb.get("genres") or []
+                if spotify_aid and mb_genres:
+                    artists_genres[spotify_aid] = mb_genres
+
+    sorted_tracks = sorted(
+        [t for t in tracks_list if t.get("uri") in adjusted_weights],
+        key=lambda t: adjusted_weights.get(t.get("uri", ""), 0),
+        reverse=True,
+    )
+    suggestions, rationale_entries, signals = _derive_suggestions(
+        sorted_tracks, adjusted_weights, artists_genres, taste,
+    )
+    rationale_path = _persist_rationale(rationale_entries)
 
     return {
         "status": "ok",
@@ -1182,4 +1103,7 @@ def run(
         "external_enhanced_count": external_enhanced_count,
         "external_sources_used": external_sources_used,
         "external_mb_with_genres": external_mb_with_genres,
+        "external_mb_matched": external_mb_matched,
+        "external_mb_artist_resolved": external_mb_artist_resolved,
+        "external_mb_with_tags_only": external_mb_with_tags_only,
     }
