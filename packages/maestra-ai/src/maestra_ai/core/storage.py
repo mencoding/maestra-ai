@@ -13,10 +13,6 @@ except ImportError:
     keyring = None  # type: ignore[assignment]
 
 
-_SERVICE = "maestra-ai"
-_USER = "spotify-refresh-token"
-
-
 def _env_or(env_key: str, xdg_key: str, xdg_default: str, suffix: str = "maestra") -> Path:
     """Resolve diretório por prioridade: env var > XDG > default."""
     override = os.environ.get(env_key)

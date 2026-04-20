@@ -27,10 +27,8 @@ from maestra_ai.core.errors import MaestraError, PlaylistCreateForbiddenError
 from maestra_ai.core.onboard_types import (
     ExpansionContext,
     ExpansionInfo,
-    FailedPlaylist,
     OwnPlaylist,
     PlaylistSelector,
-    SelectedPlaylist,
 )
 
 WEIGHTS = {
@@ -289,13 +287,13 @@ def run(
       de playlist e reaproveita a existente como buffer. Nome é obtido via
       `sp.playlist(..., fields="name")` apenas para relatório.
 
-    - `total_cap`: v0.5.3 — teto desejado para total de faixas únicas
+    - `total_cap`: teto desejado para total de faixas únicas
       pontuadas. Default 5000.
 
-    - `playlist_selector`: v0.5.3 — callback opcional que decide quais
+    - `playlist_selector`: callback opcional que decide quais
       playlists do usuário entram na expansão. Veja "Expansão" abaixo.
 
-    ## Expansão por playlists próprias (v0.5.3)
+    ## Expansão por playlists próprias
 
     Executada entre recent e análise quando TODAS estas condições são
     verdadeiras:
@@ -313,7 +311,7 @@ def run(
     - `long_term`=3, `medium_term`=2, `short_term`=2
     - `saved` (Liked Songs ❤️)=3
     - `recent`=1
-    - `playlist`=2 (v0.5.3) — **aplicado uma única vez** por URI,
+    - `playlist`=2 — **aplicado uma única vez** por URI,
       mesmo que apareça em múltiplas playlists do usuário (dedup por
       `seen` set). Exemplo: faixa em top_long + duas playlists do
       usuário = 3 (long) + 2 (playlist) = 5, não 3 + 2 + 2 = 7.

@@ -72,6 +72,9 @@ def _call_spotify(fn, *args, **kwargs):
         raise
 
 
+# Escolha conservadora: Spotify API aceita até 50, mas 10 mantém
+# respostas rápidas e painel de CLI legível. Configurável via flag
+# --limit no cmd_search.
 SPOTIFY_SEARCH_PAGE_LIMIT = 10
 
 
