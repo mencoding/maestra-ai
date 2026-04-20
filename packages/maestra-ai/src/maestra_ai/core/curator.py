@@ -70,7 +70,7 @@ class Curator:
             if len(candidates) >= search_limit:
                 break
 
-        # Filtra rejeitadas pelo perfil de gosto
+        # Filtra rejeitadas pelo perfil de gosto (URI + context_score + artistas excluídos pelo caller)
         filtered = []
         for c in candidates:
             if self.taste.is_rejected(c["uri"]):
@@ -81,12 +81,8 @@ class Curator:
                 continue
             filtered.append(c)
 
-        # Filtra por artistas rejeitados
-        rejected_artists = set(self.taste.get_rejected_artists())
-        filtered = [
-            c for c in filtered
-            if c["artist"] not in rejected_artists
-        ]
+        # Filtra por artistas rejeitados no perfil (delegação ao TasteProfile)
+        filtered = self.taste.filter_with_artist_info(filtered)
 
         filtered.sort(
             key=lambda c: self.taste.context_score(c["uri"], context),
