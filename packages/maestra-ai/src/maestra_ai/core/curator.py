@@ -113,10 +113,14 @@ class Curator:
         # Filtra por artistas rejeitados no perfil (delegação ao TasteProfile)
         filtered = self.taste.filter_with_artist_info(filtered)
 
-        # 4) Re-rank (v0.10.0-alpha.1: ainda por context_score; integração
-        #    com compose_score virá em Task 18)
+        # 4) Re-rank por compose_score (taste + decade + tag + bpm ponderados)
+        from maestra_ai.core.config import load_and_migrate, load_curate_weights
+        cfg = load_and_migrate()
+        weights = load_curate_weights(cfg)
+        has_lf = (cfg.get("external_sources") or {}).get("lastfm", {}).get("enabled", False)
+
         filtered.sort(
-            key=lambda c: self.taste.context_score(c["uri"], context),
+            key=lambda c: self._compose_score_for(c, context, weights, has_lf),
             reverse=True,
         )
 
@@ -133,6 +137,57 @@ class Curator:
             filtered = limited
 
         return filtered[:count], queries_used, self._active_sources()
+
+    def _dominant_decades(self) -> set[str]:
+        """Carrega décadas dominantes globais do profile.json (onboard)."""
+        try:
+            from maestra_ai.core import storage
+            path = storage.data_dir() / "profile.json"
+            import json
+            if path.exists():
+                data = json.loads(path.read_text()) or {}
+                return set(data.get("dominant_decades") or [])
+        except Exception:
+            pass
+        return set()
+
+    def _track_tags(self, track: dict) -> set[str]:
+        """Tags do artista via cache external (MB + LF se presente).
+
+        v0.10.0-alpha.1: simplificado — retorna vazio (contribui 0 no score
+        via tag_similarity). Integração rica com enhancement cache virá
+        quando houver demanda de calibração real.
+        """
+        return set()
+
+    def _context_tags(self, context: str) -> set[str]:
+        """Tags do contexto derivadas de MOOD_TAG_KEYWORDS."""
+        from maestra_ai.core.external.mood_mappings import MOOD_TAG_KEYWORDS
+        ctx_lower = context.lower()
+        return {kw for kw in MOOD_TAG_KEYWORDS if kw in ctx_lower}
+
+    def _compose_score_for(self, track: dict, context: str, weights: dict, has_lastfm: bool) -> float:
+        from maestra_ai.core.scoring import (
+            compose_score,
+            decade_match,
+            effective_weights,
+            tag_similarity,
+        )
+        dominant = self._dominant_decades()
+        t_tags = self._track_tags(track)
+        c_tags = self._context_tags(context)
+        tag = tag_similarity(t_tags, c_tags)
+        dec = decade_match(track.get("release_date"), dominant)
+        bpm = 0.0  # BPM vem em alpha.2
+        taste_score = max(-1.0, min(1.0, self.taste.context_score(track["uri"], context)))
+        w = effective_weights(
+            weights,
+            has_lastfm=has_lastfm,
+            has_bpm_target=False,
+            track_has_bpm=False,
+            has_decade=bool(dominant),
+        )
+        return compose_score(weights=w, taste=taste_score, tag=tag, decade=dec, bpm=bpm)
 
     def _resolve_queries(self, context):
         """Resolve contexto em lista de queries de busca.

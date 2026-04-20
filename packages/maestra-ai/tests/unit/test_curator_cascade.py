@@ -67,3 +67,27 @@ def test_curate_returns_sources_used(mocker):
     mocker.patch.object(curator, "_active_sources", return_value=["musicbrainz", "lastfm"])
     tracks, queries, sources = curator.curate("foco")
     assert sources == ["musicbrainz", "lastfm"]
+
+
+def test_reranking_uses_compose_score(mocker):
+    """Verifica que o score composto governa ordenação (não só taste.context_score)."""
+    from maestra_ai.core.curator import Curator
+
+    results = [
+        {"uri": "spotify:track:A", "name": "A", "artist": "Art1", "release_date": "2015-01-01"},
+        {"uri": "spotify:track:B", "name": "B", "artist": "Art2", "release_date": "1990-01-01"},
+    ]
+    controller = _FakeController({"q": results})
+    taste = _FakeTaste()
+    curator = Curator(controller, taste)
+
+    mocker.patch.object(curator, "_build_informed_query", return_value="q")
+    mocker.patch.object(curator, "_active_sources", return_value=["musicbrainz", "lastfm"])
+    # Força context_score = 0 pra ambos; decade_match é que diferencia
+    mocker.patch.object(taste, "context_score", return_value=0.0)
+    mocker.patch.object(curator, "_dominant_decades", return_value={"2010s"})
+    mocker.patch.object(curator, "_track_tags", return_value=set())
+    mocker.patch.object(curator, "_context_tags", return_value=set())
+    tracks, _, _ = curator.curate("foco")
+    # Track A (2010s) deve vir antes de B (1990s) porque decade_match
+    assert tracks[0]["uri"] == "spotify:track:A"
