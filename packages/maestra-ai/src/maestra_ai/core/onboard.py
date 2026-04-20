@@ -323,6 +323,39 @@ _FALLBACK_MOODS = [
 ]
 
 
+# v0.9.0-alpha.5: fallback ESPECÍFICO por família quando todos os moods
+# derivados já foram usados. Evita combinações desengonçadas tipo
+# "alternative metal para pausa do trabalho" que o fallback global gera.
+# Tentado antes de cair em `_FALLBACK_MOODS` universal.
+_FALLBACK_MOODS_BY_FAMILY: dict[str, list[str]] = {
+    "metal":              ["para treino", "para direção noturna", "para energia alta"],
+    "world":              ["para despertar cultural", "para contemplação",
+                           "para imersão cultural"],
+    "classical":          ["para leitura longa", "para foco sustentado",
+                           "para estudo"],
+    "folk":               ["para fim de tarde", "para tarde ao ar livre",
+                           "para reflexão calma"],
+    "jazz":               ["para jantar", "para noite tranquila",
+                           "para tarde suave"],
+    "electronic-ambient": ["para trabalho analítico", "para foco silencioso",
+                           "para escrita noturna"],
+    "electronic-dance":   ["para treino", "para fim de semana",
+                           "para energia alta"],
+    "hip-hop":            ["para caminhada urbana", "para estrada",
+                           "para treino"],
+    "soul":               ["para fim de tarde suave", "para jantar",
+                           "para noite tranquila"],
+    "indie":              ["para tarde ao ar livre", "para caminhada",
+                           "para reflexão calma"],
+    "post-rock":          ["para contemplação", "para leitura longa",
+                           "para escrita noturna"],
+    "rock":               ["para deslocamento", "para treino",
+                           "para energia alta"],
+    "pop":                ["para manhã leve", "para pausa do dia",
+                           "para humor positivo"],
+}
+
+
 # v0.9.0-alpha.3 (B): mood derivado de tags MB quando gênero não está no
 # mapa curado. Whitelist de keywords que aparecem em tags MB e mapa de
 # mood → contexto de uso. Ordem de prioridade:
@@ -741,7 +774,9 @@ def _select_mood(
       2. Para cada mood derivado das tags MB dos top-3 artistas deste
          gênero, tenta resolver um contexto via família (se houver) ou
          via `_MOOD_CONTEXT`, respeitando `used_contexts` (C1).
-      3. Se nenhum mood der, cai em `_FALLBACK_MOODS`.
+      3a. `_FALLBACK_MOODS_BY_FAMILY[family]` — fallback específico da
+          família (alpha.5), mais coerente que o genérico.
+      3b. `_FALLBACK_MOODS` genérico — último recurso.
 
     `used_contexts` pode ser mutado pelo chamador entre chamadas
     sucessivas para garantir diversidade entre as top-K sugestões.
@@ -786,7 +821,22 @@ def _select_mood(
             if ctx is not None:
                 return ctx
 
-    # 3. Fallback genérico, evitando repetição se possível.
+    # 3a. Fallback específico por família (v0.9.0-alpha.5). Preferido
+    # sobre o fallback global porque mantém coerência com o gênero.
+    if family is not None:
+        family_fallbacks = _FALLBACK_MOODS_BY_FAMILY.get(family, [])
+        if family_fallbacks:
+            start_fam = hash(seed) % len(family_fallbacks)
+            for offset in range(len(family_fallbacks)):
+                candidate = family_fallbacks[
+                    (start_fam + offset) % len(family_fallbacks)
+                ]
+                if candidate not in used_contexts:
+                    return candidate
+            # Todos usados — ainda melhor repetir família do que cair em
+            # fallback global genérico, mas prefere variar em último caso.
+
+    # 3b. Fallback genérico, evitando repetição se possível.
     start_f = hash(seed) % len(_FALLBACK_MOODS)
     for offset in range(len(_FALLBACK_MOODS)):
         candidate = _FALLBACK_MOODS[(start_f + offset) % len(_FALLBACK_MOODS)]

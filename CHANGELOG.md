@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0-alpha.5] — 2026-04-20
+
+### Adicionado
+- **Fallback específico por família de gênero** em `_select_mood`.
+  Antes, quando todos os contextos derivados de tags MB eram consumidos
+  por `used_contexts`, a sugestão caía no `_FALLBACK_MOODS` universal
+  ("para concentração", "para pausa do trabalho", etc.), gerando
+  combinações desengonçadas como "alternative metal para pausa do
+  trabalho". Agora existe um passo intermediário:
+  `_FALLBACK_MOODS_BY_FAMILY[family]` com ~3 contextos coerentes por
+  família (metal: "para treino"/"direção noturna"/"energia alta";
+  world: "despertar cultural"/"contemplação"/"imersão cultural"; e
+  assim por diante). Cobre 13 famílias: metal, world, classical,
+  folk, jazz, electronic-ambient, electronic-dance, hip-hop, soul,
+  indie, post-rock, rock, pop.
+
+### Nota
+- A prioridade completa de `_select_mood` agora tem 4 níveis: mapa
+  curado por gênero → tags MB dos top-3 artistas → fallback por
+  família → fallback global.
+
 ## [0.9.0-alpha.4] — 2026-04-20
 
 ### Adicionado

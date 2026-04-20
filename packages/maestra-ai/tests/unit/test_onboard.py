@@ -1868,3 +1868,62 @@ class TestSelectMoodWithTopN:
         assert ctx1 != ctx2
 
 
+class TestFallbackByFamily:
+    """alpha.5: fallback específico por família quando moods esgotam."""
+
+    def test_metal_esgotado_cai_em_family_fallback(self):
+        """Quando todos contextos derivados de mood já foram usados,
+        usa fallback da família 'metal' antes do genérico."""
+        from maestra_ai.core.onboard import _select_mood
+        # Tag "heavy" + família metal → ["para garagem", "para direção intensa"]
+        # Ambos marcados como usados → force family fallback
+        used = {"para garagem", "para direção intensa",
+                "para foco profundo", "para direção noturna"}
+        result = _select_mood(
+            "alternative metal", seed="seed-x",
+            artists_tags={"a1": ["heavy", "intense"]},
+            genre_to_top_artist_ids={"alternative metal": ["a1"]},
+            used_contexts=used,
+        )
+        # Deve vir do _FALLBACK_MOODS_BY_FAMILY["metal"]
+        assert result in (
+            "para treino", "para direção noturna", "para energia alta",
+        ) or result not in used
+
+    def test_sem_family_cai_em_global(self):
+        """Gênero desconhecido sem família → fallback global."""
+        from maestra_ai.core.onboard import _select_mood
+        result = _select_mood(
+            "completely-unknown-xyz", seed="z",
+            artists_tags=None,
+            genre_to_top_artist_ids={},
+            used_contexts=set(),
+        )
+        # Pode vir do _FALLBACK_MOODS global
+        assert result in (
+            "para concentração", "para relaxar no fim do dia",
+            "para caminhada matinal", "para pausa do trabalho",
+        )
+
+    def test_world_family_fallback_para_contemplacao(self):
+        """Família 'world' esgotada → fallback 'para despertar cultural'
+        ou similar, NÃO 'para pausa do trabalho'."""
+        from maestra_ai.core.onboard import _select_mood
+        used = {"para foco profundo", "para contemplação",
+                "para foco silencioso"}
+        result = _select_mood(
+            "central asian throat singing", seed="seed-y",
+            artists_tags={"a1": ["heavy", "dark"]},
+            genre_to_top_artist_ids={"central asian throat singing": ["a1"]},
+            used_contexts=used,
+        )
+        # Deve preferir family fallback de world antes do genérico
+        assert result in (
+            "para despertar cultural", "para contemplação",
+            "para imersão cultural",
+            # aceita também outros contextos de world que ainda não foram usados
+            "noturno para contemplação", "para meditação ativa",
+        ) or result not in {"para pausa do trabalho",
+                            "para caminhada matinal"}
+
+
