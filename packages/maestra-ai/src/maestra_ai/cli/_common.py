@@ -121,9 +121,9 @@ def _active_context_value(context_state):
 
 
 def _prune_candidates(tracks, taste, context):
-    """Shim — delega para core.taste._prune_candidates."""
+    """Shim — delega para core.taste.prune_candidates."""
     from maestra_ai.core import taste as taste_mod
-    return taste_mod._prune_candidates(tracks, taste, context)
+    return taste_mod.prune_candidates(tracks, taste, context)
 
 
 def taste_summary(taste):

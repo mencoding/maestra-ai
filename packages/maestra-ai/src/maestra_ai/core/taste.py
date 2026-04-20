@@ -522,7 +522,12 @@ def _signal_weight(signal):
     return 0
 
 
-def _prune_candidates(tracks, profile, context):
+def prune_candidates(tracks, profile, context):
+    """Decide quais faixas de uma playlist são candidatas a remoção.
+
+    **API pública** — consumida por `cli/_common.py` e testes.
+    Retorna lista de `{**track, reason, context_score}`.
+    """
     candidates = []
     for track in tracks:
         uri = track["uri"]
@@ -538,6 +543,10 @@ def _prune_candidates(tracks, profile, context):
             "context": context,
         })
     return candidates
+
+
+# Alias para uso interno em `review`, onde o parâmetro homônimo ocultaria a função.
+_prune_candidates_fn = prune_candidates
 
 
 def review(profile, playlist_tracks, context, *, prune_candidates=None, top=10):
@@ -597,7 +606,9 @@ def review(profile, playlist_tracks, context, *, prune_candidates=None, top=10):
     )
     unscored_rows = [row for row in rows if row["score"] == 0]
     if prune_candidates is None:
-        prune_candidates = _prune_candidates(playlist_tracks, profile, context)
+        prunable = _prune_candidates_fn(playlist_tracks, profile, context)
+    else:
+        prunable = prune_candidates
 
     return {
         "context": context,
@@ -609,7 +620,7 @@ def review(profile, playlist_tracks, context, *, prune_candidates=None, top=10):
         "negative_signals": sum(row["negative"] for row in rows),
         "top_positive": positive_rows[:top],
         "top_negative": negative_rows[:top],
-        "prune_candidates": prune_candidates[:top],
+        "prune_candidates": prunable[:top],
         "dominant_artists": [
             {"artist": artist, "count": count}
             for artist, count in artist_counts.most_common(top)

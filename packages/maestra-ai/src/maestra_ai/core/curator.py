@@ -175,7 +175,7 @@ class Curator:
         from maestra_ai.core import taste as taste_mod
 
         tracks = self.controller.playlist_tracks(playlist_id)
-        candidates = taste_mod._prune_candidates(tracks, self.taste, context)
+        candidates = taste_mod.prune_candidates(tracks, self.taste, context)
 
         if not confirm:
             return {
