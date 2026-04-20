@@ -572,3 +572,84 @@ class TestReset:
         assert (data_dir / "taste_profile.json").exists()
         assert (state_dir / "onboard_rationale.json").exists()
         assert token_calls["n"] == 0
+
+
+class TestRunOrchestration:
+    """Orquestração `run_interactive` / `run_auto` — dispatch por estado."""
+
+    def test_run_interactive_estado_A_menu_sair(self, monkeypatch):
+        from maestra_ai.core import init
+
+        monkeypatch.setattr(init, "detect_state", lambda: "A")
+        monkeypatch.setattr("rich.prompt.Prompt.ask", lambda *a, **k: "2")
+
+        report = init.run_interactive()
+        assert report["action"] == "exit"
+        assert report["state_before"] == "A"
+
+    def test_run_auto_estado_A_falha_com_erro(self, monkeypatch):
+        from maestra_ai.core import init
+        from maestra_ai.core.errors import UserError
+
+        monkeypatch.setattr(init, "detect_state", lambda: "A")
+        with pytest.raises(UserError, match="requer interação"):
+            init.run_auto()
+
+    def test_run_auto_estado_A2_falha_com_erro(self, monkeypatch):
+        from maestra_ai.core import init
+        from maestra_ai.core.errors import UserError
+
+        monkeypatch.setattr(init, "detect_state", lambda: "A2")
+        with pytest.raises(UserError, match="requer interação"):
+            init.run_auto()
+
+    def test_run_auto_estado_B_executa_analise(self, monkeypatch):
+        from maestra_ai.core import init
+
+        captured = {}
+
+        def fake_flow_B(**kwargs):
+            captured.update(kwargs)
+            return {
+                "state_before": "B",
+                "action": "initial_analysis",
+                "playlist_id": "pl_auto",
+                "taste_profile_updated": True,
+                "rationale_path": None,
+                "signals": None,
+                "suggestions": [],
+                "warnings": [],
+            }
+
+        monkeypatch.setattr(init, "detect_state", lambda: "B")
+        monkeypatch.setattr(init, "_flow_B_analysis", fake_flow_B)
+
+        report = init.run_auto()
+        assert report["action"] == "initial_analysis"
+        assert captured.get("playlist_name_hint") == "Maestra"
+        assert captured.get("skip_expansion") is True
+
+    def test_run_auto_estado_C_executa_update_full(self, monkeypatch):
+        from maestra_ai.core import init
+
+        captured = {}
+
+        def fake_flow_C(**kwargs):
+            captured.update(kwargs)
+            return {
+                "state_before": "C",
+                "action": "update_full",
+                "playlist_id": None,
+                "taste_profile_updated": True,
+                "rationale_path": None,
+                "signals": None,
+                "suggestions": [],
+                "warnings": [],
+            }
+
+        monkeypatch.setattr(init, "detect_state", lambda: "C")
+        monkeypatch.setattr(init, "_flow_C_update", fake_flow_C)
+
+        report = init.run_auto()
+        assert report["action"] == "update_full"
+        assert captured.get("mode") == "full"

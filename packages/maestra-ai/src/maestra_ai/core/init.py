@@ -690,3 +690,102 @@ def _flow_reset_full() -> InitReport:
         "suggestions": [],
         "warnings": [],
     }
+
+
+def run_interactive() -> InitReport:
+    """Executa o wizard `maestra init` em modo interativo.
+
+    Detecta o estado atual e apresenta o menu contextual. Dispatch por
+    estado segue a tabela do plano:
+
+      - A  → [1] _flow_A → _flow_A2 → _flow_B encadeados; [2] exit.
+      - A2 → [1] _flow_A2 → _flow_B; [2] reset_partial; [3] exit.
+      - B  → [1] _flow_B_analysis; [2] reset_partial; [3] exit.
+      - C  → [1] sub-menu (recent_mood/full/voltar); [2] reset_full;
+             [3] exit.
+
+    Em todos os fluxos, `UserAbort` levantado por sub-fluxos (ex: retry
+    loop desistido) é propagado para o CLI traduzir em exit code.
+    """
+    state = detect_state()
+    render_menu(state)
+
+    if state == "A":
+        choice = Prompt.ask("Escolha", choices=["1", "2"], default="1")
+        if choice == "2":
+            return _report_exit("A")
+        # [1] Começar agora: A → A2 → B encadeados
+        _flow_A_collect_credentials()
+        _flow_A2_oauth_paste_back()
+        report = _flow_B_analysis(playlist_name_hint=None, skip_expansion=False)
+        # Preserva state_before original da jornada
+        report = dict(report)  # type: ignore[assignment]
+        report["state_before"] = "A"
+        return report  # type: ignore[return-value]
+
+    if state == "A2":
+        choice = Prompt.ask("Escolha", choices=["1", "2", "3"], default="1")
+        if choice == "3":
+            return _report_exit("A2")
+        if choice == "2":
+            report = _flow_reset_partial()
+            report = dict(report)  # type: ignore[assignment]
+            report["state_before"] = "A2"
+            return report  # type: ignore[return-value]
+        # [1] Continuar — autorizar e analisar
+        _flow_A2_oauth_paste_back()
+        report = _flow_B_analysis(playlist_name_hint=None, skip_expansion=False)
+        report = dict(report)  # type: ignore[assignment]
+        report["state_before"] = "A2"
+        return report  # type: ignore[return-value]
+
+    if state == "B":
+        choice = Prompt.ask("Escolha", choices=["1", "2", "3"], default="1")
+        if choice == "3":
+            return _report_exit("B")
+        if choice == "2":
+            return _flow_reset_partial()
+        return _flow_B_analysis(playlist_name_hint=None, skip_expansion=False)
+
+    # state == "C"
+    choice = Prompt.ask("Escolha", choices=["1", "2", "3"], default="1")
+    if choice == "3":
+        return _report_exit("C")
+    if choice == "2":
+        return _flow_reset_full()
+    # [1] Atualizar — sub-menu recent_mood/full/voltar
+    render_update_submenu()
+    sub = Prompt.ask("Escolha", choices=["1", "2", "3"], default="1")
+    if sub == "1":
+        return _flow_C_update(mode="recent_mood")
+    if sub == "2":
+        return _flow_C_update(mode="full")
+    # [3] Voltar — re-chama run_interactive recursivamente
+    return run_interactive()
+
+
+def run_auto() -> InitReport:
+    """Executa o wizard `maestra init` em modo automático (sem prompts).
+
+    Cobre apenas os estados B e C — A e A2 levantam `UserError` porque
+    exigem input humano (criação de app no painel Spotify ou paste-back
+    da URL OAuth).
+
+    - B → `_flow_B_analysis(playlist_name_hint="Maestra", skip_expansion=True)`.
+    - C → `_flow_C_update(mode="full")`.
+    """
+    from maestra_ai.core.errors import UserError
+
+    state = detect_state()
+    if state in ("A", "A2"):
+        raise UserError(
+            f"Estado '{state}' requer interação humana (criar app Spotify "
+            "e/ou autorizar OAuth). Rode `maestra init` sem --auto."
+        )
+    if state == "B":
+        return _flow_B_analysis(
+            playlist_name_hint="Maestra",
+            skip_expansion=True,
+        )
+    # state == "C"
+    return _flow_C_update(mode="full")

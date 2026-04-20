@@ -76,9 +76,12 @@ def _import_subcommands() -> None:
     from maestra_ai.cli import (
         help as help_cmd,
     )
+    from maestra_ai.cli import (
+        init as init_cmd,
+    )
     _ = (auth, basic, config_cmd, context_cmd, curate, director, doctor,
-         feedback, flow, help_cmd, history, onboard, playback, playlist,
-         rollback, taste)
+         feedback, flow, help_cmd, history, init_cmd, onboard, playback,
+         playlist, rollback, taste)
 
 
 def _build_parser() -> argparse.ArgumentParser:
