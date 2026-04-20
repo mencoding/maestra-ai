@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0-alpha.1] — 2026-04-20
+
+### Adicionado
+- **Scoring composto** em `core/scoring.py`: componentes puros
+  (`tag_similarity` Jaccard, `decade_match`, `bpm_proximity`) +
+  `effective_weights` (redistribui para taste quando sinal falta) +
+  `compose_score` (soma ponderada).
+- **`curate_weights` em `config.json`** com defaults
+  `{taste: 0.4, tag: 0.3, decade: 0.2, bpm: 0.1}`. Validação: soma =
+  1.0 ± 0.01, cada valor em [0, 1]. Config inválido cai para defaults
+  com log warning.
+- **`Curator` em modo cascade**: tenta query informada primeiro
+  (`_build_informed_query`, stub nesta release); se abaixo de
+  `MIN_CANDIDATES = 10`, complementa com queries do `SEMANTIC_MAP`.
+- **Re-rank por `compose_score`** no `Curator.curate`. Substitui o
+  sort simples por `taste.context_score`. Degradação graciosa aplicada
+  automaticamente.
+- **`Curator.curate` retorna tripla** `(tracks, queries_used, sources_used)`.
+- **Atribuição condicional** no `maestra curate --human`: só imprime
+  "Metadata: ..." quando sources_used não vazio.
+
+### Nota
+- `bpm_proximity` fica sempre 0 nesta release (GetSongBPM vem em alpha.2);
+  o peso redistribui automaticamente para taste via `effective_weights`.
+- Query informada ainda é stub (retorna None) — cascade cai direto no
+  SEMANTIC_MAP. A derivação real via `conjunto_positivo` virá quando
+  houver uso suficiente para calibrar.
+
 ## [0.10.0-alpha.0] — 2026-04-20
 
 ### Adicionado
