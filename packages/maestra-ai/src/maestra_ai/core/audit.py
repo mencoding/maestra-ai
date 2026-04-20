@@ -32,6 +32,12 @@ def _path_active() -> Path:
 
 
 def _redact(data: Any) -> Any:
+    """Redige valores de chaves sensíveis.
+
+    Chaves em `_SECRET_KEYS` casam por igualdade exata (lowercase).
+    Variantes como `"user_email"` ou `"refresh_token_ttl"` NÃO casam
+    — se precisar redactar, adicionar explicitamente ao set.
+    """
     if isinstance(data, dict):
         return {k: ("REDACTED" if k.lower() in _SECRET_KEYS else _redact(v)) for k, v in data.items()}
     if isinstance(data, list):
