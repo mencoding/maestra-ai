@@ -159,6 +159,37 @@ def _ask_smart_exit(error_kind: str, hint: str) -> bool:
     return choice == "1"
 
 
+def _prompt_external_sources_optin() -> bool:
+    """Pergunta se o usuário quer habilitar fontes externas.
+
+    v0.9: apenas 2 opções ativas — (2) pular, (3) só MusicBrainz.
+    Opção 1 (Last.fm/BPM) chega em v0.10.
+    """
+    from rich.prompt import Prompt
+
+    _console.print(
+        "\n[bold]━━━ Melhorar curadoria com fontes externas (opcional) ━━━[/bold]\n"
+    )
+    _console.print(
+        "A Maestra pode consultar o MusicBrainz (banco público) para"
+        " identificar gêneros canônicos das faixas. Isso recupera"
+        " sugestões mais ricas agora que o Spotify removeu o campo"
+        " `genres` da API pública.\n"
+    )
+    _console.print("  [2] Pular — curadoria segue só com dados do Spotify")
+    _console.print("  [3] Usar MusicBrainz (sem chave, sem configuração)\n")
+
+    while True:
+        choice = Prompt.ask("Escolha", choices=["1", "2", "3"], default="3")
+        if choice == "1":
+            _console.print(
+                "[yellow]Last.fm e BPM chegam em v0.10 — por ora só MusicBrainz. "
+                "Escolha 2 ou 3.[/yellow]\n"
+            )
+            continue
+        return choice == "3"
+
+
 def _retry_loop(
     fn: Callable[[], T],
     *,
@@ -553,6 +584,11 @@ def _flow_B_analysis(  # noqa: N802 — ecoa nome do state (B) para legibilidade
         # antes o user ficava sem feedback durante dezenas de segundos em
         # fetches com paginação longa.
         kwargs["progress_cb"] = _make_onboard_progress_cb()
+        enable_external = _prompt_external_sources_optin()
+        cfg = storage.read_config()
+        cfg["external_sources_enabled"] = enable_external
+        storage.write_config(cfg)
+        kwargs["enhance_external"] = enable_external
         return onboard.run(sp, taste, **kwargs)
 
     def classify(err: Exception) -> str:

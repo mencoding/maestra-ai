@@ -20,8 +20,17 @@ class TestImportSemSideEffect:
         custom_dir = tmp_path / "maestra-data-test"
         monkeypatch.setenv("MAESTRA_DATA_DIR", str(custom_dir))
         # Força reimport do módulo e do storage.
-        for m in ("maestra_ai.cli._common", "maestra_ai.core.storage"):
+        # Inclui maestra_ai.core.init porque ele importa storage no topo;
+        # sem popar init, o módulo antigo mantém referência ao storage velho
+        # e monkeypatches em testes posteriores não alcançam _has_config.
+        # Remove também o atributo do pacote para evitar que
+        # `from maestra_ai.core import init` retorne o módulo antigo via
+        # atributo do pacote em vez de reimportar.
+        import maestra_ai.core as _core_pkg
+        for m in ("maestra_ai.cli._common", "maestra_ai.core.storage", "maestra_ai.core.init"):
             sys.modules.pop(m, None)
+        if hasattr(_core_pkg, "init"):
+            delattr(_core_pkg, "init")
         importlib.import_module("maestra_ai.cli._common")
         # O import NÃO deve ter criado custom_dir.
         assert not custom_dir.exists(), \
