@@ -179,3 +179,60 @@ def test_fetch_artist_genres_http_network_error(mb):
     with patch("urllib.request.urlopen", side_effect=Exception("boom")):
         genres = mb._fetch_artist_genres_http("some-mbid")
     assert genres == []
+
+
+# ---------------------------------------------------------------------------
+# Testes da promoção de tags para gêneros (G5)
+# ---------------------------------------------------------------------------
+
+def test_promoted_genres_from_tags_basic():
+    from maestra_ai.core.external.musicbrainz import _promoted_genres_from_tags
+    tags = ["70s", "classic rock", "american", "folk rock", "seen live"]
+    promoted = _promoted_genres_from_tags(tags)
+    assert promoted == ["classic rock", "folk rock"]
+
+
+def test_promoted_genres_from_tags_dedup():
+    from maestra_ai.core.external.musicbrainz import _promoted_genres_from_tags
+    tags = ["Rock", "rock", "indie rock"]
+    promoted = _promoted_genres_from_tags(tags)
+    # Preserva ordem e forma original do primeiro match; lowercased dedup
+    assert promoted == ["Rock", "indie rock"]
+
+
+def test_promoted_genres_from_tags_empty():
+    from maestra_ai.core.external.musicbrainz import _promoted_genres_from_tags
+    assert _promoted_genres_from_tags([]) == []
+
+
+def test_promoted_genres_from_tags_ignores_non_genre():
+    from maestra_ai.core.external.musicbrainz import _promoted_genres_from_tags
+    assert _promoted_genres_from_tags(["80s", "male vocalist", "seen live"]) == []
+
+
+def test_artist_genres_merges_http_genres_with_promoted_tags(mb):
+    """Integration: _artist_genres_and_tags retorna genres + promoted tags."""
+    artist_via_lib = {
+        "artist": {
+            "id": "some-mbid",
+            "name": "Test Artist",
+            "tag-list": [
+                {"name": "classic rock", "count": "5"},
+                {"name": "70s", "count": "3"},
+                {"name": "british", "count": "2"},
+                {"name": "folk rock", "count": "1"},
+            ],
+        }
+    }
+    with patch("musicbrainzngs.get_artist_by_id", return_value=artist_via_lib), \
+         patch.object(mb, "_fetch_artist_genres_http", return_value=["rock"]):
+        genres, tags = mb._artist_genres_and_tags("some-mbid")
+    assert "rock" in genres
+    assert "classic rock" in genres
+    assert "folk rock" in genres
+    assert "70s" not in genres
+    assert "british" not in genres
+    # Tags continuam intactas (tanto as promovidas quanto as não)
+    assert "classic rock" in tags
+    assert "70s" in tags
+    assert "british" in tags

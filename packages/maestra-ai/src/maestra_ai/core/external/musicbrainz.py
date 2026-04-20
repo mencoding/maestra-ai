@@ -21,6 +21,38 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# v0.9.0-alpha.2 G5: whitelist de keywords para promover tags do MB
+# que parecem gênero para o campo `genres` efetivo. Filtro conservador —
+# exclui tokens curtos/ambíguos. Revisar ocasionalmente conforme feedback.
+GENRE_KEYWORDS = frozenset({
+    "rock", "pop", "jazz", "electronic", "folk", "metal", "punk",
+    "hip hop", "rap", "classical", "ambient", "indie", "alternative",
+    "soul", "funk", "blues", "reggae", "country", "r&b", "rnb",
+    "techno", "house", "trance", "edm", "experimental", "shoegaze",
+    "grunge", "disco", "gospel", "latin",
+})
+
+
+def _promoted_genres_from_tags(tags: list[str]) -> list[str]:
+    """Retorna subconjunto de `tags` que parecem gênero (match em GENRE_KEYWORDS).
+
+    Deduplicação preserva ordem. Tags não promovidas NÃO são retornadas —
+    elas continuam existindo na lista de tags do artista para uso futuro
+    (mood, contexto).
+    """
+    seen: set[str] = set()
+    promoted: list[str] = []
+    for tag in tags:
+        if not tag:
+            continue
+        lowered = tag.lower()
+        if any(kw in lowered for kw in GENRE_KEYWORDS):
+            if lowered not in seen:
+                seen.add(lowered)
+                promoted.append(tag)
+    return promoted
+
+
 _USER_AGENT_APP = "maestra-ai"
 _USER_AGENT_CONTACT = "https://github.com/mencoding/maestra-ai"
 
@@ -95,7 +127,17 @@ class MusicBrainzSource:
         # Gêneros via HTTP direto — musicbrainzngs 0.7.1 não suporta inc=genres
         genres = self._fetch_artist_genres_http(mbid)
 
-        return genres, tags
+        # G5: promove tags que parecem gênero e faz merge com gêneros HTTP
+        promoted = _promoted_genres_from_tags(tags)
+        seen: set[str] = set()
+        effective_genres: list[str] = []
+        for g in list(genres) + promoted:
+            lowered = g.lower()
+            if lowered not in seen:
+                seen.add(lowered)
+                effective_genres.append(g)
+
+        return effective_genres, tags
 
     def _fetch_artist_genres_http(self, mbid: str) -> list[str]:
         """Busca gêneros do artista via HTTP direto na API REST do MusicBrainz.
