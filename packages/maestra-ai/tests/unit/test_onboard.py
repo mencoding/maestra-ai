@@ -610,6 +610,39 @@ class TestPlaylistExpansion:
         assert report["playlist_expansion"]["tracks_added"] == 5
 
 
+class TestExpansionPropagaAuthError:
+    """M2 v0.6.2: AuthError em _fetch_own_playlists propaga;
+    não vira 'no_own_playlists' silencioso."""
+
+    def test_auth_error_durante_fetch_playlists_nao_eh_silenciado(
+        self, tmp_path, monkeypatch,
+    ):
+        import pytest
+        from maestra_ai.core.errors import AuthError
+        from maestra_ai.core.taste import TasteProfile
+
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+
+        sp = TestPlaylistExpansion()._sp_with_playlists()
+        # _resolve_playlist_name chama current_user_playlists antes de
+        # _fetch_own_playlists. Primeira chamada devolve lista vazia (sem colisão
+        # de nome); segunda chamada (dentro de _fetch_own_playlists) levanta
+        # AuthError — esse é o cenário que queremos testar.
+        sp.current_user_playlists.side_effect = [
+            {"items": [], "next": None},   # _resolve_playlist_name — ok
+            AuthError("revoked"),           # _fetch_own_playlists — deve propagar
+        ]
+
+        taste = TasteProfile(tmp_path / "taste.json")
+        with pytest.raises(AuthError, match="revoked"):
+            onboard.run(
+                sp, taste, playlist_name="M", seed_count=0,
+                playlist_selector=lambda pls, ctx: [],
+                total_cap=5000,
+            )
+
+
 class TestExpansionEdgeCases:
     """v0.5.6 #25: edge cases do contrato do selector."""
 

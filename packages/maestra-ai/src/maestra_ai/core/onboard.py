@@ -23,7 +23,7 @@ from collections import Counter
 from collections.abc import Callable
 
 from maestra_ai.core import storage
-from maestra_ai.core.errors import PlaylistCreateForbiddenError
+from maestra_ai.core.errors import MaestraError, PlaylistCreateForbiddenError
 from maestra_ai.core.onboard_types import (
     ExpansionContext,
     ExpansionInfo,
@@ -247,7 +247,6 @@ def _derive_suggestions(tracks_by_weight: list[dict]) -> list[str]:
 
 def _resolve_playlist_name(sp, desired: str) -> str:
     """Se já existe playlist com esse nome, acrescenta sufixo numérico."""
-    from maestra_ai.core.errors import MaestraError
     try:
         existing = sp.current_user_playlists(limit=50).get("items", [])
     except MaestraError:
@@ -485,8 +484,10 @@ def run(
                     lambda n: report_step(6, "Listando playlists", f"{n}")
                 ) if progress_cb else None,
             )
+        except MaestraError:
+            raise  # AuthError/RateLimit/API → pipeline central
         except Exception:
-            own_playlists, empty_count = [], 0
+            own_playlists, empty_count = [], 0  # shape inesperada → fallback
         expansion_info["attempted"] = True
         expansion_info["offered_playlists"] = len(own_playlists)
         # v0.5.7 #17: expõe contagem para CLI distinguir "nenhuma playlist
