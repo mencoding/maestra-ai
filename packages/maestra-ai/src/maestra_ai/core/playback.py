@@ -3,7 +3,7 @@ import json
 import os
 from datetime import datetime
 
-from maestra_ai.core.storage import atomic_write_json
+from maestra_ai.core.storage import append_jsonl_locked, atomic_write_json
 
 
 class PlaybackObserver:
@@ -128,9 +128,12 @@ class PlaybackObserver:
             os.remove(self.state_path)
 
     def _append_events(self, events):
+        # S2: delega para append_jsonl_locked (fcntl.LOCK_EX) — serializa
+        # writes entre processos concorrentes (daemon director + CLI manual).
+        # Sem o lock, payloads > PIPE_BUF (~4KB) podem intercalar e corromper
+        # linhas do JSONL, gerando JSONDecodeError silencioso no
+        # PlaybackEventProcessor (perda de evento).
         if not events:
             return
-        os.makedirs(os.path.dirname(self.log_path) or ".", exist_ok=True)
-        with open(self.log_path, "a", encoding="utf-8") as f:
-            for event in events:
-                f.write(json.dumps(event, ensure_ascii=False) + "\n")
+        for event in events:
+            append_jsonl_locked(self.log_path, event)

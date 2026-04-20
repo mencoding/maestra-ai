@@ -130,3 +130,57 @@ def test_eventos_sao_gravados_em_jsonl(tmp_path):
     events = read_events(log_path)
     assert events[0]["event"] == "track_started"
     assert events[0]["context"] == "foco"
+
+
+def test_append_events_usa_lock_e_nao_corrompe_concorrencia(tmp_path):
+    """S2: _append_events deve usar lock exclusivo para evitar intercalação.
+
+    Payloads > PIPE_BUF (~4KB) podem intercalar entre threads/processos
+    concorrentes se o write for feito sem fcntl.LOCK_EX. Corrupção vira
+    JSONDecodeError silencioso no PlaybackEventProcessor → perda de evento.
+    """
+    import threading
+
+    log_path = tmp_path / "playback_events.jsonl"
+    obs_1 = PlaybackObserver(
+        state_path=str(tmp_path / "state_1.json"),
+        log_path=str(log_path),
+    )
+    obs_2 = PlaybackObserver(
+        state_path=str(tmp_path / "state_2.json"),
+        log_path=str(log_path),
+    )
+
+    # Payload inflado acima de PIPE_BUF (~4KB) — nome grande força o write
+    # a ultrapassar o limite POSIX de atomicidade de append.
+    big_name = "a" * 5000
+    event_template = {
+        "event": "track_started",
+        "at": "2026-04-20T00:00:00",
+        "context": "concurrency-test",
+        "uri": "spotify:track:" + "x" * 22,
+        "track": big_name,
+        "artist": "Artist",
+        "is_playing": True,
+        "progress_ms": 0,
+        "duration_ms": 100000,
+    }
+
+    def hammer(observer, n):
+        for i in range(n):
+            event = dict(event_template)
+            event["progress_ms"] = i
+            observer._append_events([event])
+
+    t1 = threading.Thread(target=hammer, args=(obs_1, 50))
+    t2 = threading.Thread(target=hammer, args=(obs_2, 50))
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+
+    lines = log_path.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 100, f"esperado 100 linhas, obtido {len(lines)}"
+    for line in lines:
+        # Cada linha deve ser JSON válido — intercalação quebraria aqui.
+        json.loads(line)
