@@ -91,3 +91,25 @@ def test_reranking_uses_compose_score(mocker):
     tracks, _, _ = curator.curate("foco")
     # Track A (2010s) deve vir antes de B (1990s) porque decade_match
     assert tracks[0]["uri"] == "spotify:track:A"
+
+
+def test_bpm_proximity_affects_rerank(mocker):
+    from maestra_ai.core.curator import Curator
+
+    results = [
+        {"uri": "spotify:track:A", "name": "A", "artist": "Art", "release_date": "2020-01-01"},
+        {"uri": "spotify:track:B", "name": "B", "artist": "Art", "release_date": "2020-01-01"},
+    ]
+    controller = _FakeController({"q": results})
+    taste = _FakeTaste()
+    curator = Curator(controller, taste)
+
+    mocker.patch.object(curator, "_build_informed_query", return_value="q")
+    mocker.patch.object(curator, "_active_sources", return_value=["musicbrainz", "getsongbpm"])
+    mocker.patch.object(curator, "_track_bpm", side_effect=lambda uri: 75 if uri.endswith("A") else 180)
+    mocker.patch.object(curator, "_active_bpm_target", return_value={"min": 60, "max": 90})
+    mocker.patch.object(curator, "_dominant_decades", return_value=set())
+
+    tracks, _, _ = curator.curate("foco")
+    # Track A (75 BPM) bate com target; B (180) longe. A deve vir primeiro.
+    assert tracks[0]["uri"] == "spotify:track:A"

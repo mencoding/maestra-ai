@@ -166,8 +166,36 @@ class Curator:
         ctx_lower = context.lower()
         return {kw for kw in MOOD_TAG_KEYWORDS if kw in ctx_lower}
 
+    def _track_bpm(self, uri: str) -> float | None:
+        """Retorna BPM cacheado para `uri` ou None."""
+        from maestra_ai.core.external import cache as cache_mod
+        track = cache_mod.get_track(uri)
+        if not track:
+            return None
+        bpm_data = track.get("bpm")
+        if not bpm_data:
+            return None
+        tempo = bpm_data.get("bpm")
+        try:
+            return float(tempo) if tempo else None
+        except (ValueError, TypeError):
+            return None
+
+    def _active_bpm_target(self) -> dict | None:
+        """Retorna o target de BPM do contexto ativo ({min, max}) ou None."""
+        from maestra_ai.core import storage
+        from maestra_ai.core.context import ContextState
+        path = storage.data_dir() / "context.json"
+        state = ContextState(path)
+        data = state.show()
+        if not data:
+            return None
+        ctx = data.get("context") or {}
+        return ctx.get("bpm")
+
     def _compose_score_for(self, track: dict, context: str, weights: dict, has_lastfm: bool) -> float:
         from maestra_ai.core.scoring import (
+            bpm_proximity,
             compose_score,
             decade_match,
             effective_weights,
@@ -178,13 +206,15 @@ class Curator:
         c_tags = self._context_tags(context)
         tag = tag_similarity(t_tags, c_tags)
         dec = decade_match(track.get("release_date"), dominant)
-        bpm = 0.0  # BPM vem em alpha.2
+        bpm_target = self._active_bpm_target()
+        track_bpm = self._track_bpm(track["uri"])
+        bpm = bpm_proximity(track_bpm=track_bpm, target=bpm_target)
         taste_score = max(-1.0, min(1.0, self.taste.context_score(track["uri"], context)))
         w = effective_weights(
             weights,
             has_lastfm=has_lastfm,
-            has_bpm_target=False,
-            track_has_bpm=False,
+            has_bpm_target=bool(bpm_target),
+            track_has_bpm=track_bpm is not None,
             has_decade=bool(dominant),
         )
         return compose_score(weights=w, taste=taste_score, tag=tag, decade=dec, bpm=bpm)
