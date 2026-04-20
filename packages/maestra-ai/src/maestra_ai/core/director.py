@@ -114,7 +114,7 @@ class MusicDirector:
             if track and track.get("uri")
         }
 
-        tracks, queries_used = self.curator.curate(
+        tracks, queries_used, _sources = self.curator.curate(
             context,
             count=count,
             exclude_uris=exclude_uris,

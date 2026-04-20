@@ -35,6 +35,7 @@ DESCRIPTOR_MAP = {
 # Palavras que indicam referência direta (prefixos comuns)
 DIRECT_PREFIXES = ["mais ", "tipo ", "algo tipo ", "parecido com ", "como "]
 DEFAULT_CONTEXT = "foco"
+MIN_CANDIDATES = 10
 
 
 class Curator:
@@ -44,33 +45,61 @@ class Curator:
         self.controller = controller
         self.taste = taste
 
+    def _build_informed_query(self, context: str) -> str | None:
+        """Monta query "{tag_dominante} {mood} {decade}" a partir de tags do perfil.
+
+        v0.10.0-alpha.1: stub mínimo (retorna None). Cascade cai direto no
+        SEMANTIC_MAP. A derivação real via conjunto_positivo virá quando
+        houver uso suficiente para calibrar.
+        """
+        return None
+
+    def _active_sources(self) -> list[str]:
+        from maestra_ai.core.config import load_and_migrate
+        cfg = load_and_migrate()
+        ext = cfg.get("external_sources") or {}
+        return [s for s in ("musicbrainz", "lastfm", "getsongbpm") if (ext.get(s) or {}).get("enabled")]
+
     def curate(self, context, count=5, exclude_uris=None, exclude_artists=None, max_per_artist=None):
         """Gera lista de faixas para um contexto.
 
-        Retorna tupla (tracks, queries_used).
+        Retorna tupla (tracks, queries_used, sources_used).
         tracks: lista de dicts com track, artist, uri.
         queries_used: lista de queries efetivamente usadas.
+        sources_used: lista de fontes externas ativas.
         """
         context = self._normalize_context(context)
-        queries = self._resolve_queries(context)
-        candidates = []
+        queries_used: list[str] = []
+        candidates: list[dict] = []
         excluded = set(exclude_uris or [])
         excluded_artists = set(exclude_artists or [])
-        seen_uris = set(excluded)
+        seen: set[str] = set(excluded)
         search_limit = max(count, count + len(excluded), 10)
 
-        for query in queries:
+        def _search_and_collect(query: str) -> None:
+            queries_used.append(query)
             results = self.controller.search(query, type="track", limit=search_limit)
             for r in results:
-                if r["uri"] not in seen_uris:
-                    seen_uris.add(r["uri"])
-                    candidates.append(r)
-                if len(candidates) >= search_limit:
-                    break
-            if len(candidates) >= search_limit:
-                break
+                if r["uri"] in seen:
+                    continue
+                seen.add(r["uri"])
+                candidates.append(r)
 
-        # Filtra rejeitadas pelo perfil de gosto (URI + context_score + artistas excluídos pelo caller)
+        # 1) Query informada
+        informed = self._build_informed_query(context)
+        if informed:
+            _search_and_collect(informed)
+
+        # 2) Fallback SEMANTIC_MAP se abaixo do mínimo
+        if len(candidates) < MIN_CANDIDATES:
+            for q in self._resolve_queries(context):
+                if q in queries_used:
+                    continue
+                _search_and_collect(q)
+                if len(candidates) >= MIN_CANDIDATES:
+                    break
+
+        # 3) Filtra rejeitadas pelo perfil de gosto (URI + context_score + artistas excluídos pelo caller)
         filtered = []
         for c in candidates:
             if self.taste.is_rejected(c["uri"]):
@@ -84,25 +113,26 @@ class Curator:
         # Filtra por artistas rejeitados no perfil (delegação ao TasteProfile)
         filtered = self.taste.filter_with_artist_info(filtered)
 
+        # 4) Re-rank (v0.10.0-alpha.1: ainda por context_score; integração
+        #    com compose_score virá em Task 18)
         filtered.sort(
             key=lambda c: self.taste.context_score(c["uri"], context),
             reverse=True,
         )
 
+        # 5) max_per_artist
         if max_per_artist:
-            limited = []
-            artist_counts = {}
-            for track in filtered:
-                artist = track["artist"]
-                if artist_counts.get(artist, 0) >= max_per_artist:
+            limited: list[dict] = []
+            counts: dict[str, int] = {}
+            for t in filtered:
+                a = t["artist"]
+                if counts.get(a, 0) >= max_per_artist:
                     continue
-                artist_counts[artist] = artist_counts.get(artist, 0) + 1
-                limited.append(track)
-                if len(limited) >= count:
-                    break
-            return limited, queries
+                counts[a] = counts.get(a, 0) + 1
+                limited.append(t)
+            filtered = limited
 
-        return filtered[:count], queries
+        return filtered[:count], queries_used, self._active_sources()
 
     def _resolve_queries(self, context):
         """Resolve contexto em lista de queries de busca.

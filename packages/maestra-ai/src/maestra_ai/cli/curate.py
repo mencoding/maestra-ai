@@ -33,7 +33,7 @@ def _maybe_print_external_attribution():
 
 def cmd_curate(args, curator, context_state, **_):
     context, _ = _curation_context(args, context_state)
-    results, _ = curator.curate(context, count=args.count)
+    results, _, _sources = curator.curate(context, count=args.count)
     if not results:
         error("Sem resultados para esse contexto.", "NO_RESULTS")
     output(results, args.human)
