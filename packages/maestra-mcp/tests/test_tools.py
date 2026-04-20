@@ -392,6 +392,57 @@ async def test_clear_context_retorna_resultado_do_handler():
     assert result["cleared_context"] is None
 
 
+class TestCallToolRedaction:
+    """S1 crítico v0.7.0-alpha.1: boundary MCP deve aplicar
+    redact_error_dict/redact_str antes de retornar erros ao cliente.
+    Paridade com o CLI (cli/__init__.py:246-255)."""
+
+    @pytest.mark.asyncio
+    async def test_call_tool_redacts_bearer_in_generic_exception(self):
+        """Exceção genérica (ex.: RuntimeError do spotipy) com Bearer
+        embutido não pode vazar o token no what_happened."""
+        from maestra_mcp import tools as tools_mod
+
+        @tools_mod.tool(
+            "leaky_test_tool", "Tool que vaza",
+            {"type": "object", "properties": {}, "additionalProperties": False},
+        )
+        def _leaky(_args):
+            raise RuntimeError("401 Unauthorized Bearer BQC-abc123def456ghi789")
+
+        try:
+            result = await tools_mod.call_tool("leaky_test_tool", {})
+        finally:
+            del tools_mod._REGISTRY["leaky_test_tool"]
+
+        assert "error" in result
+        assert "Bearer BQC" not in result["error"]["what_happened"]
+        assert "REDACTED" in result["error"]["what_happened"]
+
+    @pytest.mark.asyncio
+    async def test_call_tool_redacts_maestra_error_with_authorization(self):
+        """MaestraError com secret em what_happened (construído via f-string)
+        deve ser redigido antes de virar dict exposto ao LLM."""
+        from maestra_mcp import tools as tools_mod
+        from maestra_ai.core.errors import UserError
+
+        @tools_mod.tool(
+            "leaky_maestra_tool", "Tool que vaza via MaestraError",
+            {"type": "object", "properties": {}, "additionalProperties": False},
+        )
+        def _leaky(_args):
+            raise UserError("falhou: authorization: Bearer xyz123abc456")
+
+        try:
+            result = await tools_mod.call_tool("leaky_maestra_tool", {})
+        finally:
+            del tools_mod._REGISTRY["leaky_maestra_tool"]
+
+        what = result["error"]["what_happened"]
+        assert "Bearer xyz123" not in what
+        assert "REDACTED" in what
+
+
 class TestOnboardRationaleTool:
     """v0.7.0: tool onboard_rationale lê state_dir/onboard_rationale.json
     e retorna dados estruturados. Se ausente, UserError."""

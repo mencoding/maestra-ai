@@ -62,12 +62,21 @@ def _format_schema_hint(err) -> str:
 
 async def call_tool(name: str, args: dict) -> Any:
     """Dispatch para o handler registrado. Valida args contra inputSchema
-    antes de invocar; captura MaestraError e genéricas."""
+    antes de invocar; captura MaestraError e genéricas.
+
+    S1 v0.7.0-alpha.1: aplica redact_error_dict/redact_str em todo dict
+    de erro antes de devolver ao cliente MCP. Paridade com o CLI
+    (cli/__init__.py:246-255). Antes dessa mudança, RuntimeError do
+    spotipy com Authorization: Bearer ... e MaestraError construído via
+    f-string podiam vazar tokens para o LLM agente.
+    """
+    from maestra_ai.core.security import redact_error_dict, redact_str
+
     td = _REGISTRY.get(name)
     if td is None:
         from maestra_ai.core.errors import UserError
         err = UserError(f"Tool '{name}' não existe.")
-        return {"error": err.to_human_dict()}
+        return {"error": redact_error_dict(err.to_human_dict())}
 
     # I5 v0.6.1: boundary MCP valida args antes de chamar o handler.
     import jsonschema
@@ -79,19 +88,19 @@ async def call_tool(name: str, args: dict) -> Any:
             f"{name}: {ve.message}",
             hint=_format_schema_hint(ve),
         )
-        return {"error": err.to_human_dict()}
+        return {"error": redact_error_dict(err.to_human_dict())}
 
     try:
         return await td.handler(args)
     except Exception as e:
         from maestra_ai.core.errors import MaestraError
         if isinstance(e, MaestraError):
-            return {"error": e.to_human_dict()}
+            return {"error": redact_error_dict(e.to_human_dict())}
         return {
             "error": {
                 "code": type(e).__name__,
                 "title": "Erro inesperado",
-                "what_happened": str(e),
+                "what_happened": redact_str(str(e)),
             },
         }
 

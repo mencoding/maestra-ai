@@ -73,19 +73,24 @@ def _build_call_tool_handler():
     async def _call_tool(name: str, args: dict) -> list[types.TextContent]:
         from maestra_ai.core import audit
         from maestra_ai.core.errors import UserError
+        from maestra_ai.core.security import redact_error_dict, redact_str
 
         disabled = _disabled_tools()
         if name in disabled:
             err = UserError(f"Tool desabilitada via config: {name}")
             return [types.TextContent(
                 type="text",
-                text=json.dumps({"error": err.to_human_dict()}, ensure_ascii=False),
+                text=json.dumps(
+                    {"error": redact_error_dict(err.to_human_dict())},
+                    ensure_ascii=False,
+                ),
             )]
 
         # Fix H4: envolve a chamada para garantir auditoria mesmo quando
         # o handler (ou tools.call_tool) propaga exceção não-tratada. Antes,
         # qualquer erro fora do try/except do registry pulava o audit.log
         # e o cliente MCP recebia erro opaco sem trilha forense.
+        # S1 v0.7.0-alpha.1: redige str(e) antes de expor ao LLM agente.
         try:
             result = await call_tool(name, args or {})
         except Exception as e:
@@ -93,7 +98,7 @@ def _build_call_tool_handler():
                 "error": {
                     "code": "InternalError",
                     "title": "Erro não tratado em tool",
-                    "what_happened": str(e),
+                    "what_happened": redact_str(str(e)),
                 },
             }
 
