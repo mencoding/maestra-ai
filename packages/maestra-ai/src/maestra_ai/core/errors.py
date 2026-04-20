@@ -276,3 +276,41 @@ class ValidationError(UserError):
         "Estrutura do payload não corresponde ao schema esperado",
     ]
     agent_hint = "Payload rejeitado antes de sobrescrever estado. Verifique origem."
+
+
+class MCPInvalidArgsError(UserError):
+    """I5 v0.6.1: args passados a uma tool MCP não casam com inputSchema.
+
+    Usado pelo server para traduzir jsonschema.ValidationError em um
+    MaestraError estruturado com agent_hint específico por tipo de
+    falha (additionalProperties, minimum, required, etc.).
+    """
+
+    code = "MCPInvalidArgsError"
+    title = "Argumentos MCP inválidos"
+    probable_causes = [
+        "Tool chamada com campo desconhecido (additionalProperties=false)",
+        "Tipo ou valor do campo não corresponde ao schema",
+        "Campo obrigatório ausente",
+    ]
+    suggested_actions = [
+        {"command": "list_tools",
+         "description": "Ver inputSchema completo de cada tool"},
+    ]
+    agent_hint = (
+        "Entrada rejeitada antes de executar a tool. Consulte o inputSchema "
+        "em list_tools e reenvie apenas campos documentados, respeitando "
+        "tipos e limites."
+    )
+
+    def __init__(
+        self,
+        what_happened: str = "",
+        *,
+        hint: str | None = None,
+        where: dict | None = None,
+    ):
+        super().__init__(what_happened, where=where)
+        if hint:
+            # Override do hint de classe para dica específica do campo.
+            self.agent_hint = hint
