@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0-alpha.5] — 2026-04-20
+
+### Corrigido
+- Regressão em v0.8.0-alpha.4: `_derive_suggestions` fazia lookup de gêneros
+  por nome de artista, mas `_fetch_artists_genres` passou a chavear por ID.
+  Resultado: `top_genres` sempre vazio em runtime real. Fix: lookup agora
+  por `artist.id` em ambos os sites (linhas ~460 e ~606 de `core/onboard.py`).
+
 ## [0.8.0-alpha.4] — 2026-04-20
 
 ### Corrigido

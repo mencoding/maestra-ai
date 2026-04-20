@@ -454,10 +454,10 @@ def _derive_suggestions(
             decade_counter[decade] += w
 
         for a in artists:
-            aname = a.get("name")
-            if not aname:
+            aid = a.get("id")
+            if not aid:
                 continue
-            for g in artists_genres.get(aname, []):
+            for g in artists_genres.get(aid, []):
                 genre_counter[g.lower()] += w / max(len(artists), 1)
 
     signals: OnboardSignals = {
@@ -601,9 +601,9 @@ def _build_rationale(
         matched = False
         if match_genre:
             for a in artists:
-                aname = a.get("name")
-                if aname and match_genre.lower() in [
-                    g.lower() for g in artists_genres.get(aname, [])
+                aid = a.get("id")
+                if aid and match_genre.lower() in [
+                    g.lower() for g in artists_genres.get(aid, [])
                 ]:
                     matched = True
                     break

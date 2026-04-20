@@ -1427,7 +1427,9 @@ class TestDeriveSuggestionsIntel:
         weights = {t["uri"]: 5.0 for t in tracks}
         adjusted = onboard._apply_taste_to_weights(weights, tracks, taste)
         sorted_tracks = [t for t in tracks if t["uri"] in adjusted]
-        genres = {"Sufjan Stevens": ["indie folk", "chamber folk"]}
+        # Dict chaveado por artist_id (shape de _fetch_artists_genres
+        # desde v0.8.0-alpha.4). _mk_tracks usa id = f"a_{artist}".
+        genres = {"a_Sufjan Stevens": ["indie folk", "chamber folk"]}
 
         texts, rationale, signals = onboard._derive_suggestions(
             sorted_tracks, adjusted, genres, taste,
@@ -1531,13 +1533,41 @@ class TestDeriveSuggestionsIntel:
         taste = TasteProfile(tmp_path / "taste.json")
         tracks = self._mk_tracks(n_tracks=10, artist="Bon Iver")
         weights = {t["uri"]: 3.0 for t in tracks}
-        genres = {"Bon Iver": ["indie folk"]}
+        genres = {"a_Bon Iver": ["indie folk"]}
         texts, rationale, signals = onboard._derive_suggestions(
             tracks, weights, genres, taste,
         )
         assert len(texts) == len(rationale)
         assert all("text" in r for r in rationale)
         assert all("contributing_tracks" in r for r in rationale)
+
+    def test_derive_suggestions_usa_artist_id_para_lookup_generos(self, tmp_path):
+        """Regressão v0.8.0-alpha.4: _derive_suggestions deve fazer lookup
+        por artist_id (não name) em artists_genres, pois _fetch_artists_genres
+        passou a chavear o dict por id do artista."""
+        from maestra_ai.core.taste import TasteProfile
+        taste = TasteProfile(tmp_path / "taste.json")
+        tracks = [
+            {
+                "uri": "spotify:track:t1",
+                "name": "Song 1",
+                "artists": [{"id": "artist-abc", "name": "Artist ABC"}],
+                "release_date": "2020-01-01",
+            },
+        ]
+        weights = {"spotify:track:t1": 3.0}
+        # Dict chaveado por ID — shape retornado por _fetch_artists_genres
+        # desde v0.8.0-alpha.4.
+        artists_genres = {"artist-abc": ["indie folk", "ambient"]}
+
+        texts, rationale, signals = onboard._derive_suggestions(
+            tracks, weights, artists_genres, taste,
+        )
+
+        genres_found = [g for g, _ in signals.get("top_genres", [])]
+        assert "indie folk" in genres_found or "ambient" in genres_found, (
+            f"Esperado gêneros enriquecidos, recebi signals={signals}"
+        )
 
 
 class TestApplyTasteToWeights:
