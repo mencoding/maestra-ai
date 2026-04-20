@@ -64,6 +64,7 @@ def _import_subcommands() -> None:
         onboard,
         playback,
         playlist,
+        profile,
         rollback,
         taste,
     )
@@ -81,7 +82,7 @@ def _import_subcommands() -> None:
     )
     _ = (auth, basic, config_cmd, context_cmd, curate, director, doctor,
          feedback, flow, help_cmd, history, init_cmd, onboard, playback,
-         playlist, rollback, taste)
+         playlist, profile, rollback, taste)
 
 
 def _build_parser() -> argparse.ArgumentParser:

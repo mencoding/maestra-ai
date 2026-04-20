@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0-alpha.7] — 2026-04-20
+
+### Adicionado
+- `maestra profile show [--human]` — visão agregada do perfil atual:
+  estado do init, total de faixas analisadas, contadores de feedback,
+  contextos registrados, sugestões da última análise (com gêneros,
+  décadas, artistas que as embasam) e timestamp. Default JSON; `--human`
+  imprime narrativa legível.
+- Módulo `core.profile_view.build_profile_view()` agrega
+  `taste_profile.json` + `onboard_rationale.json` + `detect_state()` em
+  um dict read-only (sem side effects).
+
 ## [0.8.0-alpha.6] — 2026-04-20
 
 ### Corrigido
