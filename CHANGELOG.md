@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0-alpha.1] — 2026-04-20
+
+### Corrigido
+- **MusicBrainz genres voltam a ser resolvidos.** `musicbrainzngs 0.7.1`
+  não expõe `"genres"` como include válido para artist — a biblioteca
+  rejeitava a chamada antes de bater na rede, e o `except Exception`
+  amplo mascarava o erro silenciosamente. Resultado em alpha.0: "0 de
+  100 faixas com gêneros canônicos" para todos os usuários. Agora
+  buscamos gêneros via HTTP direto em
+  `https://musicbrainz.org/ws/2/artist/{mbid}?inc=genres&fmt=json`,
+  com o mesmo User-Agent e rate limit de 1 req/s. Validado com teste
+  de integração real (Fleetwood Mac).
+- **Avisos reescritos em linguagem comum**: texto antigo tinha termos
+  como "batch artists", "fallback item-a-item", "/v1/artists/{id}" e
+  vazava a URL completa da request. Removido jargão e a URL.
+- **Relatório pós-análise reorganizado**: antes, a linha "Melhoramento
+  externo (MusicBrainz): X de Y…" aparecia ANTES de "Análise concluída!"
+  porque era impressa dentro de `onboard.run`. Agora é parte do relatório
+  de `_print_onboard_results`, na ordem: título → gêneros → décadas →
+  melhoramento externo → sugestões → "Para usar" → separador → avisos.
+  Avisos não escondem mais o essencial.
+
+### Adicionado
+- Integration test `tests/integration/test_musicbrainz_live.py` marcado
+  `@pytest.mark.integration_live` — faz chamadas HTTP reais à API pública
+  do MusicBrainz para pegar regressão silenciosa se a resposta do MB
+  mudar. Pulado por padrão via `conftest.py`, rode com
+  `uv run pytest -m integration_live`.
+- Marker `integration_live` registrado em `pyproject.toml` (raiz e
+  package) para evitar `PytestUnknownMarkWarning`.
+- Novo campo no report de `onboard.run`: `external_mb_with_genres` —
+  contagem de faixas que de fato receberam gêneros/tags do MusicBrainz.
+
+### Nota técnica
+- A limitação do `musicbrainzngs` só apareceu em runtime porque os testes
+  unit originais mockavam `get_artist_by_id` com fixture inventada — o
+  validador de includes da lib real nunca executava. A estratégia de
+  teste agora combina unit tests com mocks **e** um integration test live
+  opt-in que bate na API real.
+
 ## [0.9.0-alpha.0] — 2026-04-20
 
 ### Adicionado
