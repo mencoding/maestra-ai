@@ -35,3 +35,4 @@ def test_optin_skip_returns_all_disabled(mocker):
     result = _prompt_external_sources_optin()
     assert result["musicbrainz"]["enabled"] is False
     assert result["lastfm"]["enabled"] is False
+    assert result["getsongbpm"]["enabled"] is False
