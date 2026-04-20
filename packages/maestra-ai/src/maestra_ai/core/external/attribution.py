@@ -5,10 +5,10 @@ GetSongBPM e dá visibilidade honesta às demais fontes gratuitas.
 """
 from __future__ import annotations
 
-_SOURCES = {
-    "musicbrainz": ("MusicBrainz", "https://musicbrainz.org/doc/About"),
+_ATTRIBUTIONS = {
+    "musicbrainz": ("MusicBrainz", "https://musicbrainz.org"),
     "lastfm": ("Last.fm", "https://www.last.fm/about"),
-    "getsongbpm": ("GetSongBPM.com", "https://getsongbpm.com/about"),
+    "getsongbpm": ("GetSongBPM", "https://getsongbpm.com/about"),
 }
 
 
@@ -18,12 +18,16 @@ def render_attribution(sources_used: list[str]) -> str:
     `sources_used` deve conter apenas nomes internos ("musicbrainz",
     "lastfm", "getsongbpm"). Nomes desconhecidos são ignorados.
     String vazia se não há fontes.
+
+    Retorna inline com separador "·" e markup rich para links clicáveis.
     """
-    known = [s for s in sources_used if s in _SOURCES]
-    if not known:
+    if not sources_used:
         return ""
-    lines = ["\n[bold]Fontes usadas nesta curadoria:[/bold]"]
-    for source in known:
-        label, url = _SOURCES[source]
-        lines.append(f"  • [link={url}]{label}[/link]")
-    return "\n".join(lines) + "\n"
+    parts = []
+    for s in sources_used:
+        if s in _ATTRIBUTIONS:
+            name, url = _ATTRIBUTIONS[s]
+            parts.append(f"[link={url}]{name}[/link]")
+    if not parts:
+        return ""
+    return "Metadata: " + " · ".join(parts)

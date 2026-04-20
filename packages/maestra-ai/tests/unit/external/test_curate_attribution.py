@@ -19,7 +19,7 @@ def test_attribution_printed_when_external_enabled(tmp_path, monkeypatch, capsys
     _maybe_print_external_attribution()
     out = capsys.readouterr().out
     assert "MusicBrainz" in out
-    assert "Fontes usadas nesta curadoria" in out
+    assert "Metadata:" in out
 
 
 def test_attribution_silent_when_disabled(tmp_path, monkeypatch, capsys):
@@ -47,4 +47,4 @@ def test_attribution_silent_when_enabled_but_cache_empty(tmp_path, monkeypatch, 
     from maestra_ai.cli.curate import _maybe_print_external_attribution
     _maybe_print_external_attribution()
     out = capsys.readouterr().out
-    assert "Fontes usadas" not in out
+    assert "Metadata:" not in out
