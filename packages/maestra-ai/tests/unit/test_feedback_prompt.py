@@ -105,6 +105,34 @@ def test_cooldown_ignora_json_corrompido(tmp_path):
     assert not fp._in_cooldown("foco")
 
 
+class TestCooldownCorrupcao:
+    def test_cooldown_tolera_fromisoformat_invalido(self, tmp_path):
+        """I6 v0.6.1: state corrompido não deve crashar o prompter.
+        Retorna False (cooldown expirou, permite novo prompt)."""
+        import json
+        from maestra_ai.core.feedback_prompt import FeedbackPrompter
+
+        state_path = tmp_path / "state.json"
+        state_path.write_text(
+            json.dumps({"workout": {"last_prompt_at": "banana"}}),
+            encoding="utf-8",
+        )
+        fp = FeedbackPrompter(str(state_path), cooldown_minutes=60)
+        assert fp._in_cooldown("workout") is False
+
+    def test_cooldown_tolera_last_prompt_at_ausente(self, tmp_path):
+        import json
+        from maestra_ai.core.feedback_prompt import FeedbackPrompter
+
+        state_path = tmp_path / "state.json"
+        state_path.write_text(
+            json.dumps({"workout": {"something_else": 1}}),
+            encoding="utf-8",
+        )
+        fp = FeedbackPrompter(str(state_path), cooldown_minutes=60)
+        assert fp._in_cooldown("workout") is False
+
+
 def test_mark_prompted_registra_cooldown(tmp_path):
     state_path = tmp_path / "prompt_state.json"
     prompter = FeedbackPrompter(str(state_path))

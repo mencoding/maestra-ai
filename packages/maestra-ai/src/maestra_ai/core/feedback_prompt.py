@@ -87,8 +87,14 @@ class FeedbackPrompter:
         entry = data.get(context)
         if not entry:
             return False
-
-        last_prompt_at = datetime.fromisoformat(entry["last_prompt_at"])
+        raw = entry.get("last_prompt_at")
+        if not raw:
+            return False
+        try:
+            last_prompt_at = datetime.fromisoformat(raw)
+        except (ValueError, TypeError):
+            # State corrompido: trata como cooldown expirado.
+            return False
         return datetime.now() - last_prompt_at < timedelta(minutes=self.cooldown_minutes)
 
     def _load_state(self):
