@@ -1,0 +1,21 @@
+{
+  "isrc": "USUM71807351",
+  "recording-count": 1,
+  "recording-list": [
+    {
+      "id": "recording-mbid-abc",
+      "title": "Dreams",
+      "length": "232800",
+      "artist-credit": [
+        {
+          "name": "Fleetwood Mac",
+          "artist": {
+            "id": "bd13909f-1c29-4c27-a874-d4aaf27c5b1a",
+            "name": "Fleetwood Mac",
+            "sort-name": "Fleetwood Mac"
+          }
+        }
+      ]
+    }
+  ]
+}

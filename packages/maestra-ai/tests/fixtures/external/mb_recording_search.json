@@ -1,0 +1,19 @@
+{
+  "recording-list": [
+    {
+      "id": "recording-mbid-xyz",
+      "ext:score": "100",
+      "title": "Obscure Song",
+      "artist-credit": [
+        {
+          "name": "Obscure Artist",
+          "artist": {
+            "id": "artist-mbid-xyz",
+            "name": "Obscure Artist"
+          }
+        }
+      ]
+    }
+  ],
+  "recording-count": 1
+}
