@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0-alpha.2] — 2026-04-20
+
+### Adicionado
+- **`GetSongBpmSource`** — fonte externa de BPM, key e time signature
+  via `urllib.request` direto (endpoint JSON trivial). Rate limit 60
+  req/min via janela deslizante (`deque` de timestamps).
+- **Guia interativo GetSongBPM** (`setup_guides.guide_getsongbpm`) —
+  mesma estrutura do guia Last.fm, com aviso de atribuição obrigatória.
+- **Contexto ativo vira objeto** `{text: str, bpm: {min, max} | null}`.
+  Migração automática da string legacy no load. Políticas: preservar
+  BPM quando texto não muda; limpar quando texto muda; validação
+  `min >= 30`, `max <= 220`, `min < max`.
+- **`maestra context set --bpm X-Y`** — formato `N-N` (ex: `60-100`).
+- **`maestra context clear-bpm`** — remove BPM sem mexer no texto.
+- **`bpm_proximity` efetivo no re-rank** — `Curator._track_bpm` lê do
+  cache externo; `_active_bpm_target` lê do contexto. Com os dois
+  presentes, `bpm_proximity` passa a contribuir ao score.
+- **Integration live test GetSongBPM** (opt-in via env
+  `MAESTRA_GETSONGBPM_KEY` + marker `integration_live`).
+
+### Nota
+- Atribuição OSC 8 de GetSongBPM já inclusa via alpha.0; passa a
+  aparecer automaticamente quando a source produz dados.
+
 ## [0.10.0-alpha.1] — 2026-04-20
 
 ### Adicionado
