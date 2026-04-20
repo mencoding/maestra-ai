@@ -671,6 +671,49 @@ def _resolve_playlist_name(sp, desired: str) -> str:
 _TOTAL_CAP_DEFAULT = 5000
 
 
+def _build_top_100_for_enhancement(
+    *,
+    top_long: list[dict],
+    saved: list[dict],
+    recent: list[dict],
+    weights: dict,
+) -> list[dict]:
+    """Monta lista ordenada por weight, até 100 itens. Deduplica por URI."""
+    seen: set[str] = set()
+    unified: list[dict] = []
+    for pool in (top_long, saved, recent):
+        for t in pool:
+            uri = t.get("uri")
+            if not uri or uri in seen:
+                continue
+            seen.add(uri)
+            unified.append(t)
+    unified.sort(key=lambda t: weights.get(t.get("uri", ""), 0.0), reverse=True)
+    return unified[:100]
+
+
+def _to_track_info_for_enhancer(t: dict) -> dict:
+    """Adapta dict de track do spotipy para TrackInfo."""
+    return {
+        "uri": t.get("uri", ""),
+        "name": t.get("name") or "",
+        "artists": [a.get("name", "") for a in (t.get("artists") or []) if a.get("name")],
+        "isrc": ((t.get("external_ids") or {}).get("isrc")),
+    }
+
+
+def _emit_mb_summary(enhanced_tracks: list, *, console) -> None:
+    """Resumo pós-enhancement: conta tracks com metadata MB não-vazio."""
+    with_mb = sum(
+        1 for t in enhanced_tracks
+        if t.get("musicbrainz") and (t["musicbrainz"].get("genres") or t["musicbrainz"].get("tags"))
+    )
+    console.print(
+        f"\n[bold]Melhoramento externo (MusicBrainz):[/bold] "
+        f"{with_mb} de {len(enhanced_tracks)} faixas com gêneros/tags canônicos.",
+    )
+
+
 def run(
     sp,
     taste,
@@ -687,6 +730,7 @@ def run(
     skip_long_term: bool = False,
     skip_medium_term: bool = False,
     skip_playlist_creation: bool = False,
+    enhance_external: bool = True,
 ) -> dict:
     """Executa onboarding. Retorna relatório estruturado.
 
@@ -1087,6 +1131,33 @@ def run(
     )
     rationale_path = _persist_rationale(rationale_entries)
 
+    external_enhanced_count = 0
+    external_sources_used: list[str] = []
+    cfg = storage.read_config()
+    if cfg.get("external_sources_enabled") and enhance_external:
+        from rich.console import Console
+        from maestra_ai.core.external import default_enhancer
+        enhancer = default_enhancer()
+        active = enhancer.active_sources()
+        if active:
+            top_100 = _build_top_100_for_enhancement(
+                top_long=top_long, saved=saved, recent=recent,
+                weights=adjusted_weights,
+            )
+            track_infos = [_to_track_info_for_enhancer(t) for t in top_100]
+            enhanced = enhancer.enhance_many(
+                track_infos,
+                progress_cb=(
+                    lambda ev: progress_cb({
+                        "step": -1, "name": "external",
+                        "detail": ev.get("detail") or "",
+                    })
+                ) if progress_cb else None,
+            )
+            external_enhanced_count = len(enhanced)
+            external_sources_used = active
+            _emit_mb_summary(enhanced, console=Console())
+
     return {
         "status": "ok",
         "playlist_id": playlist_id,
@@ -1103,4 +1174,6 @@ def run(
         "signals": signals,
         "rationale_path": str(rationale_path),
         "warnings": warnings,
+        "external_enhanced_count": external_enhanced_count,
+        "external_sources_used": external_sources_used,
     }
