@@ -119,6 +119,29 @@ def atomic_write_json(
         os.replace(tmp_path, path)
 
 
+def append_jsonl_locked(path: str | os.PathLike, entry: dict) -> None:
+    """Append uma linha JSON com lock exclusivo via fcntl.flock.
+
+    Serializa writes concorrentes de processos distintos (daemon
+    director, CLI, MCP server). POSIX garante append atômico apenas
+    até PIPE_BUF (~4KB); payloads reais ultrapassam esse limite,
+    então o lock é necessário para evitar intercalação.
+
+    Em caso de crash mid-write, perde-se no máximo a linha corrente
+    (jamais corrompe linhas anteriores).
+    """
+    path = os.fspath(path)
+    parent = os.path.dirname(path) or "."
+    os.makedirs(parent, exist_ok=True)
+    line = json.dumps(entry, ensure_ascii=False) + "\n"
+    with open(path, "a", encoding="utf-8") as f:
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        try:
+            f.write(line)
+        finally:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+
+
 def read_config() -> dict:
     p = config_dir() / "config.json"
     if not p.exists():

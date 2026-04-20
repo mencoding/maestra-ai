@@ -146,3 +146,36 @@ def test_read_config_non_dict_raises_config_error(monkeypatch, tmp_path):
 
 # test_keyring_fallback_to_file removido — coberto por
 # test_token_store.TestDefaultTokenStore + TestFileTokenStore
+
+
+class TestAppendJsonlLocked:
+    def test_serializa_entry_com_acento(self, tmp_path):
+        from maestra_ai.core.storage import append_jsonl_locked
+        path = tmp_path / "log.jsonl"
+        append_jsonl_locked(path, {"user": "João", "city": "São Paulo"})
+        lines = path.read_text(encoding="utf-8").splitlines()
+        assert len(lines) == 1
+        parsed = json.loads(lines[0])
+        assert parsed == {"user": "João", "city": "São Paulo"}
+
+    def test_concorrencia_nao_intercala_bytes(self, tmp_path):
+        import threading
+        from maestra_ai.core.storage import append_jsonl_locked
+        path = tmp_path / "log.jsonl"
+
+        def writer(tid: int):
+            for i in range(50):
+                append_jsonl_locked(path, {"thread": tid, "i": i, "pad": "x" * 500})
+
+        threads = [threading.Thread(target=writer, args=(t,)) for t in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        lines = path.read_text(encoding="utf-8").splitlines()
+        assert len(lines) == 100
+        # Todas as linhas devem ser JSON válido — prova ausência de intercalação.
+        for line in lines:
+            parsed = json.loads(line)
+            assert set(parsed.keys()) == {"thread", "i", "pad"}
