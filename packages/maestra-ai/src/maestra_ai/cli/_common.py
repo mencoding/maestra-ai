@@ -112,12 +112,6 @@ def _active_context_value(context_state):
     return active_context["context"]
 
 
-def _prune_candidates(tracks, taste, context):
-    """Shim — delega para core.taste.prune_candidates."""
-    from maestra_ai.core import taste as taste_mod
-    return taste_mod.prune_candidates(tracks, taste, context)
-
-
 def taste_summary(taste):
     """Retorna resumo do perfil de gosto."""
     all_signals = [
@@ -137,11 +131,5 @@ def taste_summary(taste):
         "preferred_artists": taste.get_preferred_artists(),
         "rejected_artists": taste.get_rejected_artists(),
     }
-
-
-def _context_review(tracks, taste, context, prune_candidates=None, top=10):
-    """Delega para core.taste.review — mantido como shim para callers em cli."""
-    from maestra_ai.core import taste as taste_mod
-    return taste_mod.review(taste, tracks, context, prune_candidates_override=prune_candidates, top=top)
 
 
