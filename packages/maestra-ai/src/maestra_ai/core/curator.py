@@ -73,7 +73,7 @@ class Curator:
         # Filtra rejeitadas pelo perfil de gosto
         filtered = []
         for c in candidates:
-            if self.taste._is_rejected(c["uri"]):
+            if self.taste.is_rejected(c["uri"]):
                 continue
             if self.taste.context_score(c["uri"], context) < 0:
                 continue

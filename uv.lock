@@ -532,6 +532,7 @@ name = "maestra-mcp"
 version = "0.6.0a0"
 source = { editable = "packages/maestra-mcp" }
 dependencies = [
+    { name = "jsonschema" },
     { name = "maestra-ai" },
     { name = "mcp" },
 ]
@@ -545,6 +546,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "jsonschema", specifier = ">=4.0,<5.0" },
     { name = "maestra-ai", editable = "packages/maestra-ai" },
     { name = "mcp", specifier = ">=1.0,<2.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },

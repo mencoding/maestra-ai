@@ -466,7 +466,7 @@ class TasteProfile:
         """Filtra lista de URIs removendo faixas rejeitadas."""
         return [
             uri for uri in uris
-            if not self._is_rejected(uri)
+            if not self.is_rejected(uri)
         ]
 
     def filter_with_artist_info(self, tracks_with_info):
@@ -477,8 +477,11 @@ class TasteProfile:
             if t["artist"] not in rejected
         ]
 
-    def _is_rejected(self, uri):
-        """Verifica se uma faixa está rejeitada no perfil."""
+    def is_rejected(self, uri):
+        """Verifica se uma faixa está rejeitada no perfil.
+
+        **API pública** — consumida por `curator.curate` e testes.
+        """
         track = self.data["tracks"].get(uri)
         if not track:
             return False
