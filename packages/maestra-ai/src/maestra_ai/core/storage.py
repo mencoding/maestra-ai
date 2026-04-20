@@ -133,8 +133,13 @@ def append_jsonl_locked(path: str | os.PathLike, entry: dict) -> None:
             fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
 
+def config_path() -> Path:
+    """Retorna o Path canônico do config.json."""
+    return config_dir() / "config.json"
+
+
 def read_config() -> dict:
-    p = config_dir() / "config.json"
+    p = config_path()
     if not p.exists():
         return {}
     try:
@@ -156,7 +161,7 @@ def read_config() -> dict:
 
 def write_config(data: dict) -> None:
     ensure_dirs()
-    p = config_dir() / "config.json"
+    p = config_path()
     atomic_write_json(p, data)
 
 

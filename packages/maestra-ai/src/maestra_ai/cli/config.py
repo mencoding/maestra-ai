@@ -123,6 +123,96 @@ def cmd_config_external_disable(args, **_):
     output({"status": "disabled"}, getattr(args, "human", False))
 
 
+# --- Sources com chave de API ---
+
+_VALID_KEYED_SOURCES = ("lastfm", "getsongbpm")
+
+
+def _load_cfg() -> dict:
+    """Carrega config.json pelo path canônico (monkeypatchável via storage.config_path)."""
+    import json as _json
+    path = storage.config_path()
+    try:
+        return _json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, ValueError):
+        return {}
+
+
+def _save_cfg(cfg: dict) -> None:
+    """Persiste config.json de forma atômica pelo path canônico."""
+    storage.atomic_write_json(storage.config_path(), cfg)
+
+
+def _ensure_nested(cfg: dict) -> dict:
+    return migrate_external_sources(cfg)
+
+
+def cmd_config_external_set_key(args, **_):
+    source = args.source
+    if source not in _VALID_KEYED_SOURCES:
+        output({"error": f"source inválido: {source}. Use um de {_VALID_KEYED_SOURCES}"}, getattr(args, "human", False))
+        return
+    cfg = _load_cfg()
+    cfg = _ensure_nested(cfg)
+    cfg["external_sources"][source]["api_key"] = args.key
+    cfg["external_sources"][source]["enabled"] = True
+    _save_cfg(cfg)
+    output({"status": "set", "source": source, "enabled": True}, getattr(args, "human", False))
+
+
+def cmd_config_external_clear_key(args, **_):
+    source = args.source
+    if source not in _VALID_KEYED_SOURCES:
+        output({"error": f"source inválido: {source}"}, getattr(args, "human", False))
+        return
+    cfg = _load_cfg()
+    cfg = _ensure_nested(cfg)
+    cfg["external_sources"][source]["api_key"] = None
+    cfg["external_sources"][source]["enabled"] = False
+    _save_cfg(cfg)
+    output({"status": "cleared", "source": source}, getattr(args, "human", False))
+
+
+def cmd_config_external_enable_source(args, **_):
+    source = args.source
+    cfg = _load_cfg()
+    cfg = _ensure_nested(cfg)
+    if source in _VALID_KEYED_SOURCES and not cfg["external_sources"][source].get("api_key"):
+        output({"error": f"{source} precisa de API key. Use 'maestra config external set-key {source} <key>' ou 'guide {source}'."}, getattr(args, "human", False))
+        return
+    cfg["external_sources"][source]["enabled"] = True
+    _save_cfg(cfg)
+    output({"status": "enabled", "source": source}, getattr(args, "human", False))
+
+
+def cmd_config_external_disable_source(args, **_):
+    source = args.source
+    cfg = _load_cfg()
+    cfg = _ensure_nested(cfg)
+    cfg["external_sources"][source]["enabled"] = False
+    _save_cfg(cfg)
+    output({"status": "disabled", "source": source}, getattr(args, "human", False))
+
+
+def cmd_config_external_guide(args, **_):
+    source = args.source
+    from maestra_ai.core.external.setup_guides import guide_getsongbpm, guide_lastfm
+    guides = {"lastfm": guide_lastfm, "getsongbpm": guide_getsongbpm}
+    if source not in guides:
+        output({"error": f"source inválido: {source}"}, getattr(args, "human", False))
+        return
+    enabled, key = guides[source]()
+    if not enabled:
+        output({"status": "skipped", "source": source}, getattr(args, "human", False))
+        return
+    cfg = _load_cfg()
+    cfg = _ensure_nested(cfg)
+    cfg["external_sources"][source]["api_key"] = key
+    cfg["external_sources"][source]["enabled"] = True
+    _save_cfg(cfg)
+    output({"status": "configured", "source": source}, getattr(args, "human", False))
+
+
 @register
 def _register(subparsers: argparse._SubParsersAction) -> None:
     from maestra_ai.cli import group_help_handler
@@ -150,10 +240,31 @@ def _register(subparsers: argparse._SubParsersAction) -> None:
     p.add_argument("--human", action="store_true")
     p.set_defaults(func=cmd_config_external_status, skip_deps=True)
 
-    p = ext_sub.add_parser("enable", help="Ativa fontes externas")
+    p = ext_sub.add_parser("enable", help="Ativa fontes externas (bulk: musicbrainz)")
     p.add_argument("--human", action="store_true")
     p.set_defaults(func=cmd_config_external_enable, skip_deps=True)
 
-    p = ext_sub.add_parser("disable", help="Desativa fontes externas")
+    p = ext_sub.add_parser("disable", help="Desativa fontes externas (bulk: musicbrainz)")
     p.add_argument("--human", action="store_true")
     p.set_defaults(func=cmd_config_external_disable, skip_deps=True)
+
+    p = ext_sub.add_parser("set-key", help="Define API key de uma source (lastfm ou getsongbpm)")
+    p.add_argument("source", choices=["lastfm", "getsongbpm"])
+    p.add_argument("key")
+    p.set_defaults(func=cmd_config_external_set_key, skip_deps=True)
+
+    p = ext_sub.add_parser("clear-key", help="Remove API key e desativa a source")
+    p.add_argument("source", choices=["lastfm", "getsongbpm"])
+    p.set_defaults(func=cmd_config_external_clear_key, skip_deps=True)
+
+    p = ext_sub.add_parser("guide", help="Roda guia interativo de configuração")
+    p.add_argument("source", choices=["lastfm", "getsongbpm"])
+    p.set_defaults(func=cmd_config_external_guide, skip_deps=True)
+
+    p = ext_sub.add_parser("enable-source", help="Ativa uma source específica")
+    p.add_argument("source", choices=["musicbrainz", "lastfm", "getsongbpm"])
+    p.set_defaults(func=cmd_config_external_enable_source, skip_deps=True)
+
+    p = ext_sub.add_parser("disable-source", help="Desativa uma source específica")
+    p.add_argument("source", choices=["musicbrainz", "lastfm", "getsongbpm"])
+    p.set_defaults(func=cmd_config_external_disable_source, skip_deps=True)
