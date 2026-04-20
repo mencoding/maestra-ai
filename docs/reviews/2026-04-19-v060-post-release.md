@@ -116,6 +116,9 @@ Uso de `taste._is_rejected`, `taste_mod._prune_candidates`, `_signal_weight` atr
 
 ---
 
+> **Status v0.6.2-alpha.1 (2026-04-19):** todos os 5 Nits (N1-N5)
+> foram fechados. Detalhes no CHANGELOG [0.6.2-alpha.1].
+
 ## Nits (5)
 
 - **N1.** Imports `SelectedPlaylist`/`FailedPlaylist` em `onboard.py:27-34` são runtime-only para TypedDict — ruff F401 pode reclamar.

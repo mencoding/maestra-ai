@@ -491,7 +491,7 @@ wheels = [
 
 [[package]]
 name = "maestra-ai"
-version = "0.6.0a0"
+version = "0.6.2a1"
 source = { editable = "packages/maestra-ai" }
 dependencies = [
     { name = "keyring" },
@@ -529,7 +529,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "maestra-mcp"
-version = "0.6.0a0"
+version = "0.6.2a1"
 source = { editable = "packages/maestra-mcp" }
 dependencies = [
     { name = "jsonschema" },

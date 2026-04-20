@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2-alpha.1] - 2026-04-19
+
+Patch cosmético — fecha os 5 Nits do review pós-v0.6.0-alpha.0.
+
+### Fixed
+- **N1** — `core/onboard.py`: removidos imports `FailedPlaylist` e
+  `SelectedPlaylist` (nunca usados no arquivo).
+- **N2** — `core/storage.py`: removidas constantes `_SERVICE`/`_USER`
+  (duplicadas e não-usadas; implementação real vive em `token_store.py`).
+- **N3** — `core/onboard.py`: docstring de `run()` atualizada
+  (referências envelhecidas a "v0.5.3" em `total_cap`, `playlist_selector`
+  e seção de expansão removidas; comentários de código inalterados).
+- **N4** — `core/client.py`: comentário justifica
+  `SPOTIFY_SEARCH_PAGE_LIMIT = 10` (Spotify aceita 50; 10 é escolha
+  conservadora para UX do CLI).
+
+### Tests
+- **N5** — cobertura de MCP: +3 testes em `test_tools.py` para
+  `clear_context` (registry, round-trip, shape de retorno). `onboard`
+  já tinha cobertura prévia.
+
 ## [0.6.2-alpha.0] - 2026-04-19
 
 Release só de correção — fecha os 8 Minors do review
