@@ -13,6 +13,7 @@ import sys
 from maestra_ai.cli import register
 from maestra_ai.core import onboard
 from maestra_ai.core.config import normalize_playlist_id
+from maestra_ai.core.errors import MaestraError
 from maestra_ai.core.reporting import format_estimate
 
 _DEFAULT_NAME = "Maestra Seeds"
@@ -323,9 +324,14 @@ def _interactive_choose(controller) -> tuple[str | None, str | None]:
         # Lista até 20 playlists do usuário.
         try:
             resp = controller.sp.current_user_playlists(limit=20)
+        except MaestraError:
+            raise  # AuthError/RateLimit/API → pipeline central (cli/__init__.py:246)
         except Exception as e:
-            print(f"Erro ao listar playlists: {e}")
-            raise SystemExit(1) from e
+            from maestra_ai.core.errors import SpotifyAPIError
+            raise SpotifyAPIError(
+                f"Falha ao listar playlists: {e}",
+                where={"step": "interactive_choose"},
+            ) from e
         items = (resp or {}).get("items", []) or []
         print("\nTuas playlists (primeiras 20):")
         for i, pl in enumerate(items, start=1):

@@ -512,3 +512,37 @@ def test_onboard_cli_interativo_input_invalido_3x_aborta(monkeypatch):
     )
     rc = cli_onboard._handle(args, _Ctrl(), taste=None)
     assert rc != 0
+
+
+class TestInteractiveChoosePropaga:
+    """M8 v0.6.2: _interactive_choose propaga MaestraError em vez de
+    SystemExit+print. Erros não-Maestra viram SpotifyAPIError."""
+
+    def test_auth_error_nao_vira_system_exit(self, monkeypatch):
+        from unittest.mock import MagicMock
+        from maestra_ai.core.errors import AuthError
+
+        # Simula escolha "2" (listar playlists).
+        monkeypatch.setattr("builtins.input", lambda _: "2")
+
+        controller = MagicMock()
+        controller.sp.current_user_playlists.side_effect = AuthError(
+            "token expirou",
+        )
+
+        with pytest.raises(AuthError, match="token expirou"):
+            cli_onboard._interactive_choose(controller)
+
+    def test_erro_generico_vira_spotify_api_error(self, monkeypatch):
+        from unittest.mock import MagicMock
+        from maestra_ai.core.errors import SpotifyAPIError
+
+        monkeypatch.setattr("builtins.input", lambda _: "2")
+
+        controller = MagicMock()
+        controller.sp.current_user_playlists.side_effect = RuntimeError(
+            "unknown failure",
+        )
+
+        with pytest.raises(SpotifyAPIError, match="unknown failure"):
+            cli_onboard._interactive_choose(controller)
