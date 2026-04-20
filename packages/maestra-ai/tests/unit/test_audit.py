@@ -27,6 +27,25 @@ class TestRedactPII:
         assert out["product"] == "premium"
 
 
+def test_redact_cobre_key_authorization():
+    """S5: header 'Authorization' (Bearer ...) deve ser redactado.
+
+    Se spotipy ou outro cliente colocar headers no MaestraError.where ou
+    no payload de audit, a key 'authorization' tem que casar no _redact.
+    """
+    from maestra_ai.core.audit import _redact
+    out = _redact({"headers": {"Authorization": "Bearer abc123"}})
+    assert out["headers"]["Authorization"] == "REDACTED"
+
+
+def test_redact_cobre_key_authorization_case_insensitive():
+    """S5: casamento por lowercase deve cobrir todas as variantes."""
+    from maestra_ai.core.audit import _redact
+    for key in ("authorization", "Authorization", "AUTHORIZATION"):
+        out = _redact({key: "Bearer xyz"})
+        assert out[key] == "REDACTED", f"falhou para key={key!r}"
+
+
 def test_append_basic(monkeypatch, tmp_path):
     monkeypatch.setenv("MAESTRA_STATE_DIR", str(tmp_path / "state"))
     (tmp_path / "state").mkdir()

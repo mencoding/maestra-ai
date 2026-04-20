@@ -38,7 +38,10 @@ def create(operation: str, state: dict) -> str:
     # Granularidade de microsegundos evita colisão lexicográfica em
     # snapshots criados na mesma segundo (ex.: safety-before-rollback
     # imediatamente antes do rollback).
-    ts = datetime.now(UTC).astimezone().strftime("%Y-%m-%d-%H%M%S-%f")
+    # S8 (v0.7.0-a1 cleanup): UTC puro, sem .astimezone() — evita que
+    # o offset local contamine o ID e produza ordenação ambígua entre
+    # processos em TZ diferentes.
+    ts = datetime.now(UTC).strftime("%Y-%m-%d-%H%M%S-%f")
     snap_id = f"{ts}-{operation}"
     path = _snap_dir() / f"{snap_id}.json"
     payload = {

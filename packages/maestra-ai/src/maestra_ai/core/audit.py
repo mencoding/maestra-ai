@@ -17,7 +17,7 @@ from maestra_ai.core import storage
 # em MaestraError.where. country/product são metadata não-PII e seguem
 # visíveis para diagnóstico (ex: "conta Free em BR").
 _SECRET_KEYS = {"refresh_token", "client_secret", "access_token", "password",
-                "token", "email"}
+                "token", "email", "authorization"}
 _ACTIVE_DAYS = 15
 _ARCHIVE_DAYS = 30
 # MEDIUM-3: dispara rotação mesmo antes da idade, para evitar crescer >100MB

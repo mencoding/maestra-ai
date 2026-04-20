@@ -102,6 +102,38 @@ def test_load_rejects_non_dict_snapshot(monkeypatch, tmp_path):
     with pytest.raises(StorageError, match="malformado"):
         snapshot.load(canonical_id)
 
+def test_snapshot_id_usa_utc_puro(monkeypatch, tmp_path):
+    """S8: ts do snapshot id deve ser UTC puro, sem offset local.
+
+    Antes: datetime.now(UTC).astimezone() re-converte para TZ local,
+    embutindo offset no ID. Em TZ com offset negativo (ex.: America/
+    Sao_Paulo, UTC-3) o ID começa com uma data anterior à data UTC
+    real — dois processos em TZ diferentes produzem IDs ordenáveis
+    ambiguamente.
+
+    Assertivamente: o prefixo do ID (YYYY-MM-DD-HH) deve coincidir
+    com o UTC agora, tolerando transição de minuto.
+    """
+    import datetime as dt
+
+    monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+    (tmp_path / "data").mkdir()
+
+    before = dt.datetime.now(dt.UTC)
+    sid = snapshot.create("test_utc", {"k": "v"})
+    after = dt.datetime.now(dt.UTC)
+
+    # Prefixo "YYYY-MM-DD-HH" em UTC deve bater com o intervalo
+    # [before, after] — tolerância de uma hora (edge em 00:59:59).
+    prefix_before = before.strftime("%Y-%m-%d-%H")
+    prefix_after = after.strftime("%Y-%m-%d-%H")
+    sid_prefix = sid[:13]  # "YYYY-MM-DD-HH"
+    assert sid_prefix in (prefix_before, prefix_after), (
+        f"sid={sid!r} prefixo {sid_prefix!r} não bate com UTC "
+        f"[{prefix_before!r}, {prefix_after!r}]"
+    )
+
+
 def test_snap_id_regex_aceita_formato_canonico():
     from maestra_ai.core.snapshot import _SNAP_ID_RE
     assert _SNAP_ID_RE.match("2026-04-19-142530-000000-safety-before-rollback")
