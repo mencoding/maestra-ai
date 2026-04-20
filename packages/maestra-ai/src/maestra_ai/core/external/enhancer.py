@@ -11,6 +11,7 @@ from collections.abc import Callable, Iterable
 from datetime import datetime
 from typing import cast
 
+from maestra_ai.core.config import any_source_enabled, load_and_migrate
 from maestra_ai.core.external import cache as cache_mod
 from maestra_ai.core.external.types import (
     EnhancedTrack,
@@ -112,10 +113,9 @@ def default_enhancer() -> Enhancer:
     v0.9: só MusicBrainz quando `external_sources_enabled: true`.
     """
     from maestra_ai import __version__ as app_version
-    from maestra_ai.core import storage
     from maestra_ai.core.external.musicbrainz import MusicBrainzSource
 
-    cfg = storage.read_config()
-    if not cfg.get("external_sources_enabled"):
+    cfg = load_and_migrate()
+    if not any_source_enabled(cfg):
         return Enhancer(sources=[])
     return Enhancer(sources=[MusicBrainzSource(app_version=app_version)])

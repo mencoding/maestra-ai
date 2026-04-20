@@ -14,7 +14,12 @@ from maestra_ai.cli import register
 from maestra_ai.cli._common import output
 from maestra_ai.core import storage
 from maestra_ai.core.audit import _redact
-from maestra_ai.core.config import normalize_playlist_id
+from maestra_ai.core.config import (
+    any_source_enabled,
+    migrate_external_sources,
+    normalize_playlist_id,
+    source_enabled,
+)
 
 # Keys permitidas no `set`. Qualquer outra é rejeitada com lista.
 _ALLOWED_KEYS: tuple[str, ...] = (
@@ -90,7 +95,12 @@ def cmd_config_external_status(args, **_):
     cfg = storage.read_config()
     output(
         {
-            "enabled": bool(cfg.get("external_sources_enabled")),
+            "enabled": any_source_enabled(cfg),
+            "per_source": {
+                "musicbrainz": source_enabled(cfg, "musicbrainz"),
+                "lastfm":      source_enabled(cfg, "lastfm"),
+                "getsongbpm":  source_enabled(cfg, "getsongbpm"),
+            },
             "musicbrainz": "available",
         },
         getattr(args, "human", False),
@@ -99,14 +109,16 @@ def cmd_config_external_status(args, **_):
 
 def cmd_config_external_enable(args, **_):
     cfg = storage.read_config()
-    cfg["external_sources_enabled"] = True
+    cfg = migrate_external_sources(cfg)
+    cfg["external_sources"]["musicbrainz"]["enabled"] = True
     storage.write_config(cfg)
     output({"status": "enabled"}, getattr(args, "human", False))
 
 
 def cmd_config_external_disable(args, **_):
     cfg = storage.read_config()
-    cfg["external_sources_enabled"] = False
+    cfg = migrate_external_sources(cfg)
+    cfg["external_sources"]["musicbrainz"]["enabled"] = False
     storage.write_config(cfg)
     output({"status": "disabled"}, getattr(args, "human", False))
 

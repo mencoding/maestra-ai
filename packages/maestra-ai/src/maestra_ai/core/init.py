@@ -16,7 +16,7 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 
 from maestra_ai.core import storage
-from maestra_ai.core.config import normalize_playlist_id
+from maestra_ai.core.config import migrate_external_sources, normalize_playlist_id
 from maestra_ai.core.init_types import InitReport, InitState
 
 # URLs e valores padrão usados nos fluxos
@@ -197,7 +197,7 @@ def _state_c_should_offer_external() -> bool:
     Presença (true ou false) = já decidiu, respeita.
     """
     cfg = storage.read_config()
-    return "external_sources_enabled" not in cfg
+    return "external_sources" not in cfg and "external_sources_enabled" not in cfg
 
 
 def _retry_loop(
@@ -619,7 +619,8 @@ def _flow_B_analysis(  # noqa: N802 — ecoa nome do state (B) para legibilidade
         kwargs["progress_cb"] = _make_onboard_progress_cb()
         enable_external = _prompt_external_sources_optin()
         cfg = storage.read_config()
-        cfg["external_sources_enabled"] = enable_external
+        cfg = migrate_external_sources(cfg)
+        cfg["external_sources"]["musicbrainz"]["enabled"] = enable_external
         storage.write_config(cfg)
         kwargs["enhance_external"] = enable_external
         return onboard.run(sp, taste, **kwargs)
@@ -915,7 +916,8 @@ def run_interactive(*, playlist_id: str | None = None) -> InitReport:
         )
         enable = _prompt_external_sources_optin()
         cfg = storage.read_config()
-        cfg["external_sources_enabled"] = enable
+        cfg = migrate_external_sources(cfg)
+        cfg["external_sources"]["musicbrainz"]["enabled"] = enable
         storage.write_config(cfg)
     choice = Prompt.ask("Escolha", choices=["1", "2", "3"], default="1")
     if choice == "3":

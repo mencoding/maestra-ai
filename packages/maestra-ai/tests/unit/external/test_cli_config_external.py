@@ -36,7 +36,7 @@ def test_external_enable_persists(isolated, capsys):
     _call("cmd_config_external_enable", human=False)
     cfg_path = Path(isolated) / "config" / "maestra" / "config.json"
     data = json.loads(cfg_path.read_text())
-    assert data["external_sources_enabled"] is True
+    assert data["external_sources"]["musicbrainz"]["enabled"] is True
 
 
 def test_external_disable_persists(isolated, capsys):
@@ -44,4 +44,4 @@ def test_external_disable_persists(isolated, capsys):
     _call("cmd_config_external_disable", human=False)
     cfg_path = Path(isolated) / "config" / "maestra" / "config.json"
     data = json.loads(cfg_path.read_text())
-    assert data["external_sources_enabled"] is False
+    assert data["external_sources"]["musicbrainz"]["enabled"] is False

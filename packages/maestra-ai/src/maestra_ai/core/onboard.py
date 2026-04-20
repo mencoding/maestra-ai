@@ -25,6 +25,7 @@ from datetime import UTC
 from pathlib import Path
 
 from maestra_ai.core import storage
+from maestra_ai.core.config import any_source_enabled
 from maestra_ai.core.errors import MaestraError, PlaylistCreateForbiddenError
 from maestra_ai.core.external.mood_mappings import (  # noqa: F401
     _FALLBACK_MOODS,
@@ -1196,7 +1197,7 @@ def run(
     external_mb_artist_resolved = 0
     external_mb_with_tags_only = 0
     cfg = storage.read_config()
-    if cfg.get("external_sources_enabled") and enhance_external:
+    if any_source_enabled(cfg) and enhance_external:
         from maestra_ai.core.external import default_enhancer
         enhancer = default_enhancer()
         active = enhancer.active_sources()

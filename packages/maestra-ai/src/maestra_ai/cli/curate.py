@@ -12,11 +12,12 @@ def _maybe_print_external_attribution():
     from rich.console import Console
 
     from maestra_ai.core import storage
+    from maestra_ai.core.config import any_source_enabled
     from maestra_ai.core.external import cache as ext_cache
     from maestra_ai.core.external.attribution import render_attribution
 
     cfg = storage.read_config()
-    if not cfg.get("external_sources_enabled"):
+    if not any_source_enabled(cfg):
         return
     cache = ext_cache.load_cache()
     sources_used: set[str] = set()

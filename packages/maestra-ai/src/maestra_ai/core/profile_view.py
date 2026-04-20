@@ -5,6 +5,7 @@ import json
 from typing import Any
 
 from maestra_ai.core import storage
+from maestra_ai.core.config import any_source_enabled
 
 
 def _load_json(path) -> dict | None:
@@ -20,7 +21,7 @@ def _build_external_block() -> dict:
     from maestra_ai.core.external import cache as ext_cache
 
     cfg = storage.read_config()
-    enabled = bool(cfg.get("external_sources_enabled"))
+    enabled = any_source_enabled(cfg)
 
     if not enabled:
         return {"enabled": False}
