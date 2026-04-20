@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-04-20
+
+Consolidação do ciclo alpha.0 → alpha.6. Promoção para estável após
+validação do fluxo completo de melhoramento externo via MusicBrainz,
+diversificação de sugestões e calibração editorial dos moods.
+
+### Destaques do ciclo v0.9
+- **Fonte externa de metadata (MusicBrainz)** como fonte gratuita
+  obrigatória, substituindo o campo `genres` depreciado pelo Spotify.
+- **Bridge ISRC → MBID** para resolver artista canônico; genres via
+  HTTP direto (contorna limitação do musicbrainzngs 0.7.1) + tags.
+- **4 níveis de mood**: mapa curado por gênero → tags MB dos top-3
+  artistas → fallback por família (13 famílias) → fallback global.
+- **Diversificação** entre top-5 sugestões via `used_contexts`.
+- **Cache persistente** por ISRC com schema versionado.
+- **Atribuição clicável** (OSC 8) para MusicBrainz no output.
+- **Opt-in UX** no `maestra init` com 2 opções (skip / MB only).
+- **Separação editorial/algorítmico**: `core/external/mood_mappings.py`
+  isola constantes opinativas do código estrutural.
+
+Ver entradas detalhadas de cada alpha abaixo.
+
 ## [0.9.0-alpha.6] — 2026-04-20
 
 ### Corrigido
