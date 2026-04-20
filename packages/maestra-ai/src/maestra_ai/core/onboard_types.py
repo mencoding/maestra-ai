@@ -65,5 +65,39 @@ class ExpansionInfo(TypedDict):
     failed_playlists: list[FailedPlaylist]
 
 
+class OnboardSignals(TypedDict):
+    """Agregados brutos computados no onboard para consumo por CLI/MCP/agentes.
+
+    - top_genres: lista (genero, peso_total) ordenada desc, limite 10.
+    - dominant_decades: lista (decada, peso_total) ordenada desc, limite 3.
+    - top_artists: lista (nome_artista, peso_total) ordenada desc, limite 10.
+
+    Peso é float (afetado por adjustments do TasteProfile em v0.7.0).
+    """
+
+    top_genres: list[tuple[str, float]]
+    dominant_decades: list[tuple[str, float]]
+    top_artists: list[tuple[str, float]]
+
+
+class TrackRationale(TypedDict):
+    """Uma faixa que contribuiu para gerar uma sugestão."""
+
+    uri: str
+    name: str
+    artist: str
+    weight: float
+    feedback: str | None  # "good"/"bad"/None (global, do TasteProfile)
+    skip_count: int  # acumulado de skips registrados pelo TasteProfile
+
+
+class RationaleEntry(TypedDict):
+    """Por que uma sugestão específica apareceu no onboard."""
+
+    text: str
+    based_on: dict  # {"genres": [...], "decades": [...], "artists": [...]}
+    contributing_tracks: list[TrackRationale]
+
+
 # Type alias exportado para anotações.
 PlaylistSelector = Callable[[list[OwnPlaylist], ExpansionContext], list[str]]
