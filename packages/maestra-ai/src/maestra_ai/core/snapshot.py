@@ -47,7 +47,7 @@ def create(operation: str, state: dict) -> str:
         "created_at": ts,
         "state": state,
     }
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    storage.atomic_write_json(path, payload)
     _rotate()
     return snap_id
 

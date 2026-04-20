@@ -130,3 +130,26 @@ def test_list_snapshots_skips_malformed(monkeypatch, tmp_path):
     snaps = snapshot.list_snapshots()
     assert len(snaps) == 1
     assert snaps[0]["id"] == snap_id
+
+
+class TestCreateAtomicity:
+    def test_create_atomico_em_caso_de_crash_simulado(
+        self, tmp_path, monkeypatch,
+    ):
+        """I4 v0.6.1: se o rename final falhar (crash), nenhum arquivo
+        parcial ou .tmp residual deve ficar visível."""
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path))
+
+        from maestra_ai.core import snapshot, storage
+
+        def failing_replace(src, dst):
+            raise RuntimeError("simulated crash mid-rename")
+
+        monkeypatch.setattr("maestra_ai.core.storage.os.replace", failing_replace)
+
+        with pytest.raises(RuntimeError, match="simulated crash"):
+            snapshot.create("test-op", {"foo": "bar"})
+
+        snap_dir = storage.snapshots_dir()
+        published = list(snap_dir.glob("*.json"))
+        assert published == []
