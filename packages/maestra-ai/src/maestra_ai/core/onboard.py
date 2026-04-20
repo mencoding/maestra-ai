@@ -269,40 +269,78 @@ def _apply_taste_to_weights(
 
 
 def _fetch_artists_genres(
-    sp, *, artist_ids: list[str], warnings: list[str] | None = None,
+    sp,
+    *,
+    artist_ids: list[str],
+    warnings: list[str] | None = None,
+    progress_cb: Callable[[dict], None] | None = None,
 ) -> dict[str, list[str]]:
-    """Resolve artist IDs → {artist_name: [genres]} via sp.artists batch.
+    """Enriquecimento de gêneros por artist_id.
 
-    Spotify API aceita até 50 IDs por call — trunca se mais.
-    MaestraError propaga; outras exceções viram dict vazio (fallback).
+    Tenta batch primeiro (`sp.artists`). Em falha (Dev Mode bloqueia
+    `/v1/artists?ids=...`), cai em loop item-a-item (`sp.artist(id)`),
+    que funciona em todos os modos. 3 falhas consecutivas item-a-item
+    abortam com dict vazio + warning.
 
-    v0.8.0-alpha.3: se `warnings` (list mutável) for fornecida, falhas
-    não-MaestraError append uma mensagem legível. Apps em Spotify Dev
-    Mode podem receber 403 em `GET /v1/artists` mesmo sendo endpoint
-    público — o report precisa expor que gêneros não foram enriquecidos.
+    v0.8.0-alpha.4: chave do dict é `artist["id"]` (não `name`), para
+    permitir lookup estável mesmo quando o fallback item-a-item retorna
+    uma resposta sem o mesmo shape do batch.
+    MaestraError sempre propaga (auth/rate limit → pipeline central).
     """
     if not artist_ids:
         return {}
-    batch = artist_ids[:50]
+    ids = list(dict.fromkeys(artist_ids))
+
+    # 1. Tenta batch
     try:
-        resp = sp.artists(batch)
+        response = sp.artists(ids)
     except MaestraError:
         raise
     except Exception as e:
-        if warnings is not None:
-            status = getattr(e, "http_status", None) or getattr(e, "status", None)
-            status_txt = f" ({status})" if status else ""
-            warnings.append(
-                f"artists-fetch falhou{status_txt}: gêneros não disponíveis "
-                f"nesta análise (top artistas e décadas continuam funcionando).",
-            )
-        return {}
+        batch_err = f"{type(e).__name__}: {e}"
+    else:
+        result: dict[str, list[str]] = {}
+        for artist in (response or {}).get("artists", []) or []:
+            if artist and artist.get("id"):
+                result[artist["id"]] = list(artist.get("genres", []) or [])
+        return result
+
+    # 2. Fallback item-a-item
+    if warnings is not None:
+        warnings.append(
+            f"batch artists falhou ({batch_err}); usando fallback "
+            f"item-a-item (mais lento).",
+        )
+
     out: dict[str, list[str]] = {}
-    for artist in (resp or {}).get("artists", []):
-        name = artist.get("name")
-        if not name:
-            continue
-        out[name] = list(artist.get("genres", []))
+    consecutive_failures = 0
+    total = len(ids)
+    for i, aid in enumerate(ids, 1):
+        try:
+            artist = sp.artist(aid)
+            if artist and artist.get("id"):
+                out[artist["id"]] = list(artist.get("genres", []) or [])
+            consecutive_failures = 0
+        except MaestraError:
+            raise
+        except Exception:
+            consecutive_failures += 1
+            if consecutive_failures >= 3:
+                if warnings is not None:
+                    warnings.append(
+                        "item-a-item também falhou 3x consecutivas; "
+                        "gênero indisponível para este onboard (abort).",
+                    )
+                return {}
+            # falha individual: segue em frente
+
+        if progress_cb and i % 5 == 0:
+            progress_cb({
+                "step": -1,
+                "name": "artists_fallback",
+                "detail": f"lendo gênero {i}/{total}...",
+            })
+
     return out
 
 

@@ -1202,6 +1202,7 @@ class TestFetchArtistsGenres:
     """_fetch_artists_genres resolve artist_ids → genres via sp.artists batch."""
 
     def test_resolve_top_artistas_em_uma_call(self):
+        """v0.8.0-alpha.4: resultado keyed por artist_id (não name)."""
         from unittest.mock import MagicMock
         sp = MagicMock()
         sp.artists.return_value = {
@@ -1216,8 +1217,8 @@ class TestFetchArtistsGenres:
             sp, artist_ids=["a1", "a2"],
         )
         assert result == {
-            "Sufjan Stevens": ["indie folk", "chamber folk"],
-            "Nils Frahm": ["neo-classical", "ambient"],
+            "a1": ["indie folk", "chamber folk"],
+            "a2": ["neo-classical", "ambient"],
         }
         sp.artists.assert_called_once_with(["a1", "a2"])
 
@@ -1229,11 +1230,14 @@ class TestFetchArtistsGenres:
         sp.artists.assert_not_called()
 
     def test_erro_api_retorna_dict_vazio_fallback(self):
-        """Falha não-MaestraError em sp.artists cai em fallback sem gêneros."""
+        """v0.8.0-alpha.4: batch falha + item-a-item também falha (3x) → {}."""
         from unittest.mock import MagicMock
         sp = MagicMock()
         sp.artists.side_effect = RuntimeError("spotify flaky")
-        result = onboard._fetch_artists_genres(sp, artist_ids=["a1"])
+        sp.artist.side_effect = RuntimeError("item-a-item também flaky")
+        result = onboard._fetch_artists_genres(
+            sp, artist_ids=["a1", "a2", "a3"],
+        )
         assert result == {}
 
     def test_maestra_error_propaga(self):
@@ -1248,29 +1252,37 @@ class TestFetchArtistsGenres:
         with pytest.raises(AuthError):
             onboard._fetch_artists_genres(sp, artist_ids=["a1"])
 
-    def test_batch_maximo_50_ids(self):
-        """Se passar > 50 IDs, corta em 50 (hard limit Spotify)."""
+    def test_batch_deduplica_ids(self):
+        """v0.8.0-alpha.4: IDs duplicados são deduplicados antes do batch.
+        Cap de 50 do Spotify é tratado pelo caller (top_artist_ids já
+        é limitado a 50 na seleção em onboard.run).
+        """
         from unittest.mock import MagicMock
         sp = MagicMock()
         sp.artists.return_value = {"artists": []}
-        many_ids = [f"a{i}" for i in range(80)]
-        onboard._fetch_artists_genres(sp, artist_ids=many_ids)
+        ids_with_dupes = ["a1", "a2", "a1", "a3", "a2"]
+        onboard._fetch_artists_genres(sp, artist_ids=ids_with_dupes)
         called_ids = sp.artists.call_args[0][0]
-        assert len(called_ids) == 50
+        assert called_ids == ["a1", "a2", "a3"]
 
     def test_erro_api_acumula_warning_quando_warnings_list_fornecida(self):
-        """v0.8.0-alpha.3: quando `warnings` list é passada, falha no fetch
-        de gêneros append uma mensagem para chegar ao report final."""
+        """v0.8.0-alpha.4: quando batch falha e fallback tb falha, warnings
+        acumula tanto a mensagem de degradação quanto a de abort."""
         from unittest.mock import MagicMock
         sp = MagicMock()
         sp.artists.side_effect = RuntimeError("403 Forbidden (Dev Mode)")
+        sp.artist.side_effect = RuntimeError("403 item também")
         warnings: list[str] = []
         result = onboard._fetch_artists_genres(
-            sp, artist_ids=["a1", "a2"], warnings=warnings,
+            sp, artist_ids=["a1", "a2", "a3"], warnings=warnings,
         )
         assert result == {}
-        assert len(warnings) == 1
-        assert "artists-fetch" in warnings[0].lower() or "gêneros" in warnings[0].lower()
+        assert len(warnings) >= 1
+        assert any(
+            "fallback" in w.lower() or "indisponível" in w.lower()
+            or "gêneros" in w.lower()
+            for w in warnings
+        )
 
 
 class TestOnboardRunWarnings:
@@ -1300,8 +1312,11 @@ class TestOnboardRunWarnings:
         sp.current_user_saved_tracks.return_value = {"items": [], "next": None}
         sp.current_user_recently_played.return_value = {"items": [], "next": None}
         sp.playlist.return_value = {"name": "Maestra"}
-        # O ponto crítico: sp.artists falha com 403
+        # O ponto crítico: sp.artists falha com 403 e item-a-item também
+        # (v0.8.0-alpha.4: fallback seria tentado; precisa falhar junto
+        # para que o warning de degradação apareça no report).
         sp.artists.side_effect = RuntimeError("403 Forbidden")
+        sp.artist.side_effect = RuntimeError("403 Forbidden (item)")
 
         taste = TasteProfile(tmp_path / "taste.json")
         report = onboard.run(
@@ -1811,3 +1826,87 @@ class TestSkipKwargs:
         assert report["saved_tracks_fetched"] == 0
         assert report["playlist_id"] is None
         assert report["status"] == "ok"
+
+
+class TestArtistsFallback:
+    def test_batch_falha_fallback_item_por_item_preenche(self, monkeypatch):
+        """Se batch falhar, fallback item-a-item preenche o dict de gêneros."""
+        from maestra_ai.core import onboard
+
+        class FakeSP:
+            def artists(self, ids):  # noqa: N803
+                raise Exception("403 Forbidden (batch)")
+
+            def artist(self, aid):
+                return {"id": aid, "genres": [f"genre-of-{aid}"]}
+
+        warnings: list[str] = []
+        result = onboard._fetch_artists_genres(
+            FakeSP(), artist_ids=["a1", "a2", "a3"], warnings=warnings,
+        )
+        assert result == {
+            "a1": ["genre-of-a1"],
+            "a2": ["genre-of-a2"],
+            "a3": ["genre-of-a3"],
+        }
+        assert any("fallback" in w.lower() or "item-a-item" in w.lower() for w in warnings)
+
+    def test_fallback_3_falhas_consecutivas_aborta(self, monkeypatch):
+        """Se os primeiros 3 item-a-item também falharem, aborta com {}."""
+        from maestra_ai.core import onboard
+
+        class FakeSP:
+            def artists(self, ids):  # noqa: N803
+                raise Exception("403 batch")
+
+            def artist(self, aid):
+                raise Exception("403 item")
+
+        warnings: list[str] = []
+        result = onboard._fetch_artists_genres(
+            FakeSP(), artist_ids=["a1", "a2", "a3", "a4", "a5"], warnings=warnings,
+        )
+        assert result == {}
+        assert any("abort" in w.lower() or "impossível" in w.lower() or "indisponível" in w.lower() for w in warnings)
+
+    def test_fallback_pula_artista_individual_que_falha(self):
+        """Se item específico falhar mas os outros respondem, pular e continuar."""
+        from maestra_ai.core import onboard
+
+        class FakeSP:
+            def artists(self, ids):  # noqa: N803
+                raise Exception("403 batch")
+
+            def artist(self, aid):
+                if aid == "a2":
+                    raise Exception("artista sumiu")
+                return {"id": aid, "genres": ["g"]}
+
+        result = onboard._fetch_artists_genres(
+            FakeSP(), artist_ids=["a1", "a2", "a3"], warnings=[],
+        )
+        assert "a1" in result and "a3" in result and "a2" not in result
+
+    def test_fallback_emite_progresso_a_cada_5(self, monkeypatch):
+        """Callback recebe progress a cada 5 artistas processados."""
+        from maestra_ai.core import onboard
+
+        class FakeSP:
+            def artists(self, ids):  # noqa: N803
+                raise Exception("batch fail")
+
+            def artist(self, aid):
+                return {"id": aid, "genres": ["g"]}
+
+        events = []
+        def cb(ev):
+            events.append(ev)
+
+        onboard._fetch_artists_genres(
+            FakeSP(),
+            artist_ids=[f"a{i}" for i in range(12)],
+            warnings=[],
+            progress_cb=cb,
+        )
+        # 12 artistas / 5 = 2 eventos (em 5 e 10)
+        assert len([e for e in events if e.get("name") == "artists_fallback"]) >= 2

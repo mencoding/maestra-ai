@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0-alpha.4] — 2026-04-20
+
+### Corrigido
+- `_fetch_artists_genres` agora tenta batch primeiro; em falha (Dev Mode
+  Spotify bloqueia `/v1/artists?ids=...` em alguns apps), cai em loop
+  item-a-item via `/v1/artists/<id>` que funciona em todos os modos.
+  Trade-off: +1 request por artista (~30-50 extras), mas gêneros ficam
+  disponíveis. 3 falhas consecutivas item-a-item abortam com warning.
+- Progresso visível no fallback item-a-item (evento `artists_fallback`
+  a cada 5 artistas).
+
 ## [0.8.0-alpha.3] — 2026-04-20
 
 ### Corrigido
