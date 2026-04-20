@@ -34,6 +34,9 @@ class GetSongBpmSource:
         self._api_key = api_key
         self._lock = threading.Lock()
         self._timestamps: deque[float] = deque()
+        self._consecutive_cf_challenges = 0
+        self._disabled_for_session = False
+        self._cf_warning_emitted = False
 
     def is_configured(self) -> bool:
         return bool(self._api_key)
@@ -55,6 +58,8 @@ class GetSongBpmSource:
             self._timestamps.append(time.monotonic())
 
     def _lookup(self, track: TrackInfo) -> SourceResult | None:
+        if self._disabled_for_session:
+            return None
         artists = track.get("artists") or []
         if not artists or not track.get("name"):
             return None
@@ -65,10 +70,21 @@ class GetSongBpmSource:
             self._respect_rate_limit()
             req = urllib.request.Request(url, headers={"User-Agent": "maestra-ai"})
             with urllib.request.urlopen(req, timeout=5) as resp:
-                payload = json.loads(resp.read().decode("utf-8"))
+                raw = resp.read().decode("utf-8")
+            if raw.lstrip().startswith("<"):
+                self._handle_cf_challenge(lookup)
+                return None
+            payload = json.loads(raw)
+        except urllib.error.HTTPError as e:
+            if e.code in (403, 503):
+                self._handle_cf_challenge(lookup)
+            else:
+                logger.debug("getsongbpm HTTP %s for %s", e.code, lookup)
+            return None
         except Exception as exc:  # noqa: BLE001
             logger.debug("getsongbpm lookup failed for %s: %s", lookup, exc)
             return None
+        self._consecutive_cf_challenges = 0
         song = payload.get("song") if isinstance(payload, dict) else None
         if not isinstance(song, dict):
             return None
@@ -85,3 +101,22 @@ class GetSongBpmSource:
                 "time_signature": str(song.get("time_sig") or ""),
             }
         }
+
+    def _handle_cf_challenge(self, lookup: str) -> None:
+        """Detecta Cloudflare challenge / 403 e short-circuita após N falhas.
+
+        Em 2026 o endpoint GetSongBPM passou a exigir resolução de desafio
+        JavaScript via Cloudflare, inacessível a clientes HTTP simples. Após
+        3 falhas consecutivas, desativa a source para o resto da sessão e
+        emite warning único — economiza rate limit e tempo do pipeline.
+        """
+        self._consecutive_cf_challenges += 1
+        logger.debug("getsongbpm Cloudflare challenge for %s", lookup)
+        if self._consecutive_cf_challenges >= 3 and not self._cf_warning_emitted:
+            logger.warning(
+                "GetSongBPM está bloqueando chamadas (Cloudflare challenge). "
+                "Source desativada para esta sessão. Veja "
+                "https://github.com/mencoding/maestra-ai/issues para status."
+            )
+            self._cf_warning_emitted = True
+            self._disabled_for_session = True

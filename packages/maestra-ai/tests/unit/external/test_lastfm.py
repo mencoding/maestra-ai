@@ -16,17 +16,17 @@ def mock_network(mocker):
 
 
 def test_lookup_by_name_returns_lastfm_data(mock_network):
+    """Tags vêm do ARTIST (Last.fm v0.10.3), não da track."""
     track = MagicMock()
-    track.get_top_tags.return_value = [
+    track.get_playcount.return_value = 1234
+    track.get_listener_count.return_value = 567
+    mock_network.get_track.return_value = track
+    artist = MagicMock()
+    artist.get_top_tags.return_value = [
         MagicMock(item=MagicMock(get_name=lambda: "rock")),
         MagicMock(item=MagicMock(get_name=lambda: "alternative")),
     ]
-    track.get_playcount.return_value = 1234
-    track.get_listener_count.return_value = 567
-    artist = MagicMock()
-    artist.get_name.return_value = "Fleetwood Mac"
-    track.get_artist.return_value = artist
-    mock_network.get_track.return_value = track
+    mock_network.get_artist.return_value = artist
 
     source = LastfmSource(api_key="key")
     result = source._lookup({"uri": "spotify:track:x", "name": "Dreams", "artists": ["Fleetwood Mac"], "isrc": None})
@@ -43,6 +43,35 @@ def test_lookup_returns_none_when_track_not_found(mock_network):
     source = LastfmSource(api_key="key")
     result = source._lookup({"uri": "spotify:track:x", "name": "X", "artists": ["Y"], "isrc": None})
     assert result is None
+
+
+def test_lookup_returns_none_when_no_playcount_or_listeners(mock_network):
+    """Track com playcount=0 e listeners=0 é tratado como 'não existe'."""
+    track = MagicMock()
+    track.get_playcount.return_value = 0
+    track.get_listener_count.return_value = 0
+    mock_network.get_track.return_value = track
+    source = LastfmSource(api_key="key")
+    result = source._lookup({"uri": "spotify:track:x", "name": "X", "artists": ["Y"], "isrc": None})
+    assert result is None
+
+
+def test_artist_tags_cached_across_calls(mock_network):
+    """Cache em memória evita chamadas repetidas para o mesmo artista."""
+    track = MagicMock()
+    track.get_playcount.return_value = 100
+    track.get_listener_count.return_value = 100
+    mock_network.get_track.return_value = track
+    artist = MagicMock()
+    artist.get_top_tags.return_value = [MagicMock(item=MagicMock(get_name=lambda: "rock"))]
+    mock_network.get_artist.return_value = artist
+
+    source = LastfmSource(api_key="key")
+    source._lookup({"uri": "u1", "name": "A", "artists": ["Same Artist"], "isrc": None})
+    source._lookup({"uri": "u2", "name": "B", "artists": ["Same Artist"], "isrc": None})
+
+    # network.get_artist deve ter sido chamado apenas uma vez graças ao cache
+    assert mock_network.get_artist.call_count == 1
 
 
 def test_get_similar_artists_returns_names(mock_network):

@@ -31,6 +31,7 @@ class LastfmSource:
         self._rate_lock = threading.Lock()
         # Inicializa com -inf para garantir que a primeira chamada nunca dorme
         self._last_request_at: float = float("-inf")
+        self._artist_tags_cache: dict[str, list[str]] = {}
 
     def is_configured(self) -> bool:
         return bool(self._api_key)
@@ -49,7 +50,13 @@ class LastfmSource:
             self._last_request_at = now
 
     def _lookup(self, track: TrackInfo) -> SourceResult | None:
-        """Busca por artista+track. Last.fm não aceita ISRC no lookup público."""
+        """Busca por artista+track. Retorna None se não encontrado no Last.fm.
+
+        Tags são extraídas do ARTIST (não da track): o Last.fm tem tags
+        folksonômicas ricas no nível de artista (~10-15 típicas), enquanto
+        track.get_top_tags() retorna lista vazia para a maioria. Match é
+        confirmado via playcount/listeners > 0.
+        """
         artists = track.get("artists") or []
         if not artists or not track.get("name"):
             return None
@@ -57,12 +64,15 @@ class LastfmSource:
         try:
             self._respect_rate_limit()
             lf_track = self._network.get_track(artist_name, track["name"])
-            tags = [t.item.get_name() for t in lf_track.get_top_tags()]
             playcount = int(lf_track.get_playcount() or 0)
             listeners = int(lf_track.get_listener_count() or 0)
-        except Exception as exc:  # noqa: BLE001 — pylast lança vários tipos
+        except Exception as exc:  # noqa: BLE001 — pylast lança vários tipos (WSError etc.)
             logger.debug("lastfm lookup failed for %s - %s: %s", artist_name, track["name"], exc)
             return None
+        # Track existe no LF apenas se tem contagem. Evita "match" falso com dados zerados.
+        if playcount == 0 and listeners == 0:
+            return None
+        tags = self._artist_top_tags(artist_name)
         return {
             "lastfm": {
                 "top_tags": tags,
@@ -72,6 +82,24 @@ class LastfmSource:
             },
             "match_method": "name",
         }
+
+    def _artist_top_tags(self, artist_name: str, *, limit: int = 15) -> list[str]:
+        """Retorna até `limit` tags de artista, com cache em memória.
+
+        Artistas repetem entre tracks da biblioteca; cachear aqui evita
+        chamadas redundantes à API (rate limit 5 req/s aplicado mesmo assim).
+        """
+        if artist_name in self._artist_tags_cache:
+            return self._artist_tags_cache[artist_name]
+        try:
+            self._respect_rate_limit()
+            artist_obj = self._network.get_artist(artist_name)
+            tags = [t.item.get_name() for t in artist_obj.get_top_tags(limit=limit)]
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("lastfm artist tags failed for %s: %s", artist_name, exc)
+            tags = []
+        self._artist_tags_cache[artist_name] = tags
+        return tags
 
     def get_similar_artists(self, artist_name: str, *, limit: int = 10) -> list[str]:
         """Retorna até `limit` artistas similares. Lista vazia em qualquer erro."""

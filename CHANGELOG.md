@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.3] — 2026-04-20
+
+### Corrigido
+- **Last.fm: tags extraídas do nível errado.** `Track.get_top_tags()`
+  retorna lista vazia para a maioria das tracks (mesmo populares como
+  Dreams, Wolf Totem, Enter Sandman). Tags folksonômicas no Last.fm
+  vivem no nível de ARTIST (~10-15 tags típicas por artista). `_lookup`
+  agora busca tags via `Artist.get_top_tags(limit=15)` e mantém cache
+  em memória por artista (evita chamadas repetidas quando a biblioteca
+  tem múltiplas faixas do mesmo artista). Tradeoff: ~2x chamadas à API
+  na primeira varredura, mitigado pelo cache.
+- **Last.fm: "match" falso com dados zerados.** `_lookup` retornava
+  `{lastfm: {top_tags: [], playcount: 0, listeners: 0}}` quando a
+  track não existia no Last.fm (em vez de None), causando `external_lf_matched`
+  ser contado incorretamente como 100/100 em bibliotecas com faixas
+  obscuras. Agora `_lookup` retorna None se `playcount == 0 AND
+  listeners == 0`.
+- **GetSongBPM: Cloudflare challenge torna o endpoint inacessível**
+  via `urllib.request` em 2026. API retorna HTML de challenge (HTTP
+  403) em vez de JSON. `_lookup` agora detecta `<!DOCTYPE html>` ou
+  resposta 403/503 e desativa a source para o resto da sessão após 3
+  falhas consecutivas, com warning único no log. Evita gasto de rate
+  limit e poluição de log. A configuração da key permanece funcional
+  para quando/se o bloqueio for removido.
+
+### Adicionado
+- Testes: `test_lookup_returns_none_when_no_playcount_or_listeners`
+  e `test_artist_tags_cached_across_calls` em `test_lastfm.py`.
+
+### Nota
+- GetSongBPM está temporariamente inacessível programaticamente.
+  Usuários que configuraram a key verão warning no log e a source
+  é desativada automaticamente. Investigação contínua sobre bypass
+  ou endpoint alternativo — eventualmente tracking em issue dedicada.
+
 ## [0.10.2] — 2026-04-20
 
 ### Corrigido
