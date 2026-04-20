@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1] — 2026-04-20
+
+### Corrigido
+- **`LastfmSource` e `GetSongBpmSource` não implementavam o contrato do
+  `Protocol EnhancementSource`**. Faltavam os métodos públicos
+  `is_configured()` e `enhance_track(track)`, que o `Enhancer` chama
+  em runtime. `_lookup()` existia como método privado mas não era
+  alcançado pelo pipeline. Só aparecia quando ambas as sources eram
+  ativadas simultaneamente em uso real — os testes unitários mockavam
+  tudo e não exercitavam o contrato. Adicionados:
+  ```python
+  def is_configured(self) -> bool:
+      return bool(self._api_key)
+
+  def enhance_track(self, track: TrackInfo) -> SourceResult | None:
+      return self._lookup(track)
+  ```
+  em ambos os módulos (`core/external/lastfm.py` e
+  `core/external/getsongbpm.py`).
+
+### Nota
+- Incidente revela lacuna de cobertura: falta teste de integração do
+  `Enhancer` instanciando sources reais (mesmo com clientes externos
+  mockados). Adicionar em v0.11.
+
 ## [0.10.0] — 2026-04-20
 
 Consolidação do ciclo alpha.0 → alpha.2. v0.10 ativa o ganho real de
