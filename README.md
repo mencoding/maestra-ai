@@ -106,6 +106,14 @@ export MAESTRA_STATE_DIR=/tmp/maestra-test/state
 Token antigo sem os scopes `user-read-email`/`user-read-private`. Rode
 `maestra auth login` de novo.
 
+## Créditos de metadata
+
+Agradecimentos aos serviços públicos que sustentam a curadoria enriquecida:
+
+- Gêneros, tags e identidade canônica via [MusicBrainz](https://musicbrainz.org).
+- Tags folksonômicas ricas e artistas similares via [Last.fm](https://www.last.fm/about).
+- BPM, tonalidade e time signature via [GetSongBPM](https://getsongbpm.com/about).
+
 ## Licença
 
 MIT.
