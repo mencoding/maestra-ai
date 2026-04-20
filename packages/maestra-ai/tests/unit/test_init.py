@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 
 class TestDetectState:
     """Cobre as 4 combinações legítimas + 3 inconsistentes."""
@@ -142,3 +144,58 @@ class TestMenuRendering:
         assert "mood recente" in out.lower()
         assert "Tudo" in out
         assert "Voltar" in out
+
+
+class TestRetryLoop:
+    def test_sucesso_primeira_tentativa_nao_pergunta(self, capsys, monkeypatch):
+        from maestra_ai.core import init
+        calls = {"n": 0}
+
+        def fn():
+            calls["n"] += 1
+            return "ok"
+
+        result = init._retry_loop(
+            fn,
+            classifier=lambda e: "network",
+            hints={"network": "Cheque sua conexão."},
+        )
+        assert result == "ok"
+        assert calls["n"] == 1
+
+    def test_recuperacao_na_segunda(self, capsys, monkeypatch):
+        from maestra_ai.core import init
+        calls = {"n": 0}
+
+        def fn():
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise ConnectionError("timeout")
+            return "ok"
+
+        monkeypatch.setattr(init, "_ask_retry", lambda: True)
+        result = init._retry_loop(
+            fn,
+            classifier=lambda e: "network",
+            hints={"network": "Cheque sua conexão."},
+        )
+        assert result == "ok"
+        assert calls["n"] == 2
+
+    def test_tres_falhas_mesmo_tipo_retorna_smart_hint(self, capsys, monkeypatch):
+        from maestra_ai.core import init
+
+        def fn():
+            raise ConnectionError("fail")
+
+        monkeypatch.setattr(init, "_ask_retry", lambda: True)
+        monkeypatch.setattr(init, "_ask_smart_exit", lambda *a, **k: False)
+
+        with pytest.raises(init.UserAbort):
+            init._retry_loop(
+                fn,
+                classifier=lambda e: "network",
+                hints={"network": "Cheque sua conexão."},
+            )
+        out = capsys.readouterr().out
+        assert "terceira tentativa" in out.lower() or "3" in out

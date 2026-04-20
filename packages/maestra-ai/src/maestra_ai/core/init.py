@@ -6,12 +6,20 @@ escolhido. Delega I/O externo para `core.auth` e `core.onboard`.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
+from typing import TypeVar
 
 from rich.console import Console
 from rich.panel import Panel
 
 from maestra_ai.core import storage
 from maestra_ai.core.init_types import InitState
+
+T = TypeVar("T")
+
+
+class UserAbort(Exception):
+    """Usuário escolheu sair voluntariamente."""
 
 _console = Console()
 
@@ -119,3 +127,76 @@ def detect_state() -> InitState:
         return "A2"
     # Combinações inconsistentes caem em A
     return "A"
+
+
+def _ask_retry() -> bool:
+    """Pergunta '[1] Tentar de novo / [2] Sair'. Retorna True se tentar."""
+    from rich.prompt import Prompt
+    _console.print("\n  [1] Tentar de novo")
+    _console.print("  [2] Sair")
+    choice = Prompt.ask("Escolha", choices=["1", "2"], default="1")
+    return choice == "1"
+
+
+def _ask_smart_exit(error_kind: str, hint: str) -> bool:
+    """Pergunta se abre link externo ou sai. Retorna True se quer tentar de novo."""
+    from rich.prompt import Prompt
+    _console.print(
+        f"\nEssa é a terceira tentativa com o mesmo erro ({error_kind}).\n\n"
+        f"Parece que o problema precisa de ação externa. {hint}\n"
+    )
+    _console.print("  [1] Abrir no navegador e tentar de novo")
+    _console.print("  [2] Sair e resolver depois (seu progresso foi salvo)")
+    choice = Prompt.ask("Escolha", choices=["1", "2"], default="2")
+    return choice == "1"
+
+
+def _retry_loop(
+    fn: Callable[[], T],
+    *,
+    classifier: Callable[[Exception], str],
+    hints: dict[str, str],
+    max_same_kind: int = 3,
+    on_smart_exit_link: Callable[[str], None] | None = None,
+) -> T:
+    """Executa `fn()` com retry interativo até sucesso ou desistência.
+
+    - Após `max_same_kind` (default 3) falhas consecutivas do MESMO tipo,
+      oferece smart exit com link e mensagem específica.
+    - Se o usuário escolher sair (seja no prompt comum ou no smart exit),
+      levanta `UserAbort`.
+    """
+    same_kind_count = 0
+    last_kind: str | None = None
+    while True:
+        try:
+            return fn()
+        except Exception as e:
+            kind = classifier(e)
+            hint = hints.get(kind, "Tente novamente em alguns segundos.")
+            _console.print(f"\n{e}\n\n{hint}\n")
+
+            if kind == last_kind:
+                same_kind_count += 1
+            else:
+                same_kind_count = 1
+                last_kind = kind
+
+            if same_kind_count >= max_same_kind:
+                _console.print(
+                    f"\nEssa é a terceira tentativa com o mesmo tipo de erro "
+                    f"({kind}). Vou oferecer uma saída diferente.\n"
+                )
+                if _ask_smart_exit(kind, hint):
+                    if on_smart_exit_link is not None:
+                        on_smart_exit_link(kind)
+                    # Reseta contador — usuário realizou ação externa
+                    same_kind_count = 0
+                    last_kind = None
+                    continue
+                raise UserAbort(
+                    f"Desistiu após {same_kind_count} tentativas ({kind})"
+                )
+
+            if not _ask_retry():
+                raise UserAbort("Usuário escolheu sair")
