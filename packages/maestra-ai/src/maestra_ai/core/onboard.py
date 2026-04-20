@@ -571,6 +571,25 @@ def _build_rationale(
     }
 
 
+def _persist_rationale(rationale_entries: list[dict]) -> "Path":
+    """Persiste as rationale entries em state_dir/onboard_rationale.json.
+
+    Sobrescreve a cada chamada (lifetime = último onboard).
+    Retorna a Path do arquivo.
+    """
+    from datetime import datetime, timezone
+    from pathlib import Path
+    path = storage.state_dir() / "onboard_rationale.json"
+    payload = {
+        "generated_at": datetime.now(timezone.utc).astimezone().isoformat(
+            timespec="seconds",
+        ),
+        "suggestions": list(rationale_entries),
+    }
+    storage.atomic_write_json(path, payload)
+    return path
+
+
 def _resolve_playlist_name(sp, desired: str) -> str:
     """Se já existe playlist com esse nome, acrescenta sufixo numérico."""
     try:
@@ -933,13 +952,46 @@ def run(
             sp.playlist_add_items(playlist_id, seed_uris)
             seeded = len(seed_uris)
 
-    # Sugestões ordenadas por peso
+    # v0.7.0: sugestões inteligentes com taste + gêneros + rationale
+    tracks_list = list(index.values())
+    adjusted_weights = _apply_taste_to_weights(
+        {uri: float(w) for uri, w in weights.items()},
+        tracks_list,
+        taste,
+    )
+    # Fetch genres do top 50 artistas (por peso agregado pré-signals)
+    pre_artist_counter: Counter[str] = Counter()
+    for uri, w in adjusted_weights.items():
+        t = index.get(uri, {})
+        artists = t.get("artists") or []
+        if artists:
+            first = artists[0]
+            if first.get("name"):
+                pre_artist_counter[first["name"]] += w
+    top_artist_ids: list[str] = []
+    seen_ids: set[str] = set()
+    for aname, _ in pre_artist_counter.most_common(50):
+        for t in tracks_list:
+            for a in t.get("artists") or []:
+                if (a.get("name") == aname
+                        and a.get("id")
+                        and a["id"] not in seen_ids):
+                    top_artist_ids.append(a["id"])
+                    seen_ids.add(a["id"])
+                    break
+            if aname in {a.get("name") for a in t.get("artists") or []}:
+                break
+    artists_genres = _fetch_artists_genres(sp, artist_ids=top_artist_ids)
+
     sorted_tracks = sorted(
-        list(index.values()),
-        key=lambda t: weights.get(t.get("uri", ""), 0),
+        [t for t in tracks_list if t.get("uri") in adjusted_weights],
+        key=lambda t: adjusted_weights.get(t.get("uri", ""), 0),
         reverse=True,
     )
-    suggestions = _derive_suggestions(sorted_tracks)
+    suggestions, rationale_entries, signals = _derive_suggestions(
+        sorted_tracks, adjusted_weights, artists_genres, taste,
+    )
+    rationale_path = _persist_rationale(rationale_entries)
 
     return {
         "status": "ok",
@@ -954,4 +1006,6 @@ def run(
         "unique_tracks_scored": len(weights),
         "seeded": seeded,
         "context_suggestions": suggestions,
+        "signals": signals,
+        "rationale_path": str(rationale_path),
     }

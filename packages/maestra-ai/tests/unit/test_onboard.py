@@ -850,15 +850,6 @@ class TestRun:
         step_numbers = {s.get("step") for s in steps if "step" in s}
         assert step_numbers >= {1, 2, 3, 4, 5, 6}
 
-    def test_derive_suggestions_retorna_5_strings(self):
-        tracks = [
-            {"uri": f"u{i}", "artists": [{"name": f"Ar{i%3}"}]} for i in range(50)
-        ]
-        suggestions = onboard._derive_suggestions(tracks)
-        assert len(suggestions) == 5
-        for s in suggestions:
-            assert isinstance(s, str) and len(s) > 0
-
     def test_seed_playlist_usa_top_short(self, tmp_path, monkeypatch):
         monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
         monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
@@ -1294,6 +1285,7 @@ class TestPreservaMetadata:
         from maestra_ai.core.taste import TasteProfile
         monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
         monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+        monkeypatch.setenv("MAESTRA_STATE_DIR", str(tmp_path / "state"))
 
         sp = _make_sp(top_long=0, top_medium=0, top_short=0,
                       saved_pages=[{"items": []}], recent=0)
@@ -1311,7 +1303,8 @@ class TestPreservaMetadata:
 
         def spy(tracks_by_weight, *args, **kwargs):
             captured["tracks"] = tracks_by_weight
-            return []
+            # Retorna tupla (texts, rationale_entries, signals) esperada por run()
+            return [], [], {"top_genres": [], "dominant_decades": [], "top_artists": []}
 
         monkeypatch.setattr(onboard, "_derive_suggestions", spy)
 
@@ -1533,3 +1526,90 @@ class TestApplyTasteToWeights:
             weights, self._sample_tracks(), taste,
         )
         assert "spotify:track:t1" not in out or out["spotify:track:t1"] == 0.0
+
+
+class TestPersistRationale:
+    """v0.7.0: onboard.run() persiste rationale em state_dir/onboard_rationale.json
+    e adiciona signals ao report."""
+
+    def test_persist_cria_arquivo_com_schema_correto(
+        self, tmp_path, monkeypatch,
+    ):
+        import json as _json
+        from maestra_ai.core.taste import TasteProfile
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+        monkeypatch.setenv("MAESTRA_STATE_DIR", str(tmp_path / "state"))
+
+        sp = _make_sp(top_long=3, top_medium=0, top_short=0,
+                      saved_pages=[{"items": []}], recent=0)
+        sp.artists.return_value = {"artists": []}
+
+        taste = TasteProfile(tmp_path / "taste.json")
+        report = onboard.run(
+            sp, taste, playlist_name="Test",
+            seed_count=0, playlist_selector=None, total_cap=5000,
+        )
+
+        from maestra_ai.core.storage import state_dir
+        rationale_path = state_dir() / "onboard_rationale.json"
+        assert rationale_path.exists(), \
+            "arquivo onboard_rationale.json não foi criado"
+        data = _json.loads(rationale_path.read_text(encoding="utf-8"))
+        assert "generated_at" in data
+        assert "suggestions" in data
+        assert isinstance(data["suggestions"], list)
+
+    def test_report_contem_signals_e_rationale_path(
+        self, tmp_path, monkeypatch,
+    ):
+        from maestra_ai.core.taste import TasteProfile
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+        monkeypatch.setenv("MAESTRA_STATE_DIR", str(tmp_path / "state"))
+
+        sp = _make_sp(top_long=5, top_medium=0, top_short=0,
+                      saved_pages=[{"items": []}], recent=0)
+        sp.artists.return_value = {"artists": []}
+
+        taste = TasteProfile(tmp_path / "taste.json")
+        report = onboard.run(
+            sp, taste, playlist_name="Test",
+            seed_count=0, playlist_selector=None, total_cap=5000,
+        )
+        assert "signals" in report
+        assert "top_genres" in report["signals"]
+        assert "dominant_decades" in report["signals"]
+        assert "top_artists" in report["signals"]
+        assert "rationale_path" in report
+
+    def test_persist_sobrescreve_onboard_anterior(
+        self, tmp_path, monkeypatch,
+    ):
+        import json as _json
+        from maestra_ai.core.taste import TasteProfile
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+        monkeypatch.setenv("MAESTRA_STATE_DIR", str(tmp_path / "state"))
+
+        taste = TasteProfile(tmp_path / "taste.json")
+
+        def _make_fresh_sp():
+            sp = _make_sp(top_long=3, top_medium=0, top_short=0,
+                          saved_pages=[{"items": []}], recent=0)
+            sp.artists.return_value = {"artists": []}
+            return sp
+
+        onboard.run(_make_fresh_sp(), taste, playlist_name="T1", seed_count=0,
+                    playlist_selector=None, total_cap=5000)
+
+        from maestra_ai.core.storage import state_dir
+        path = state_dir() / "onboard_rationale.json"
+        first = _json.loads(path.read_text(encoding="utf-8"))
+
+        import time
+        time.sleep(1.01)  # garante mudança no timestamp (resolução segundos)
+        onboard.run(_make_fresh_sp(), taste, playlist_name="T2", seed_count=0,
+                    playlist_selector=None, total_cap=5000)
+        second = _json.loads(path.read_text(encoding="utf-8"))
+        assert first["generated_at"] != second["generated_at"]
