@@ -1236,6 +1236,7 @@ def run(
     external_mb_with_tags_only = 0
     external_lf_matched = 0
     external_lf_with_tags = 0
+    external_gsb_matched = 0
     cfg = storage.read_config()
     if any_source_enabled(cfg) and enhance_external:
         from maestra_ai.core.external import default_enhancer
@@ -1287,6 +1288,10 @@ def run(
                 1 for t in enhanced
                 if t.get("lastfm") and (t["lastfm"].get("top_tags") or [])
             )
+            external_gsb_matched = sum(
+                1 for t in enhanced
+                if t.get("bpm") and t["bpm"].get("bpm")
+            )
             for t_info, enhanced_track in zip(track_infos, enhanced, strict=False):
                 spotify_aid = t_info.get("spotify_artist_id")
                 mb = enhanced_track.get("musicbrainz") or {}
@@ -1334,4 +1339,5 @@ def run(
         "external_mb_with_tags_only": external_mb_with_tags_only,
         "external_lf_matched": external_lf_matched,
         "external_lf_with_tags": external_lf_with_tags,
+        "external_gsb_matched": external_gsb_matched,
     }

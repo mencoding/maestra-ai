@@ -509,6 +509,21 @@ def _print_onboard_results(report: dict) -> None:
                 "mainstream ainda; considere contribuir em musicbrainz.org.[/dim]"
             )
 
+    if "lastfm" in sources_used:
+        total = report.get("external_enhanced_count", 0)
+        lf_matched = report.get("external_lf_matched", 0)
+        lf_with_tags = report.get("external_lf_with_tags", 0)
+        _console.print("\n[bold]Melhoramento externo (Last.fm):[/bold]")
+        _console.print(f"  • {lf_matched} de {total} faixas encontradas na base.")
+        if lf_with_tags:
+            _console.print(f"  • {lf_with_tags} com tags descritivas.")
+
+    if "getsongbpm" in sources_used:
+        total = report.get("external_enhanced_count", 0)
+        gsb_matched = report.get("external_gsb_matched", 0)
+        _console.print("\n[bold]Melhoramento externo (GetSongBPM):[/bold]")
+        _console.print(f"  • {gsb_matched} de {total} faixas com BPM conhecido.")
+
     suggestions = report.get("context_suggestions") or report.get("suggestions") or []
     if suggestions:
         _console.print("\n[bold]Sugestões de contextos:[/bold]")

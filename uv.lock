@@ -491,7 +491,7 @@ wheels = [
 
 [[package]]
 name = "maestra-ai"
-version = "0.10.1"
+version = "0.10.2"
 source = { editable = "packages/maestra-ai" }
 dependencies = [
     { name = "keyring" },

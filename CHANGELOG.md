@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.2] — 2026-04-20
+
+### Corrigido
+- **Relatório do `maestra init` não reportava Last.fm nem GetSongBPM**
+  mesmo quando as sources estavam ativas e retornando dados. As
+  métricas `external_lf_matched`/`external_lf_with_tags` eram
+  computadas em `onboard.py` (v0.10.0-alpha.0 Task 12) mas `init.py`
+  só chamava o bloco de MusicBrainz. Adicionados blocos paralelos
+  para Last.fm e GetSongBPM no `_print_onboard_results`.
+
+### Adicionado
+- **Métrica `external_gsb_matched`** (contagem de faixas com BPM
+  conhecido via GetSongBPM) em `onboard.py`. Completa a trinca de
+  visibilidade do enhancement externo: MB/LF/GSB cada um com seu
+  bloco no relatório final.
+
 ## [0.10.1] — 2026-04-20
 
 ### Corrigido
