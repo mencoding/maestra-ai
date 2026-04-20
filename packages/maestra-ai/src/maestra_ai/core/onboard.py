@@ -1133,10 +1133,9 @@ def run(
 
     external_enhanced_count = 0
     external_sources_used: list[str] = []
+    external_mb_with_genres = 0
     cfg = storage.read_config()
     if cfg.get("external_sources_enabled") and enhance_external:
-        from rich.console import Console
-
         from maestra_ai.core.external import default_enhancer
         enhancer = default_enhancer()
         active = enhancer.active_sources()
@@ -1157,7 +1156,12 @@ def run(
             )
             external_enhanced_count = len(enhanced)
             external_sources_used = active
-            _emit_mb_summary(enhanced, console=Console())
+            external_mb_with_genres = sum(
+                1 for t in enhanced
+                if t.get("musicbrainz") and (
+                    t["musicbrainz"].get("genres") or t["musicbrainz"].get("tags")
+                )
+            )
 
     return {
         "status": "ok",
@@ -1177,4 +1181,5 @@ def run(
         "warnings": warnings,
         "external_enhanced_count": external_enhanced_count,
         "external_sources_used": external_sources_used,
+        "external_mb_with_genres": external_mb_with_genres,
     }

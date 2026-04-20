@@ -452,7 +452,7 @@ def _build_taste_profile():
 
 
 def _print_onboard_results(report: dict) -> None:
-    """Imprime narrativa pós-análise: gêneros/décadas dominantes + sugestões."""
+    """Imprime narrativa pós-análise: gêneros/décadas + melhoramento + sugestões + avisos."""
     signals = report.get("signals") or {}
     _console.print("\n[bold]Análise concluída![/bold]\n")
 
@@ -466,19 +466,21 @@ def _print_onboard_results(report: dict) -> None:
         nomes = ", ".join(d for d, _ in decades[:3])
         _console.print(f"Décadas dominantes: {nomes}")
 
+    # v0.9.0-alpha.1: bloco de melhoramento externo (só se rodou).
+    sources_used = report.get("external_sources_used") or []
+    if "musicbrainz" in sources_used:
+        total = report.get("external_enhanced_count", 0)
+        with_genres = report.get("external_mb_with_genres", 0)
+        _console.print(
+            f"Melhoramento externo: {with_genres} de {total} "
+            "faixas com gêneros do MusicBrainz."
+        )
+
     suggestions = report.get("context_suggestions") or report.get("suggestions") or []
     if suggestions:
         _console.print("\n[bold]Sugestões de contextos:[/bold]")
         for i, s in enumerate(suggestions, 1):
             _console.print(f"  {i}. {s}")
-
-    # v0.8.0-alpha.3: warnings expostos no final — ex.: artists-fetch 403
-    # em Dev Mode faz a análise seguir sem gêneros; user precisa saber.
-    warnings = report.get("warnings") or []
-    if warnings:
-        _console.print("\n[yellow]Avisos:[/yellow]")
-        for w in warnings:
-            _console.print(f"  [yellow]•[/yellow] {w}")
 
     _console.print(
         "\n[dim]Para usar:[/dim]\n"
@@ -486,6 +488,15 @@ def _print_onboard_results(report: dict) -> None:
         "  maestra curate\n"
         "  maestra play\n"
     )
+
+    # v0.9.0-alpha.1: avisos no final, após separador, para não esconder
+    # o relatório principal. Texto já reescrito em linguagem comum (F2).
+    warnings = report.get("warnings") or []
+    if warnings:
+        _console.print("─" * 60)
+        _console.print("\n[yellow]Avisos:[/yellow]")
+        for w in warnings:
+            _console.print(f"  [yellow]•[/yellow] {w}")
 
 
 # Instrução didática exibida antes de pedir o link da playlist criada pelo
