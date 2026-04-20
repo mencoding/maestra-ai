@@ -36,6 +36,11 @@ def register_parser(subparsers: argparse._SubParsersAction) -> None:
         action="store_true",
         help="Saída estruturada JSON (implica --auto).",
     )
+    p.add_argument(
+        "--playlist-id",
+        metavar="URI|URL|ID",
+        help="Usa playlist existente (ex: spotify:playlist:ID). Pula a criação.",
+    )
     # `init` não precisa de deps montadas pelo pipeline central — o core
     # constrói seus próprios clientes conforme o fluxo escolhido.
     p.set_defaults(func=_handle, skip_deps=True)
@@ -47,11 +52,12 @@ def _handle(args: argparse.Namespace) -> int:
     # --json implica --auto (saída para agentes, sem prompts).
     auto = bool(getattr(args, "auto", False) or getattr(args, "json", False))
     want_json = bool(getattr(args, "json", False))
+    playlist_id = getattr(args, "playlist_id", None)
     try:
         if auto:
-            report = init_mod.run_auto()
+            report = init_mod.run_auto(playlist_id=playlist_id)
         else:
-            report = init_mod.run_interactive()
+            report = init_mod.run_interactive(playlist_id=playlist_id)
     except init_mod.UserAbort as e:
         if want_json:
             print(_json.dumps({"error": str(e)}, ensure_ascii=False))

@@ -376,6 +376,34 @@ class TestFlowB:
         assert report["playlist_id"] == "pl_ok"
         assert calls["n"] == 2
 
+    def test_flow_B_com_playlist_id_pula_criacao(self, monkeypatch):  # noqa: N802 — ecoa nome do state (B) para legibilidade
+        from maestra_ai.core import init, onboard
+
+        captured = {}
+
+        def fake_run(sp, taste, **kw):
+            captured.update(kw)
+            return {
+                "playlist_id": kw.get("existing_playlist_id"),
+                "playlist_name": kw.get("playlist_name"),
+                "signals": {},
+                "suggestions": [],
+                "rationale_path": None,
+                "warnings": [],
+            }
+
+        monkeypatch.setattr(onboard, "run", fake_run)
+        monkeypatch.setattr(init, "_build_spotify_client", lambda: object())
+        monkeypatch.setattr(init, "_build_taste_profile", lambda: object())
+
+        report = init._flow_B_analysis(
+            playlist_name_hint="Maestra",
+            skip_expansion=True,
+            existing_playlist_id="6c2ppkdUfGKJNWwBl0MC4w",
+        )
+        assert captured["existing_playlist_id"] == "6c2ppkdUfGKJNWwBl0MC4w"
+        assert report["playlist_id"] == "6c2ppkdUfGKJNWwBl0MC4w"
+
 
 class TestFlowC:
     """Fluxo C → [1]: atualização incremental.
@@ -658,3 +686,28 @@ class TestRunOrchestration:
         report = init.run_auto()
         assert report["action"] == "update_full"
         assert captured.get("mode") == "full"
+
+    def test_run_auto_com_playlist_id_repassa_ao_flow_B(self, monkeypatch):  # noqa: N802 — ecoa nome do state (B) para legibilidade
+        from maestra_ai.core import init
+
+        captured = {}
+
+        def fake_flow(**kw):  # noqa: N802 — ecoa nome do state (B) para legibilidade
+            captured.update(kw)
+            return {
+                "state_before": "B",
+                "action": "initial_analysis",
+                "playlist_id": "abc",
+                "taste_profile_updated": True,
+                "rationale_path": None,
+                "signals": None,
+                "suggestions": [],
+                "warnings": [],
+            }
+
+        monkeypatch.setattr(init, "detect_state", lambda: "B")
+        monkeypatch.setattr(init, "_flow_B_analysis", fake_flow)
+        report = init.run_auto(playlist_id="spotify:playlist:6c2ppkdUfGKJNWwBl0MC4w")
+        # URI foi normalizada para ID puro
+        assert captured["existing_playlist_id"] == "6c2ppkdUfGKJNWwBl0MC4w"
+        assert report["action"] == "initial_analysis"

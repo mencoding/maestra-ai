@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0-alpha.1] — 2026-04-20
+
+### Adicionado
+- Flag `--playlist-id` em `maestra init` — aponta playlist existente e pula
+  a criação. Útil quando o app Spotify está em Development Mode e retorna
+  403 em `POST /users/.../playlists` (limitação conhecida; User Management
+  + email correto não resolve em todos os casos).
+- `run_interactive` e `run_auto` aceitam `playlist_id` (normalizado via
+  `config.normalize_playlist_id`).
+
 ## [0.8.0-alpha.0] — 2026-04-20
 
 ### Adicionado

@@ -442,6 +442,7 @@ def _flow_B_analysis(  # noqa: N802 — ecoa nome do state (B) para legibilidade
     *,
     playlist_name_hint: str | None = None,
     skip_expansion: bool = False,
+    existing_playlist_id: str | None = None,
 ) -> InitReport:
     """Fluxo B → [1]: análise inicial de preferências.
 
@@ -453,12 +454,18 @@ def _flow_B_analysis(  # noqa: N802 — ecoa nome do state (B) para legibilidade
       playlist_name_hint: nome pré-definido (modo --auto). None = prompt.
       skip_expansion: pula a expansão por playlists próprias (não passa
         selector). Default False para interativo.
+      existing_playlist_id: se fornecido, pula a criação e aponta para a
+        playlist existente. Útil quando o app Spotify está em Development
+        Mode e retorna 403 em POST /users/.../playlists.
     """
     from maestra_ai.core import onboard
     from maestra_ai.core.errors import PlaylistCreateForbiddenError
 
-    # Define nome da playlist: prompt se hint=None
-    if playlist_name_hint is None:
+    # Define nome da playlist: prompt se hint=None, exceto quando já temos
+    # playlist_id — nesse caso o nome é só um hint (não recria).
+    if existing_playlist_id is not None:
+        name = playlist_name_hint or "Maestra"
+    elif playlist_name_hint is None:
         name = Prompt.ask(
             "Nome da playlist onde as sugestões vão aparecer?",
             default="Maestra",
@@ -466,16 +473,24 @@ def _flow_B_analysis(  # noqa: N802 — ecoa nome do state (B) para legibilidade
     else:
         name = playlist_name_hint
 
-    _console.print(
-        f"\nVou criar uma playlist privada chamada [bold]'{name}'[/bold]. "
-        "As curadorias futuras vão popular ela (~2s por rodada).\n"
-    )
+    if existing_playlist_id is not None:
+        _console.print(
+            f"\nUsando playlist existente [bold]{existing_playlist_id}[/bold]. "
+            "As curadorias futuras vão popular ela (~2s por rodada).\n"
+        )
+    else:
+        _console.print(
+            f"\nVou criar uma playlist privada chamada [bold]'{name}'[/bold]. "
+            "As curadorias futuras vão popular ela (~2s por rodada).\n"
+        )
 
     sp = _build_spotify_client()
     taste = _build_taste_profile()
 
     def do_run():
-        kwargs = {"playlist_name": name}
+        kwargs: dict = {"playlist_name": name}
+        if existing_playlist_id is not None:
+            kwargs["existing_playlist_id"] = existing_playlist_id
         if skip_expansion:
             # Sem selector = onboard.run pula expansão
             # (reason="selector_not_provided").
@@ -691,7 +706,7 @@ def _flow_reset_full() -> InitReport:
     }
 
 
-def run_interactive() -> InitReport:
+def run_interactive(*, playlist_id: str | None = None) -> InitReport:
     """Executa o wizard `maestra init` em modo interativo.
 
     Detecta o estado atual e apresenta o menu contextual. Dispatch por
@@ -706,6 +721,12 @@ def run_interactive() -> InitReport:
     Em todos os fluxos, `UserAbort` levantado por sub-fluxos (ex: retry
     loop desistido) é propagado para o CLI traduzir em exit code.
     """
+    # Normaliza playlist_id se fornecido (aceita URI/URL/ID).
+    normalized_pid: str | None = None
+    if playlist_id is not None:
+        from maestra_ai.core.config import normalize_playlist_id
+        normalized_pid = normalize_playlist_id(playlist_id)
+
     state = detect_state()
     render_menu(state)
 
@@ -716,7 +737,11 @@ def run_interactive() -> InitReport:
         # [1] Começar agora: A → A2 → B encadeados
         _flow_A_collect_credentials()
         _flow_A2_oauth_paste_back()
-        report = _flow_B_analysis(playlist_name_hint=None, skip_expansion=False)
+        report = _flow_B_analysis(
+            playlist_name_hint=None,
+            skip_expansion=False,
+            existing_playlist_id=normalized_pid,
+        )
         # Preserva state_before original da jornada
         report = dict(report)  # type: ignore[assignment]
         report["state_before"] = "A"
@@ -733,7 +758,11 @@ def run_interactive() -> InitReport:
             return report  # type: ignore[return-value]
         # [1] Continuar — autorizar e analisar
         _flow_A2_oauth_paste_back()
-        report = _flow_B_analysis(playlist_name_hint=None, skip_expansion=False)
+        report = _flow_B_analysis(
+            playlist_name_hint=None,
+            skip_expansion=False,
+            existing_playlist_id=normalized_pid,
+        )
         report = dict(report)  # type: ignore[assignment]
         report["state_before"] = "A2"
         return report  # type: ignore[return-value]
@@ -744,7 +773,11 @@ def run_interactive() -> InitReport:
             return _report_exit("B")
         if choice == "2":
             return _flow_reset_partial()
-        return _flow_B_analysis(playlist_name_hint=None, skip_expansion=False)
+        return _flow_B_analysis(
+            playlist_name_hint=None,
+            skip_expansion=False,
+            existing_playlist_id=normalized_pid,
+        )
 
     # state == "C"
     choice = Prompt.ask("Escolha", choices=["1", "2", "3"], default="1")
@@ -760,10 +793,10 @@ def run_interactive() -> InitReport:
     if sub == "2":
         return _flow_C_update(mode="full")
     # [3] Voltar — re-chama run_interactive recursivamente
-    return run_interactive()
+    return run_interactive(playlist_id=playlist_id)
 
 
-def run_auto() -> InitReport:
+def run_auto(*, playlist_id: str | None = None) -> InitReport:
     """Executa o wizard `maestra init` em modo automático (sem prompts).
 
     Cobre apenas os estados B e C — A e A2 levantam `UserError` porque
@@ -775,6 +808,12 @@ def run_auto() -> InitReport:
     """
     from maestra_ai.core.errors import UserError
 
+    # Normaliza playlist_id se fornecido (aceita URI/URL/ID).
+    normalized_pid: str | None = None
+    if playlist_id is not None:
+        from maestra_ai.core.config import normalize_playlist_id
+        normalized_pid = normalize_playlist_id(playlist_id)
+
     state = detect_state()
     if state in ("A", "A2"):
         raise UserError(
@@ -785,6 +824,7 @@ def run_auto() -> InitReport:
         return _flow_B_analysis(
             playlist_name_hint="Maestra",
             skip_expansion=True,
+            existing_playlist_id=normalized_pid,
         )
-    # state == "C"
+    # state == "C" — update não precisa de playlist_id (skip_playlist_creation=True).
     return _flow_C_update(mode="full")
