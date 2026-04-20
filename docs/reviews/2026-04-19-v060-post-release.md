@@ -17,6 +17,9 @@ Nenhum. Não há bloqueador para release.
 
 ---
 
+> **Status v0.6.1-alpha.0 (2026-04-19):** todos os 7 itens Important
+> (I1-I7) foram fechados. Detalhes no CHANGELOG [0.6.1-alpha.0].
+
 ## Important (7)
 
 ### I1. Tornar `storage.write_config` atômico

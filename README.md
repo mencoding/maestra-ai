@@ -5,7 +5,7 @@
 CLI e servidor MCP para controlar Spotify através de agentes de IA, com
 curadoria contextual que aprende gosto via feedback conservador.
 
-**Status:** pre-alpha (v0.6.0-alpha). Lançamento público planejado em v1.0.0.
+**Status:** pre-alpha (v0.6.1-alpha). Lançamento público planejado em v1.0.0.
 
 ## Instalação
 

@@ -7,6 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1-alpha.0] - 2026-04-19
+
+Release só de correção — fecha os 7 itens Important do review
+pós-v0.6.0-alpha.0 (ver `docs/reviews/2026-04-19-v060-post-release.md`).
+Zero feature nova, zero breaking no CLI, zero breaking no output
+do MCP para clientes válidos. Suite: ~506 (maestra-ai + maestra-mcp).
+
+### Fixed
+- **I1** — `storage.write_config` agora usa `atomic_write_json`
+  (rename atômico via `os.replace`). Elimina janela de lost-update
+  entre daemon director e CLI manual.
+- **I2** — `director._record` usa `storage.append_jsonl_locked`
+  com `fcntl.LOCK_EX`. Payloads de decisão com `tracks[]` passam
+  de PIPE_BUF (~4KB), e o lock evita intercalação de bytes entre
+  daemon e `director_once` via MCP.
+- **I3** — `audit.log` idem. MCP server + CLI + daemon podiam
+  corromper o audit.jsonl em paralelo; agora são serializados.
+- **I4** — `snapshot.create` usa `atomic_write_json`. Crash
+  mid-write deixa no máximo um `.tmp` residual, nunca um `.json`
+  parcial (importante porque `rollback.py` cria safety-snapshot
+  justamente quando algo já está dando errado).
+- **I6** — `FeedbackPrompter._in_cooldown` guarda `fromisoformat`
+  contra state corrompido (edição manual, valor inválido, chave
+  ausente). Antes crashava com `ValueError`; agora retorna `False`
+  (cooldown expirou). Mesmo padrão de `context.py:44`.
+
+### Added
+- **I5** — validação de args MCP contra `inputSchema`. Dep nova
+  `jsonschema>=4.0` em maestra-mcp. `tools.call_tool` valida antes
+  de invocar o handler; `ValidationError` é traduzido em
+  `MCPInvalidArgsError(UserError)` com `agent_hint` específico por
+  tipo (minimum, required, additionalProperties, type, enum).
+- **`MCPInvalidArgsError`** em `core/errors.py` — subclasse de
+  `UserError` com hint per-instance (override do agent_hint de classe).
+- **`core.storage.append_jsonl_locked(path, entry)`** — helper
+  público para append JSONL serializado com `fcntl.LOCK_EX`.
+
+### Changed (breaking — renames em taste, pre-1.0)
+- **I7** — promove 3 símbolos privados para API pública em
+  `core/taste.py`:
+  - `TasteProfile._is_rejected` → `TasteProfile.is_rejected`
+  - `_prune_candidates` → `prune_candidates`
+  - `_signal_weight` → `signal_weight`
+  Callers atualizados em `core/curator.py`, `core/history.py` e
+  `cli/_common.py`. Sem deprecation alias — zero consumidores
+  externos conhecidos.
+
+### Tests
+- +2 em `TestAppendJsonlLocked` (serialização + concorrência 2×50).
+- +1 em `TestCreateAtomicity` (crash simulado em `os.replace`).
+- +2 em `TestCooldownCorrupcao` (fromisoformat inválido + chave ausente).
+- +4 em `TestValidacaoArgs` (MCP: additionalProperties, minimum, required, válido).
+- 1 teste existente atualizado (`test_history_import_outside_rejeita_signal_invalido`)
+  para refletir que validação agora é no boundary MCP.
+
 ## [0.6.0-alpha.0] - 2026-04-19
 
 Primeiro bump de minor desde v0.5.0. Formaliza contrato do
