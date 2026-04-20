@@ -26,10 +26,17 @@ class LastfmSource:
     name = "lastfm"
 
     def __init__(self, *, api_key: str) -> None:
+        self._api_key = api_key
         self._network = pylast.LastFMNetwork(api_key=api_key)
         self._rate_lock = threading.Lock()
         # Inicializa com -inf para garantir que a primeira chamada nunca dorme
         self._last_request_at: float = float("-inf")
+
+    def is_configured(self) -> bool:
+        return bool(self._api_key)
+
+    def enhance_track(self, track: TrackInfo) -> SourceResult | None:
+        return self._lookup(track)
 
     def _respect_rate_limit(self) -> None:
         with self._rate_lock:

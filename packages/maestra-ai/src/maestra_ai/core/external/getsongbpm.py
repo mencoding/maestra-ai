@@ -35,6 +35,12 @@ class GetSongBpmSource:
         self._lock = threading.Lock()
         self._timestamps: deque[float] = deque()
 
+    def is_configured(self) -> bool:
+        return bool(self._api_key)
+
+    def enhance_track(self, track: TrackInfo) -> SourceResult | None:
+        return self._lookup(track)
+
     def _respect_rate_limit(self) -> None:
         with self._lock:
             now = time.monotonic()
