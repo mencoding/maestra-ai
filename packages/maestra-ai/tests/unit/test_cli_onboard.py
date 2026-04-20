@@ -520,6 +520,7 @@ class TestInteractiveChoosePropaga:
 
     def test_auth_error_nao_vira_system_exit(self, monkeypatch):
         from unittest.mock import MagicMock
+
         from maestra_ai.core.errors import AuthError
 
         # Simula escolha "2" (listar playlists).
@@ -535,6 +536,7 @@ class TestInteractiveChoosePropaga:
 
     def test_erro_generico_vira_spotify_api_error(self, monkeypatch):
         from unittest.mock import MagicMock
+
         from maestra_ai.core.errors import SpotifyAPIError
 
         monkeypatch.setattr("builtins.input", lambda _: "2")

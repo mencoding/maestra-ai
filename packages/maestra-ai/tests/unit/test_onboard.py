@@ -547,7 +547,6 @@ class TestPlaylistExpansion:
         """v0.5.5 #6-#7: se fetch de uma playlist falha (race, timeout),
         expansion_info.failed_playlists registra o id e a razão —
         sem engolir silenciosamente nem abortar a expansão."""
-        from unittest.mock import MagicMock
 
         from maestra_ai.core.taste import TasteProfile
 
@@ -618,6 +617,7 @@ class TestExpansionPropagaAuthError:
         self, tmp_path, monkeypatch,
     ):
         import pytest
+
         from maestra_ai.core.errors import AuthError
         from maestra_ai.core.taste import TasteProfile
 
@@ -677,7 +677,6 @@ class TestExpansionEdgeCases:
         """Agente pode passar IDs que não estão na lista oferecida
         (via cache antigo, typo). Fetch falha por ID inválido ou
         permissão; failed_playlists registra."""
-        from unittest.mock import MagicMock
         from maestra_ai.core.taste import TasteProfile
         monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
         monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
@@ -721,7 +720,9 @@ class TestPlaylistCreate403:
         monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
 
         # spotipy.SpotifyException tem http_status e a string contém "403".
-        class FakeSpotifyException(Exception):
+        # noqa N818: nome replica o nome real da exceção do spotipy
+        # (SpotifyException, sem sufixo Error), mantido para simular fielmente.
+        class FakeSpotifyException(Exception):  # noqa: N818
             def __init__(self):
                 super().__init__("http status: 403 - Forbidden")
                 self.http_status = 403
@@ -1132,7 +1133,9 @@ class TestResolvePlaylistName:
 
     def test_propaga_auth_error_e_nao_silencia(self):
         from unittest.mock import MagicMock
+
         import pytest
+
         from maestra_ai.core.errors import AuthError
 
         sp = MagicMock()
@@ -1143,7 +1146,9 @@ class TestResolvePlaylistName:
 
     def test_propaga_rate_limit_error(self):
         from unittest.mock import MagicMock
+
         import pytest
+
         from maestra_ai.core.errors import RateLimitError
 
         sp = MagicMock()
@@ -1233,8 +1238,10 @@ class TestFetchArtistsGenres:
 
     def test_maestra_error_propaga(self):
         """AuthError/RateLimit propagam (pipeline central)."""
-        import pytest
         from unittest.mock import MagicMock
+
+        import pytest
+
         from maestra_ai.core.errors import AuthError
         sp = MagicMock()
         sp.artists.side_effect = AuthError("token revogado")
@@ -1536,6 +1543,7 @@ class TestPersistRationale:
         self, tmp_path, monkeypatch,
     ):
         import json as _json
+
         from maestra_ai.core.taste import TasteProfile
         monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
         monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
@@ -1546,7 +1554,7 @@ class TestPersistRationale:
         sp.artists.return_value = {"artists": []}
 
         taste = TasteProfile(tmp_path / "taste.json")
-        report = onboard.run(
+        onboard.run(
             sp, taste, playlist_name="Test",
             seed_count=0, playlist_selector=None, total_cap=5000,
         )
@@ -1587,6 +1595,7 @@ class TestPersistRationale:
         self, tmp_path, monkeypatch,
     ):
         import json as _json
+
         from maestra_ai.core.taste import TasteProfile
         monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
         monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))

@@ -160,6 +160,7 @@ class TestAppendJsonlLocked:
 
     def test_concorrencia_nao_intercala_bytes(self, tmp_path):
         import threading
+
         from maestra_ai.core.storage import append_jsonl_locked
         path = tmp_path / "log.jsonl"
 

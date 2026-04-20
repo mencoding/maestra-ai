@@ -6,7 +6,6 @@ Redige secrets antes de gravar.
 from __future__ import annotations
 
 import gzip
-import json
 import shutil
 from datetime import UTC, datetime, timedelta
 from pathlib import Path

@@ -110,6 +110,7 @@ class TestCooldownCorrupcao:
         """I6 v0.6.1: state corrompido não deve crashar o prompter.
         Retorna False (cooldown expirou, permite novo prompt)."""
         import json
+
         from maestra_ai.core.feedback_prompt import FeedbackPrompter
 
         state_path = tmp_path / "state.json"
@@ -122,6 +123,7 @@ class TestCooldownCorrupcao:
 
     def test_cooldown_tolera_last_prompt_at_ausente(self, tmp_path):
         import json
+
         from maestra_ai.core.feedback_prompt import FeedbackPrompter
 
         state_path = tmp_path / "state.json"

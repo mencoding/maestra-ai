@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from maestra_ai.cli.basic import cmd_play, cmd_pause, cmd_next, cmd_queue_add, cmd_queue_context
+from maestra_ai.cli.basic import cmd_next, cmd_pause, cmd_play, cmd_queue_add, cmd_queue_context
 from maestra_ai.core.errors import AuthError, RateLimitError, SpotifyAPIError
 
 

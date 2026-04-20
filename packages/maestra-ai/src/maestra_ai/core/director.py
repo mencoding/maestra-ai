@@ -1,5 +1,4 @@
 """Director — gerencia repertorio dinamico sem trocar a faixa atual."""
-import json
 import os
 import signal
 import subprocess

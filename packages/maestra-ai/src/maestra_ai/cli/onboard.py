@@ -173,16 +173,16 @@ def _prompt_playlists_checkbox(playlists: list[dict]) -> list[str]:
     except Exception:
         # Fallback texto: numerado + vírgulas. v0.5.7 #16: usuários com
         # muitas playlists (100+) teriam UX péssima com lista dump. Se
-        # passar de _FALLBACK_LIMIT, ordena por track_count desc e corta.
-        _FALLBACK_LIMIT = 20
+        # passar de fallback_limit, ordena por track_count desc e corta.
+        fallback_limit = 20
         shown = playlists
         truncated = False
-        if len(playlists) > _FALLBACK_LIMIT:
+        if len(playlists) > fallback_limit:
             shown = sorted(
                 playlists,
                 key=lambda p: p.get("track_count", 0),
                 reverse=True,
-            )[:_FALLBACK_LIMIT]
+            )[:fallback_limit]
             truncated = True
         print("Playlists disponíveis:")
         for i, p in enumerate(shown, 1):
@@ -190,7 +190,7 @@ def _prompt_playlists_checkbox(playlists: list[dict]) -> list[str]:
         if truncated:
             total = len(playlists)
             print(
-                f"\n  (mostrando top {_FALLBACK_LIMIT} de {total} por "
+                f"\n  (mostrando top {fallback_limit} de {total} por "
                 f"tamanho — use questionary/TTY para ver todas)",
             )
         raw = input("Números separados por vírgula (ou 'all'): ").strip()

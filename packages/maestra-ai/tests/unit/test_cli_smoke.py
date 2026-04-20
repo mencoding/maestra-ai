@@ -74,7 +74,6 @@ def test_grupo_com_sub_subcomando_nao_pula_deps(monkeypatch, tmp_path):
     # patch direto no args.func via namespace.
     # Abordagem mais simples: atestar que o taste.cmd_taste_show original
     # é chamado com deps (não cai no skip_deps do grupo).
-    import argparse
     from maestra_ai.cli import _build_parser
     parser = _build_parser()
     args = parser.parse_args(["taste", "show"])

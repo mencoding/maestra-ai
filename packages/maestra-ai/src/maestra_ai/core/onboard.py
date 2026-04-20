@@ -21,6 +21,8 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Callable
+from datetime import UTC
+from pathlib import Path
 
 from maestra_ai.core import storage
 from maestra_ai.core.errors import MaestraError, PlaylistCreateForbiddenError
@@ -571,17 +573,16 @@ def _build_rationale(
     }
 
 
-def _persist_rationale(rationale_entries: list[dict]) -> "Path":
+def _persist_rationale(rationale_entries: list[dict]) -> Path:
     """Persiste as rationale entries em state_dir/onboard_rationale.json.
 
     Sobrescreve a cada chamada (lifetime = último onboard).
     Retorna a Path do arquivo.
     """
-    from datetime import datetime, timezone
-    from pathlib import Path
+    from datetime import datetime
     path = storage.state_dir() / "onboard_rationale.json"
     payload = {
-        "generated_at": datetime.now(timezone.utc).astimezone().isoformat(
+        "generated_at": datetime.now(UTC).astimezone().isoformat(
             timespec="seconds",
         ),
         "suggestions": list(rationale_entries),
