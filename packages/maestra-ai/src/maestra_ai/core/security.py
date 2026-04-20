@@ -21,6 +21,14 @@ from maestra_ai.core.audit import _redact
 #     refresh_token, client_secret, api_key, apikey, authorization, auth)
 #  3. JWT shape                                     (3 segmentos
 #     base64url separados por '.', começando com 'eyJ')
+#
+# Limite conhecido do matcher JWT (S6):
+# o regex cobre o shape canônico `eyJ...eyJ...eyJ...` (header base64url
+# que começa com o caractere `{` codificado — `eyJ`). JWTs com headers
+# não-canônicos ou tokens opacos isolados (sem prefixo `Bearer` e sem
+# known-key adjacente) NÃO são redigidos por este regex — a defesa
+# efetiva nesses casos é a redaction por chave em `_SECRET_KEYS` de
+# `core/audit.py` e o prefixo `Bearer ` emitido pelo spotipy.
 _KNOWN_SECRET_KEYS = (
     "access_token", "refresh_token", "client_secret",
     "api_key", "apikey", "authorization", "auth",

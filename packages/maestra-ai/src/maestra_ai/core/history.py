@@ -247,6 +247,16 @@ class HistoryAnalyzer:
         }
 
     def _context_query_candidates(self, genre_counts):
+        """Heurística estática (v0.7): mapeia gêneros em buckets 'foco' e 'energia'.
+
+        Nota (D11): marcado para rework em v0.8 com calibração por
+        TasteProfile. Retorna `{"foco": [...], "energia": [...]}` com
+        listas (possivelmente vazias) quando o sinal é suficiente;
+        devolve `{}` se o sinal for fraco (<3 gêneros distintos), para
+        reduzir ruído em perfis novos/esparsos.
+        """
+        if len(genre_counts) < 3:
+            return {}
         genres = [genre for genre, _ in genre_counts.most_common(20)]
         return {
             "foco": [

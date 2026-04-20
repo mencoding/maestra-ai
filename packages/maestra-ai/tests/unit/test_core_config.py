@@ -55,3 +55,19 @@ def test_extrai_22_validos_quando_embutidos():
     # String maior contendo 22 chars válidos deve extrair esse trecho.
     extra = f"garbage---{_ID}---more"
     assert normalize_playlist_id(extra) == _ID
+
+
+def test_normalize_playlist_id_preferencia_uri_canonica_quando_presente():
+    # S10: quando há URI/URL canônica presente, extrair o ID canônico
+    # e não um pseudo-ID de 22 chars que aparece antes no lixo.
+    sid = "cccccccccccccccccccccc"  # 22 c's (ID canônico desejado)
+    garbage = "xxxxxxxxxxxxxxxxxxxxxx"  # 22 x's — outra sequência 22-char
+    # Entrada com garbage + URI canônica → retorna ID da URI, não do garbage.
+    assert normalize_playlist_id(f"{garbage} spotify:playlist:{sid}") == sid
+    assert normalize_playlist_id(
+        f"{garbage} https://open.spotify.com/playlist/{sid}"
+    ) == sid
+    # URI canônica pura continua funcionando.
+    assert normalize_playlist_id(f"spotify:playlist:{sid}") == sid
+    # ID isolado: fallback permissivo.
+    assert normalize_playlist_id(sid) == sid
