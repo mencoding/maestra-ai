@@ -16,6 +16,7 @@ from maestra_ai.cli._common import (
     safe_call,
     taste_summary,
 )
+from maestra_ai.core.errors import ConfigError
 
 
 def cmd_start(args, controller, **_):
@@ -163,7 +164,7 @@ def cmd_status(args, controller, taste, context_state, feedback_prompter, **_):
     context = active_context["context"] if active_context else None
     try:
         playlist_id = resolve_playlist_id()
-    except Exception:
+    except ConfigError:
         playlist_id = None
     if playlist_id:
         playlist_tracks = safe_call(lambda: controller.playlist_tracks(playlist_id), "PLAYLIST_ERROR")
