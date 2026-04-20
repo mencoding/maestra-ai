@@ -16,9 +16,9 @@ def test_set_e_show_preserva_contexto(tmp_path):
 
     result = state.set("foco profundo", ttl_minutes=90)
 
-    assert result["context"] == "foco profundo"
+    assert result["context"]["text"] == "foco profundo"
     assert result["ttl_minutes"] == 90
-    assert state.show()["context"] == "foco profundo"
+    assert state.show()["context"]["text"] == "foco profundo"
 
 
 def test_clear_remove_contexto(tmp_path):
@@ -82,4 +82,4 @@ def test_show_ignora_ttl_nulo(tmp_path):
     path.write_text(json.dumps(data), encoding="utf-8")
     state = ContextState(str(path))
 
-    assert state.show()["context"] == "foco"
+    assert state.show()["context"]["text"] == "foco"

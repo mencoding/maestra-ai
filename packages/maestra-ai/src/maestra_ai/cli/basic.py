@@ -106,7 +106,7 @@ def cmd_queue_context(args, controller, taste, curator, context_state, **_):
     from maestra_ai.core.errors import MaestraError
 
     context, context_source = _curation_context(args, context_state)
-    results, queries_used = curator.curate(context, count=args.count)
+    results, queries_used, _sources = curator.curate(context, count=args.count)
     if not results:
         error("Sem resultados para esse contexto.", "NO_RESULTS")
 
@@ -133,7 +133,7 @@ def cmd_queue_context(args, controller, taste, curator, context_state, **_):
 
 def cmd_play_context(args, controller, taste, curator, context_state, **_):
     context, context_source = _curation_context(args, context_state)
-    results, queries_used = curator.curate(context, count=1)
+    results, queries_used, _sources = curator.curate(context, count=1)
     if not results:
         error("Sem resultados para esse contexto.", "NO_RESULTS")
 
@@ -151,7 +151,8 @@ def cmd_play_context(args, controller, taste, curator, context_state, **_):
 
 def cmd_status(args, controller, taste, context_state, feedback_prompter, **_):
     active_context = context_state.show()
-    context = active_context["context"] if active_context else None
+    ctx_obj = (active_context.get("context") or {}) if active_context else {}
+    context = (ctx_obj.get("text") or None) if isinstance(ctx_obj, dict) else (ctx_obj or None)
     try:
         playlist_id = resolve_playlist_id()
     except ConfigError:

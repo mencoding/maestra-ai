@@ -96,7 +96,10 @@ def _curation_context(args, context_state):
 
     active_context = context_state.show()
     if active_context:
-        return active_context["context"], "active"
+        ctx = active_context.get("context") or {}
+        text = (ctx.get("text") or "") if isinstance(ctx, dict) else str(ctx)
+        if text:
+            return text, "active"
 
     return DEFAULT_CONTEXT, "default"
 
@@ -110,7 +113,10 @@ def _active_context_value(context_state):
     active_context = context_state.show()
     if not active_context:
         return None
-    return active_context["context"]
+    ctx = active_context.get("context") or {}
+    if isinstance(ctx, dict):
+        return ctx.get("text") or None
+    return ctx or None
 
 
 def taste_summary(taste):

@@ -39,7 +39,8 @@ def cmd_taste_feedback(args, taste, context_state, **_):
     context = args.context
     context_source = "argument"
     if context is None and active_context:
-        context = active_context["context"]
+        ctx_obj = active_context.get("context") or {}
+        context = (ctx_obj.get("text") or None) if isinstance(ctx_obj, dict) else (ctx_obj or None)
         context_source = "active"
 
     taste.record_feedback(

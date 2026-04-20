@@ -37,7 +37,18 @@ def _handle(args: argparse.Namespace) -> int:
             ctx = state["context"]
             if ctx and isinstance(ctx, dict) and ctx.get("context"):
                 ttl = ctx.get("ttl_minutes", 120)
-                context_state.set(ctx["context"], ttl_minutes=ttl)
+                raw = ctx["context"]
+                # Suporta snapshot legacy (str) e novo formato ({text, bpm})
+                if isinstance(raw, dict):
+                    text = raw.get("text") or ""
+                    bpm = raw.get("bpm")
+                else:
+                    text = raw or ""
+                    bpm = None
+                if text:
+                    context_state.set(text, bpm=bpm, ttl_minutes=ttl)
+                else:
+                    context_state.clear()
             else:
                 context_state.clear()
 

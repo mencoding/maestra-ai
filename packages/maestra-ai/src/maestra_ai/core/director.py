@@ -158,7 +158,10 @@ class MusicDirector:
     def _context(self):
         active = self.context_state.show()
         if active and active.get("context"):
-            return active["context"], "active"
+            ctx = active["context"]
+            text = (ctx.get("text") or "") if isinstance(ctx, dict) else str(ctx)
+            if text:
+                return text, "active"
         return DEFAULT_CONTEXT, "default"
 
     def _context_track_count(self, context):
