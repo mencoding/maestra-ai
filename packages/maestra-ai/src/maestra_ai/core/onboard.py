@@ -815,6 +815,44 @@ def _emit_mb_summary(enhanced_tracks: list, *, console) -> None:
     )
 
 
+def _aggregate_tags_from_enhanced(
+    enhanced: dict,
+    track_info: dict,
+    artists_tags: dict[str, list[str]],
+) -> None:
+    """Agrega tags MB + tags Last.fm (dedup, preserva ordem) por artist_id Spotify."""
+    mb_tags = (enhanced.get("musicbrainz") or {}).get("tags") or []
+    lf_tags = (enhanced.get("lastfm") or {}).get("top_tags") or []
+    combined: list[str] = []
+    seen: set[str] = set()
+    for tag in list(mb_tags) + list(lf_tags):
+        t = (tag or "").strip()
+        if not t or t.lower() in seen:
+            continue
+        seen.add(t.lower())
+        combined.append(t)
+    for artist in track_info.get("artists") or []:
+        aid = artist.get("id")
+        if not aid:
+            continue
+        existing = artists_tags.get(aid, [])
+        existing_lower = {t.lower() for t in existing}
+        merged = list(existing)
+        for t in combined:
+            if t.lower() not in existing_lower:
+                merged.append(t)
+                existing_lower.add(t.lower())
+        artists_tags[aid] = merged
+
+
+def _emit_lf_summary(report: dict, *, console) -> None:
+    """Resumo pós-enhancement: métricas Last.fm."""
+    lf_matched = report.get("external_lf_matched", 0)
+    lf_with_tags = report.get("external_lf_with_tags", 0)
+    if lf_matched:
+        console.print(f"  • Last.fm — {lf_matched} faixas casadas, {lf_with_tags} com tags ricas.")
+
+
 def run(
     sp,
     taste,
@@ -1196,6 +1234,8 @@ def run(
     external_mb_matched = 0
     external_mb_artist_resolved = 0
     external_mb_with_tags_only = 0
+    external_lf_matched = 0
+    external_lf_with_tags = 0
     cfg = storage.read_config()
     if any_source_enabled(cfg) and enhance_external:
         from maestra_ai.core.external import default_enhancer
@@ -1239,16 +1279,25 @@ def run(
 
             # G1: artists_genres agora vem do MB (via spotify_artist_id),
             # não mais do Spotify /v1/artists (que foi depreciado).
+            # G3: artists_tags agrega MB tags + Last.fm top_tags via helper.
+            external_lf_matched = sum(
+                1 for t in enhanced if t.get("lastfm")
+            )
+            external_lf_with_tags = sum(
+                1 for t in enhanced
+                if t.get("lastfm") and (t["lastfm"].get("top_tags") or [])
+            )
             for t_info, enhanced_track in zip(track_infos, enhanced, strict=False):
                 spotify_aid = t_info.get("spotify_artist_id")
                 mb = enhanced_track.get("musicbrainz") or {}
                 mb_genres = mb.get("genres") or []
-                mb_tags = mb.get("tags") or []
-                if spotify_aid:
-                    if mb_genres:
-                        artists_genres[spotify_aid] = mb_genres
-                    if mb_tags:
-                        artists_tags[spotify_aid] = mb_tags
+                if spotify_aid and mb_genres:
+                    artists_genres[spotify_aid] = mb_genres
+                # Agrega tags MB + LF via helper (dedup, preserva ordem).
+                # t_info usa spotify_artist_id (string), convertemos para shape
+                # compatível com o helper {artists: [{id: ...}]}.
+                aid_track_info = {"artists": [{"id": spotify_aid}]} if spotify_aid else {}
+                _aggregate_tags_from_enhanced(enhanced_track, aid_track_info, artists_tags)
 
     sorted_tracks = sorted(
         [t for t in tracks_list if t.get("uri") in adjusted_weights],
@@ -1283,4 +1332,6 @@ def run(
         "external_mb_matched": external_mb_matched,
         "external_mb_artist_resolved": external_mb_artist_resolved,
         "external_mb_with_tags_only": external_mb_with_tags_only,
+        "external_lf_matched": external_lf_matched,
+        "external_lf_with_tags": external_lf_with_tags,
     }
