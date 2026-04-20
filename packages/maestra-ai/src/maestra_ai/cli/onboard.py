@@ -360,7 +360,22 @@ def _interactive_choose(controller) -> tuple[str | None, str | None]:
     return (_DEFAULT_NAME, None)
 
 
-def _handle(args: argparse.Namespace, controller, taste, **_) -> int:
+def cmd_onboard(args: argparse.Namespace, *pos, **deps) -> int:
+    """Wrapper público — imprime aviso de depreciação e delega ao handler real.
+
+    v0.8: `maestra onboard` está depreciado em favor de `maestra init`
+    (interativo) e `maestra init --auto` (scripted). Será removido em v0.9.
+    """
+    from rich.console import Console
+    _err_console = Console(stderr=True)
+    _err_console.print(
+        "[yellow]⚠ `maestra onboard` está depreciado e será removido em v0.9. "
+        "Use `maestra init` (interativo) ou `maestra init --auto` (scripted).[/yellow]"
+    )
+    return _run_onboard_real(args, *pos, **deps)
+
+
+def _run_onboard_real(args: argparse.Namespace, controller, taste, **_) -> int:
     playlist_name = getattr(args, "playlist_name", None)
     explicit_id = getattr(args, "playlist_id", None)
     non_interactive = getattr(args, "non_interactive", False)
@@ -482,6 +497,11 @@ def _handle(args: argparse.Namespace, controller, taste, **_) -> int:
     return 0
 
 
+# v0.8: alias para testes e consumidores internos que se referem ao handler
+# real (pré-deprecação). `cmd_onboard` é o entry-point público com o warning.
+_handle = _run_onboard_real
+
+
 @register
 def _register(subparsers: argparse._SubParsersAction) -> None:
     p = subparsers.add_parser("onboard", help="Bootstrap do perfil por histórico")
@@ -509,4 +529,4 @@ def _register(subparsers: argparse._SubParsersAction) -> None:
                    help="Lista de IDs de playlist separados por vírgula para "
                         "usar na expansão (pula o prompt interativo).")
     p.add_argument("--json", action="store_true")
-    p.set_defaults(func=_handle)
+    p.set_defaults(func=cmd_onboard)

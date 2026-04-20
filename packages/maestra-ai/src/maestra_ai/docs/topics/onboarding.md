@@ -1,5 +1,9 @@
 # Onboarding
 
+> ⚠️ **Depreciado.** `maestra onboard` será removido em v0.9. Use
+> `maestra init` (ou `maestra init --auto` em scripts).
+> Veja `maestra help init`.
+
 Bootstrap inicial do perfil Maestra usando seu histórico Spotify.
 
 ## Pré-requisitos
