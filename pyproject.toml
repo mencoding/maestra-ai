@@ -12,3 +12,6 @@ testpaths = ["packages/maestra-ai/tests", "packages/maestra-mcp/tests"]
 pythonpath = ["packages/maestra-ai/src", "packages/maestra-mcp/src"]
 asyncio_mode = "auto"
 addopts = "--import-mode=importlib"
+markers = [
+    "integration_live: tests that hit real external APIs (opt-in, slow). Run with: uv run pytest -m integration_live",
+]

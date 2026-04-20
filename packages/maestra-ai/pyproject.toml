@@ -43,6 +43,9 @@ packages = ["src/maestra_ai"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = [
+    "integration_live: tests that hit real external APIs (opt-in, slow). Run with: uv run pytest -m integration_live",
+]
 
 [tool.ruff]
 target-version = "py311"
