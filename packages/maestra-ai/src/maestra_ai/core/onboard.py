@@ -633,6 +633,10 @@ def run(
     existing_playlist_id: str | None = None,
     total_cap: int = _TOTAL_CAP_DEFAULT,
     playlist_selector: PlaylistSelector | None = None,
+    skip_library: bool = False,
+    skip_long_term: bool = False,
+    skip_medium_term: bool = False,
+    skip_playlist_creation: bool = False,
 ) -> dict:
     """Executa onboarding. Retorna relatório estruturado.
 
@@ -705,10 +709,14 @@ def run(
     sp.current_user()
 
     # Step 2: playlist (cria nova ou reaproveita existente)
+    # v0.8.0: skip_playlist_creation=True pula criação/resolução (fluxo C
+    # de re-análise pura). playlist_id fica None no report.
     report_step(2, "Playlist", detail=playlist_name)
     playlist_id = None
     effective_name = playlist_name
-    if existing_playlist_id:
+    if skip_playlist_creation:
+        pass
+    elif existing_playlist_id:
         # Reaproveita playlist já existente; busca nome para relatório.
         playlist_id = existing_playlist_id
         try:
@@ -773,19 +781,25 @@ def run(
         storage.write_config(cfg)
 
     # Step 3: top tracks (3 janelas)
+    # v0.8.0: skip_long_term / skip_medium_term permitem pular janelas
+    # individualmente (fluxo C mode=recent_mood usa só short_term).
     report_step(3, "Top tracks (3 janelas)")
-    top_long = _fetch_top_window(sp, "long_term")
-    top_medium = _fetch_top_window(sp, "medium_term")
+    top_long = [] if skip_long_term else _fetch_top_window(sp, "long_term")
+    top_medium = [] if skip_medium_term else _fetch_top_window(sp, "medium_term")
     top_short = _fetch_top_window(sp, "short_term")
 
     # Step 4: biblioteca
+    # v0.8.0: skip_library=True pula _fetch_saved (sem tocar no spotipy).
     report_step(4, "Biblioteca (saved tracks)")
-    saved = _fetch_saved(
-        sp,
-        progress_cb=(lambda n: report_step(4, "Biblioteca", f"{n}/{effective_cap}"))
-        if progress_cb else None,
-        max_tracks=effective_cap,
-    )
+    if skip_library:
+        saved = []
+    else:
+        saved = _fetch_saved(
+            sp,
+            progress_cb=(lambda n: report_step(4, "Biblioteca", f"{n}/{effective_cap}"))
+            if progress_cb else None,
+            max_tracks=effective_cap,
+        )
 
     # Step 5: recently played
     report_step(5, "Recently played")

@@ -1622,3 +1622,133 @@ class TestPersistRationale:
                     playlist_selector=None, total_cap=5000)
         second = _json.loads(path.read_text(encoding="utf-8"))
         assert first["generated_at"] != second["generated_at"]
+
+
+class TestSkipKwargs:
+    """v0.8.0: kwargs skip_* em onboard.run para fluxo C (update).
+
+    Permitem pular etapas específicas do pipeline sem tocar no spotipy:
+    - skip_library → pula _fetch_saved (current_user_saved_tracks)
+    - skip_long_term → pula top_tracks long_term
+    - skip_medium_term → pula top_tracks medium_term
+    - skip_playlist_creation → pula criação/resolução de playlist
+    """
+
+    def test_skip_library_nao_chama_current_user_saved_tracks(
+        self, tmp_path, monkeypatch,
+    ):
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+        sp = _make_sp(top_long=2, top_short=2, saved_pages=[{"items": []}], recent=1)
+
+        from maestra_ai.core.taste import TasteProfile
+        taste = TasteProfile(str(tmp_path / "taste.json"))
+
+        report = onboard.run(
+            sp, taste, playlist_name="X", seed_count=0, dry_run=True,
+            skip_library=True,
+        )
+
+        sp.current_user_saved_tracks.assert_not_called()
+        assert report["saved_tracks_fetched"] == 0
+
+    def test_skip_long_term_nao_pede_long_term(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+        sp = _make_sp(top_long=5, top_medium=3, top_short=2,
+                      saved_pages=[{"items": []}], recent=1)
+
+        from maestra_ai.core.taste import TasteProfile
+        taste = TasteProfile(str(tmp_path / "taste.json"))
+
+        report = onboard.run(
+            sp, taste, playlist_name="X", seed_count=0, dry_run=True,
+            skip_long_term=True,
+        )
+
+        # Verifica que current_user_top_tracks NÃO foi chamado com long_term
+        time_ranges_chamados = [
+            c.kwargs.get("time_range") or (c.args[1] if len(c.args) > 1 else None)
+            for c in sp.current_user_top_tracks.call_args_list
+        ]
+        assert "long_term" not in time_ranges_chamados
+        assert report["top_long_count"] == 0
+
+    def test_skip_medium_term_nao_pede_medium_term(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+        sp = _make_sp(top_long=3, top_medium=3, top_short=2,
+                      saved_pages=[{"items": []}], recent=1)
+
+        from maestra_ai.core.taste import TasteProfile
+        taste = TasteProfile(str(tmp_path / "taste.json"))
+
+        report = onboard.run(
+            sp, taste, playlist_name="X", seed_count=0, dry_run=True,
+            skip_medium_term=True,
+        )
+
+        time_ranges_chamados = [
+            c.kwargs.get("time_range") or (c.args[1] if len(c.args) > 1 else None)
+            for c in sp.current_user_top_tracks.call_args_list
+        ]
+        assert "medium_term" not in time_ranges_chamados
+        assert report["top_medium_count"] == 0
+
+    def test_skip_playlist_creation_nao_cria_playlist(self, tmp_path, monkeypatch):
+        """skip_playlist_creation=True pula user_playlist_create e retorna
+        playlist_id=None mesmo com dry_run=False."""
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+        sp = _make_sp(top_long=2, top_short=2,
+                      saved_pages=[{"items": []}], recent=1)
+
+        from maestra_ai.core.taste import TasteProfile
+        taste = TasteProfile(str(tmp_path / "taste.json"))
+
+        report = onboard.run(
+            sp, taste, playlist_name="X", seed_count=5, dry_run=False,
+            skip_playlist_creation=True,
+        )
+
+        sp.user_playlist_create.assert_not_called()
+        sp.playlist_add_items.assert_not_called()
+        assert report["playlist_id"] is None
+        # seed_count>0 sem playlist → não semeou nada
+        assert report["seeded"] == 0
+
+    def test_skip_combinado_recent_mood_so_chama_short_e_recent(
+        self, tmp_path, monkeypatch,
+    ):
+        """Cenário do _flow_C_update(mode='recent_mood'):
+        skip_library + skip_long_term + skip_medium_term +
+        skip_playlist_creation. Só top_short + recent são fetchados.
+        """
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+        sp = _make_sp(top_long=5, top_medium=5, top_short=3,
+                      saved_pages=[{"items": []}], recent=2)
+
+        from maestra_ai.core.taste import TasteProfile
+        taste = TasteProfile(str(tmp_path / "taste.json"))
+
+        report = onboard.run(
+            sp, taste, playlist_name="X", seed_count=0, dry_run=False,
+            skip_library=True, skip_long_term=True, skip_medium_term=True,
+            skip_playlist_creation=True,
+        )
+
+        sp.current_user_saved_tracks.assert_not_called()
+        sp.user_playlist_create.assert_not_called()
+        time_ranges = [
+            c.kwargs.get("time_range") or (c.args[1] if len(c.args) > 1 else None)
+            for c in sp.current_user_top_tracks.call_args_list
+        ]
+        assert "long_term" not in time_ranges
+        assert "medium_term" not in time_ranges
+        assert "short_term" in time_ranges
+        assert report["top_long_count"] == 0
+        assert report["top_medium_count"] == 0
+        assert report["saved_tracks_fetched"] == 0
+        assert report["playlist_id"] is None
+        assert report["status"] == "ok"

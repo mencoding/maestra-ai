@@ -370,3 +370,70 @@ class TestFlowB:
         )
         assert report["playlist_id"] == "pl_ok"
         assert calls["n"] == 2
+
+
+class TestFlowC:
+    """Fluxo C → [1]: atualização incremental.
+
+    Dois modos:
+      - recent_mood: só top_short + recent (skip library/long/medium/playlist).
+      - full: re-analisa tudo exceto criação de playlist.
+    """
+
+    def test_update_recent_mood(self, monkeypatch):
+        from maestra_ai.core import init, onboard
+
+        captured_kwargs = {}
+
+        def fake_run(sp, taste, **kw):
+            captured_kwargs.update(kw)
+            return {
+                "playlist_id": "pl_x",
+                "signals": {"top_genres": [("ambient", 10.0)]},
+                "suggestions": [],
+                "rationale_path": None,
+                "warnings": [],
+            }
+
+        monkeypatch.setattr(onboard, "run", fake_run)
+        monkeypatch.setattr(init, "_build_spotify_client", lambda: object())
+        monkeypatch.setattr(init, "_build_taste_profile", lambda: object())
+
+        report = init._flow_C_update(mode="recent_mood")
+
+        assert report["action"] == "update_recent_mood"
+        assert report["state_before"] == "C"
+        # Modo recent_mood: pula library/long/medium e playlist creation
+        assert captured_kwargs.get("skip_library") is True
+        assert captured_kwargs.get("skip_long_term") is True
+        assert captured_kwargs.get("skip_medium_term") is True
+        assert captured_kwargs.get("skip_playlist_creation") is True
+
+    def test_update_full(self, monkeypatch):
+        from maestra_ai.core import init, onboard
+
+        captured_kwargs = {}
+
+        def fake_run(sp, taste, **kw):
+            captured_kwargs.update(kw)
+            return {
+                "playlist_id": "pl_x",
+                "signals": {"top_genres": [("ambient", 10.0)]},
+                "suggestions": [],
+                "rationale_path": None,
+                "warnings": [],
+            }
+
+        monkeypatch.setattr(onboard, "run", fake_run)
+        monkeypatch.setattr(init, "_build_spotify_client", lambda: object())
+        monkeypatch.setattr(init, "_build_taste_profile", lambda: object())
+
+        report = init._flow_C_update(mode="full")
+
+        assert report["action"] == "update_full"
+        assert report["state_before"] == "C"
+        # Modo full: só pula criação de playlist
+        assert captured_kwargs.get("skip_playlist_creation") is True
+        assert not captured_kwargs.get("skip_library", False)
+        assert not captured_kwargs.get("skip_long_term", False)
+        assert not captured_kwargs.get("skip_medium_term", False)

@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import webbrowser
 from collections.abc import Callable
-from typing import TypeVar
+from typing import Literal, TypeVar
 from urllib.parse import parse_qs, urlparse
 
 from rich.console import Console
@@ -513,6 +513,72 @@ def _flow_B_analysis(
     return {
         "state_before": "B",
         "action": "initial_analysis",
+        "playlist_id": report.get("playlist_id"),
+        "taste_profile_updated": True,
+        "rationale_path": report.get("rationale_path"),
+        "signals": report.get("signals"),
+        "suggestions": report.get("suggestions") or [],
+        "warnings": report.get("warnings") or [],
+    }
+
+
+def _flow_C_update(*, mode: Literal["recent_mood", "full"]) -> InitReport:
+    """Fluxo C → [1]: atualização incremental das preferências.
+
+    Dois modos:
+      - "recent_mood": re-analisa só o mood recente (top_short + recent).
+        Pula library, long_term, medium_term e criação de playlist.
+        Útil para refrescar rapidamente (~3s) quando o usuário sente que
+        o humor musical recente mudou.
+      - "full": re-analisa tudo, mas sem re-criar a playlist (reusa a
+        existente). Sem expansão por playlists próprias (no selector).
+
+    Em ambos os casos, `playlist_id` no report vem None — o fluxo C não
+    toca na playlist existente (definida previamente por _flow_B_analysis).
+    """
+    from maestra_ai.core import onboard
+
+    sp = _build_spotify_client()
+    taste = _build_taste_profile()
+
+    if mode == "recent_mood":
+        _console.print(
+            "\nAtualizando só o mood recente (últimas 4 semanas + histórico "
+            "recente). Isso é rápido (~3s).\n"
+        )
+        report = onboard.run(
+            sp,
+            taste,
+            playlist_name="",  # não usado — skip_playlist_creation=True
+            seed_count=0,
+            dry_run=False,
+            skip_library=True,
+            skip_long_term=True,
+            skip_medium_term=True,
+            skip_playlist_creation=True,
+        )
+        action: Literal["update_recent_mood", "update_full"] = "update_recent_mood"
+    else:  # "full"
+        _console.print(
+            "\nRe-analisando tudo. Pode demorar ~10-20s dependendo do "
+            "tamanho da sua biblioteca.\n"
+        )
+        report = onboard.run(
+            sp,
+            taste,
+            playlist_name="",  # não usado — skip_playlist_creation=True
+            seed_count=0,
+            dry_run=False,
+            skip_playlist_creation=True,
+            playlist_selector=None,  # sem expansão por playlists próprias
+        )
+        action = "update_full"
+
+    _print_onboard_results(report)
+
+    return {
+        "state_before": "C",
+        "action": action,
         "playlist_id": report.get("playlist_id"),
         "taste_profile_updated": True,
         "rationale_path": report.get("rationale_path"),
