@@ -40,6 +40,14 @@ def cmd_profile_show(args, **_):
             if s["track_count"]:
                 print(f"     ({s['track_count']} faixas contribuintes)")
 
+    external = view.get("external") or {}
+    if external.get("enabled"):
+        print("\nMelhoramento externo:")
+        mb = external.get("musicbrainz") or {}
+        total = mb.get("tracks_total", 0)
+        with_genres = mb.get("tracks_with_genres", 0)
+        print(f"  MusicBrainz: ativo ({with_genres}/{total} faixas com gêneros)")
+
 
 @register
 def _register(subparsers: argparse._SubParsersAction) -> None:

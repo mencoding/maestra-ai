@@ -15,6 +15,32 @@ def _load_json(path) -> dict | None:
         return None
 
 
+def _build_external_block() -> dict:
+    """Agrega estatísticas de uso de fontes externas."""
+    from maestra_ai.core.external import cache as ext_cache
+
+    cfg = storage.read_config()
+    enabled = bool(cfg.get("external_sources_enabled"))
+
+    if not enabled:
+        return {"enabled": False}
+
+    cache = ext_cache.load_cache()
+    tracks = cache.get("tracks", {})
+    total = len(tracks)
+    with_mb_genres = sum(
+        1 for t in tracks.values()
+        if t.get("musicbrainz") and t["musicbrainz"].get("genres")
+    )
+    return {
+        "enabled": True,
+        "musicbrainz": {
+            "tracks_total": total,
+            "tracks_with_genres": with_mb_genres,
+        },
+    }
+
+
 def build_profile_view() -> dict[str, Any]:
     """Monta dict com estado atual + sinais do onboard + contadores do taste.
 
@@ -47,6 +73,8 @@ def build_profile_view() -> dict[str, Any]:
         for s in suggestions_raw
     ]
 
+    external = _build_external_block()
+
     return {
         "state": state,
         "total_tracks": len(tracks),
@@ -54,4 +82,5 @@ def build_profile_view() -> dict[str, Any]:
         "contexts": contexts,
         "suggestions": suggestions,
         "last_analysis_at": rationale_data.get("generated_at"),
+        "external": external,
     }
