@@ -39,6 +39,10 @@ class MusicBrainzSource:
             result = self._lookup_by_isrc(isrc)
             if result is not None:
                 return result
+        name = track.get("name") or ""
+        artists = track.get("artists") or []
+        if name and artists:
+            return self._lookup_by_name(name, artists[0])
         return None
 
     def _lookup_by_isrc(self, isrc: str) -> SourceResult | None:
@@ -76,6 +80,31 @@ class MusicBrainzSource:
         genres = [g["name"] for g in (artist.get("genre-list") or []) if g.get("name")]
         tags = [t["name"] for t in (artist.get("tag-list") or []) if t.get("name")]
         return genres, tags
+
+
+    def _lookup_by_name(self, name: str, artist: str) -> SourceResult | None:
+        query = f'recording:"{name}" AND artist:"{artist}"'
+        try:
+            response = musicbrainzngs.search_recordings(query=query, limit=1)
+        except Exception as e:
+            logger.debug("MB name search falhou para %s/%s: %s", name, artist, e)
+            return None
+        recordings = response.get("recording-list") or []
+        if not recordings:
+            return None
+        recording = recordings[0]
+        recording_mbid = recording.get("id", "")
+        artist_mbid = _extract_first_artist_mbid(recording)
+        genres, tags = self._artist_genres_and_tags(artist_mbid) if artist_mbid else ([], [])
+        return {
+            "musicbrainz": {
+                "mbid": recording_mbid,
+                "genres": genres,
+                "tags": tags,
+            },
+            "artist_mbid": artist_mbid or "",
+            "match_method": "name",
+        }
 
 
 def _extract_first_artist_mbid(recording: dict) -> str:
