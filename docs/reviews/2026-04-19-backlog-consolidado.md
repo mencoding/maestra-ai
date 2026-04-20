@@ -215,8 +215,8 @@ módulos principais, P2-1, P2-4, PLAN-v050, PLAN-v040) não aparecem aqui.
 **v0.5.6 ✅ (2026-04-19):** itens 10, 11, 13, 14, 24, 25, 26 + #23 (junto com #11). Item 12 descartado como falso positivo.
 **v0.5.7 ✅ (2026-04-19):** itens 15, 16, 17, 18, 19, 20, 21, 22 fechados.
 **v0.6.0-alpha.0 ✅ (2026-04-19):** itens 27 e 29 fechados. Item 28 já tinha sido fechado em v0.5.6 (rename de reason vocabulário).
-**v0.6.x+ pendente:** B3 — sugestões inteligentes (brainstorming próprio).
+**v0.7.0-alpha.0 ✅ (2026-04-20):** B3 fechado — sugestões inteligentes com gêneros/décadas/taste + rationale persistido + MCP tool.
 
-Itens fechados: 28 de 29 (+ 1 descartado). Pendente: B3 (fora do backlog original, planejado para v0.6.1 após brainstorming).
+Itens fechados: 29 de 29 (+ 1 descartado).
 
 **v0.5.x está substancialmente concluída** — só faltam os 3 itens de design que justificam mini-spec próprio (quebra de contrato do selector) e a melhoria das sugestões que pede brainstorming de UX (gêneros, décadas, mood).

@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0-alpha.0] - 2026-04-20
+
+Fecha item B3 do backlog consolidado — `_derive_suggestions`
+reescrita com sinais reais do catálogo (gêneros via `sp.artists`,
+décadas via `release_date`, artistas dominantes), integrada com
+`TasteProfile` (filtra rejeitados, amplifica `good`, penaliza
+`skip`). Rationale persistido em `state_dir/onboard_rationale.json`
+e exposto via nova MCP tool `onboard_rationale`.
+
+### Added
+- **`core/onboard.py`**:
+  - `_decade_of(release_date)` — helper para agregar década.
+  - `_fetch_artists_genres(sp, artist_ids)` — 1 call `sp.artists` batch.
+  - `_apply_taste_to_weights(weights, tracks, taste)` — filtra rejeitados;
+    +2.0 para `good`, -0.5 por skip (floor em 0).
+  - `_GENRE_MOOD_TEMPLATES` — ~20 gêneros com moods contextuais
+    (indie folk, ambient, jazz, synthwave, etc.).
+  - `_persist_rationale(entries)` — grava JSON em `state_dir`.
+- **`core/onboard_types.py`**: `OnboardSignals`, `TrackRationale`,
+  `RationaleEntry`.
+- **MCP tool `onboard_rationale`**: retorna rationale persistido;
+  opcional filtro por `suggestion` (texto exato).
+- **Report de `onboard.run()`**: chaves novas `signals` (top_genres,
+  dominant_decades, top_artists) e `rationale_path`.
+
+### Changed
+- **`_derive_suggestions`** — nova assinatura
+  `(tracks, weights, artists_genres, taste, *, top_k, cap_per_artist)`
+  retornando `(texts, rationale, signals)`. Sem audio_features
+  (deprecado pela Spotify jan/2026). Fallback para comportamento
+  v0.5.x quando `artists_genres` vazio (mantém 2 personalizadas +
+  3 genéricas).
+- **Index de tracks em `onboard.run()`** — shape normalizado
+  `{uri, name, artists: [{id, name}], release_date}` em vez do dict
+  cru do Spotify. Preserva `release_date` e `artist_id` para
+  downstream.
+- **Overhead**: +1 call `sp.artists` por onboard (~200-300ms).
+
+### Tests
+- +6 em `TestDecadeOf`.
+- +5 em `TestFetchArtistsGenres`.
+- +5 em `TestApplyTasteToWeights`.
+- +6 em `TestDeriveSuggestionsIntel`.
+- +3 em `TestPersistRationale`.
+- +3 em `TestOnboardRationaleTool` (MCP).
+- +1 em `TestPreservaMetadata` (shape do index).
+- `test_total_23_tools` → `test_total_24_tools` (nova tool).
+
 ## [0.6.2-alpha.1] - 2026-04-19
 
 Patch cosmético — fecha os 5 Nits do review pós-v0.6.0-alpha.0.
