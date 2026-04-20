@@ -118,6 +118,7 @@ def default_enhancer() -> Enhancer:
     v0.10: MusicBrainz + Last.fm (quando ativo + api_key presente).
     """
     from maestra_ai import __version__
+    from maestra_ai.core.external.getsongbpm import GetSongBpmSource
     from maestra_ai.core.external.lastfm import LastfmSource
     from maestra_ai.core.external.musicbrainz import MusicBrainzSource
 
@@ -130,5 +131,8 @@ def default_enhancer() -> Enhancer:
     lf = ext.get("lastfm") or {}
     if lf.get("enabled") and lf.get("api_key"):
         sources.append(LastfmSource(api_key=lf["api_key"]))
+    gsb = ext.get("getsongbpm") or {}
+    if gsb.get("enabled") and gsb.get("api_key"):
+        sources.append(GetSongBpmSource(api_key=gsb["api_key"]))
 
     return Enhancer(sources=sources)
