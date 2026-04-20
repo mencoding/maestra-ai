@@ -425,7 +425,7 @@ def _print_onboard_results(report: dict) -> None:
         nomes = ", ".join(d for d, _ in decades[:3])
         _console.print(f"Décadas dominantes: {nomes}")
 
-    suggestions = report.get("suggestions") or []
+    suggestions = report.get("context_suggestions") or report.get("suggestions") or []
     if suggestions:
         _console.print("\n[bold]Sugestões de contextos:[/bold]")
         for i, s in enumerate(suggestions, 1):

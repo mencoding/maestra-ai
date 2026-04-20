@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0-alpha.6] — 2026-04-20
+
+### Corrigido
+- `init`: callback de progresso do fallback item-a-item em `_fetch_artists_genres`
+  não era conectado ao console (progresso silencioso). Agora emite
+  `"lendo gênero N/M..."` a cada 5 artistas.
+- `init`: `_print_onboard_results` lia chave `"suggestions"` mas o report de
+  `onboard.run` usa `"context_suggestions"` — sugestões nunca apareciam ao final.
+
+### Adicionado
+- Warning específico quando o fallback item-a-item retorna gêneros vazios para
+  todos os artistas. Motivo: Spotify deprecou silenciosamente o campo `genres`
+  em `GET /v1/artists/{id}` ao longo de 2025 (ref. community.spotify.com).
+  Sugestões passam a ser baseadas em décadas e artistas dominantes.
+
 ## [0.8.0-alpha.5] — 2026-04-20
 
 ### Corrigido

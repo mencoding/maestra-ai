@@ -1065,7 +1065,17 @@ def run(
                 break
     artists_genres = _fetch_artists_genres(
         sp, artist_ids=top_artist_ids, warnings=warnings,
+        progress_cb=progress_cb,
     )
+    # v0.8.0-alpha.6: Spotify deprecou silenciosamente o campo `genres`
+    # em GET /v1/artists/{id} em 2025 (community.spotify.com). A chamada
+    # tem sucesso mas retorna genres=[] para ~todos os artistas. Se o
+    # fallback rodou mas não trouxe nenhum gênero, avisa o usuário.
+    if top_artist_ids and artists_genres and not any(artists_genres.values()):
+        warnings.append(
+            "Spotify deprecou o campo 'genres' em /v1/artists/{id}; "
+            "sugestões serão baseadas em décadas e artistas.",
+        )
 
     sorted_tracks = sorted(
         [t for t in tracks_list if t.get("uri") in adjusted_weights],
