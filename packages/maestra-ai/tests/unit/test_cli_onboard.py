@@ -6,6 +6,7 @@ e modo interativo (TTY) com escolha entre criar nova ou apontar.
 from __future__ import annotations
 
 import argparse
+import sys
 
 import pytest
 
@@ -173,10 +174,7 @@ class TestPromptExpansionConfirmDinamico:
             return FakeQ()
 
         fake_questionary = type("FQ", (), {"confirm": staticmethod(fake_confirm)})
-        monkeypatch.setattr(
-            "maestra_ai.cli.onboard.sys.modules",
-            {**__import__("sys").modules, "questionary": fake_questionary},
-        )
+        monkeypatch.setitem(sys.modules, "questionary", fake_questionary)
 
         cli_onboard._prompt_expansion_confirm(current_total=0, total_cap=1000)
         assert "1000" in captured["msg"]
@@ -194,10 +192,7 @@ class TestPromptExpansionConfirmDinamico:
             return FakeQ()
 
         fake_questionary = type("FQ", (), {"confirm": staticmethod(fake_confirm)})
-        monkeypatch.setattr(
-            "maestra_ai.cli.onboard.sys.modules",
-            {**__import__("sys").modules, "questionary": fake_questionary},
-        )
+        monkeypatch.setitem(sys.modules, "questionary", fake_questionary)
 
         cli_onboard._prompt_expansion_confirm(current_total=700, total_cap=1000)
         # Prompt deve citar 700 (atual) e 300 (gap).
