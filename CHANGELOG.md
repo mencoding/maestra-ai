@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0-alpha.6] — 2026-04-20
+
+### Corrigido
+- **"para foco profundo" duplicado** nas sugestões #3 e #5. O slot #5
+  é template fixo `"{artist} e similares para foco profundo"` e era
+  gerado depois dos paramétricos, então `used_contexts` ao resolver
+  #3 não conhecia essa string. `_derive_suggestions` agora
+  pré-alimenta o set com "para foco profundo" no início do fluxo
+  quando há `top_artists`.
+
+### Alterado
+- **Mapeamentos editoriais extraídos para `core/external/mood_mappings.py`**.
+  Separa a estrutura algorítmica (que é genérica e testada) do
+  conteúdo opinativo (strings de mood/família). Constantes movidas:
+  `_GENRE_MOOD_TEMPLATES`, `_MOOD_CONTEXT`, `_MOOD_CONTEXT_BY_FAMILY`,
+  `_FALLBACK_MOODS`, `_FALLBACK_MOODS_BY_FAMILY`, `_GENRE_FAMILIES`,
+  `MOOD_TAG_KEYWORDS`, e a função `_family_for_genre`. `onboard.py`
+  importa do novo módulo. Nenhuma mudança de comportamento.
+
 ## [0.9.0-alpha.5] — 2026-04-20
 
 ### Adicionado
