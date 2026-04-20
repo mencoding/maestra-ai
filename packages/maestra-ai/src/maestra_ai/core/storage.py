@@ -166,7 +166,7 @@ def read_config() -> dict:
 def write_config(data: dict) -> None:
     ensure_dirs()
     p = config_dir() / "config.json"
-    p.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    atomic_write_json(p, data)
 
 
 def _keyring_backend_ok() -> bool:
