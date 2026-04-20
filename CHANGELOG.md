@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-04-20
+
+Consolidação do ciclo alpha.0 → alpha.2. v0.10 ativa o ganho real de
+curadoria dinâmica: Last.fm (tags ricas + artistas similares),
+GetSongBPM (BPM/key/time signature), scoring composto no re-rank,
+Curator em modo cascade, contexto com target de BPM opcional, guias
+interativos para criar cada API key.
+
+### Destaques do ciclo v0.10
+- **Nova fonte Last.fm** via `pylast`. Tags folksonômicas e similar
+  artists. Rate limit 5 req/s.
+- **Nova fonte GetSongBPM** via `urllib.request`. BPM, key, time
+  signature. Rate limit 60 req/min (janela deslizante).
+- **Scoring composto** em `core/scoring.py` (taste + tag + decade +
+  bpm) com pesos em `config.json`, validação soma = 1.0 ± 0.01, e
+  degradação graciosa (sinal ausente → peso migra para taste).
+- **Curator em cascade**: query informada primeiro (hook para ampliar),
+  fallback automático para `SEMANTIC_MAP` se abaixo de 10 candidatos.
+- **Contexto BPM opcional** com migração silenciosa da string legacy
+  para objeto `{text, bpm}`.
+- **Opt-in estendido** no `maestra init` com guias passo-a-passo
+  padrão `_flow_A_collect_credentials`.
+- **Config `external_sources` nested** com migração automática do
+  booleano flat legacy.
+- **Cache schema v2** com bucket `similar_artists` (TTL 60d).
+- **Atribuição OSC 8** para as 3 fontes.
+- **Nova dep**: `pylast>=5.3`.
+
+Ver entradas detalhadas dos alphas abaixo.
+
 ## [0.10.0-alpha.2] — 2026-04-20
 
 ### Adicionado
