@@ -1136,6 +1136,7 @@ def run(
     cfg = storage.read_config()
     if cfg.get("external_sources_enabled") and enhance_external:
         from rich.console import Console
+
         from maestra_ai.core.external import default_enhancer
         enhancer = default_enhancer()
         active = enhancer.active_sources()

@@ -40,7 +40,5 @@ def test_emit_mb_summary_counts():
     ]
     _console = MagicMock()
     _emit_mb_summary(enhanced_tracks, console=_console)
-    args = _console.print.call_args_list
-    flat = " ".join(str(c) for c in args)
     # Deve ter ao menos menção à contagem (1 com genres, 3 total).
     assert _console.print.called

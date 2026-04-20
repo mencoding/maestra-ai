@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0-alpha.0] — 2026-04-20
+
+### Adicionado
+- **Fontes externas de metadata** (v0.9: MusicBrainz-only; arquitetura
+  preparada para Last.fm + GetSongBPM em v0.10):
+  - Novo pacote `core/external/` com `EnhancementSource` Protocol,
+    `Enhancer` (cache + orquestração), fonte `MusicBrainzSource` via
+    `musicbrainzngs`, cache persistente `external_cache.json`, e
+    `attribution` com links clicáveis (OSC 8).
+  - Opt-in no `maestra init`: nova etapa "Melhorar curadoria com fontes
+    externas" com opções `[2]` Pular / `[3]` Usar MusicBrainz.
+  - `maestra config external status/enable/disable` — controle explícito
+    em qualquer momento.
+  - `maestra cache refresh [--source X] [--uri Y]` — força re-fetch na
+    próxima ação.
+  - `maestra profile show --human` — bloco "Melhoramento externo" com
+    contagem de faixas por fonte.
+  - `maestra curate --human` — bloco de atribuição clicável ao fim
+    quando fontes externas foram usadas.
+  - Migração no state C: usuários já com perfil completo são oferecidos
+    a habilitar fontes externas ao entrar no sub-menu de update (só uma
+    vez, até decidirem).
+- Lookup MB primário via ISRC (`track.external_ids.isrc`); fallback para
+  `name+artist` quando ISRC ausente ou sem match.
+- Graceful degradation: `musicbrainzngs.NetworkError` e 404 não bloqueiam
+  a análise; o pipeline segue com os dados do Spotify.
+- Atribuição unificada com OSC 8 hyperlinks para as três fontes (Last.fm
+  e GetSongBPM em v0.10), seletiva — só lista as efetivamente usadas.
+
+### Alterado
+- `onboard.run` ganha parâmetro `enhance_external: bool = True` e duas
+  novas chaves no report: `external_enhanced_count`, `external_sources_used`.
+
+### Dependências
+- `musicbrainzngs>=0.7.1` (nova, obrigatória).
+- `responses>=0.25` já estava em dev-deps.
+
+### Referências
+- Spec: `docs/superpowers/specs/2026-04-20-v090-external-sources-design.md`
+- Plano: `docs/superpowers/plans/2026-04-20-v090-musicbrainz.md`
+- Issues: [#2](https://github.com/mencoding/maestra-ai/issues/2)
+
 ## [0.8.0-alpha.7] — 2026-04-20
 
 ### Adicionado

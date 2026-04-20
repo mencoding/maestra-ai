@@ -5,9 +5,10 @@ Paralelismo via ThreadPoolExecutor entra em v0.10 quando há múltiplas fontes.
 """
 from __future__ import annotations
 
+import datetime as dt
 import logging
 from collections.abc import Callable, Iterable
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import cast
 
 from maestra_ai.core.external import cache as cache_mod
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).astimezone().replace(microsecond=0).isoformat()
+    return datetime.now(dt.UTC).astimezone().replace(microsecond=0).isoformat()
 
 
 class Enhancer:
