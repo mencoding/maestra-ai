@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0-alpha.2] — 2026-04-20
+
+### Alterado
+- `maestra init` agora **sempre pede ao usuário que crie a playlist manualmente
+  no app Spotify** e cole o link. Motivo: Spotify retorna 403 em
+  `POST /users/.../playlists` para muitos apps em Development Mode mesmo
+  com User Management correto; pular a criação automática vira o fluxo
+  padrão em vez de caso-de-exceção. Instrução didática passo-a-passo
+  surge antes do prompt.
+- `maestra init --auto` em estado B agora exige `--playlist-id` explícito
+  (antes tentava criar automaticamente). Mensagem de erro aponta o fix.
+
 ## [0.8.0-alpha.1] — 2026-04-20
 
 ### Adicionado

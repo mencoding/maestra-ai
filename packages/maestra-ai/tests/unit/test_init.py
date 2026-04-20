@@ -313,8 +313,11 @@ class TestFlowB:
 
         monkeypatch.setattr(onboard, "run", fake_run)
 
-        # Prompt.ask devolve o nome da playlist (hint=None)
-        monkeypatch.setattr("rich.prompt.Prompt.ask", lambda *a, **k: "Maestra")
+        # Prompt.ask devolve o link da playlist criada pelo usuário
+        monkeypatch.setattr(
+            "rich.prompt.Prompt.ask",
+            lambda *a, **k: "https://open.spotify.com/playlist/6c2ppkdUfGKJNWwBl0MC4w?si=xyz",
+        )
 
         class FakeSP:
             pass
@@ -366,15 +369,75 @@ class TestFlowB:
         monkeypatch.setattr(onboard, "run", fake_run)
         monkeypatch.setattr(init, "_build_spotify_client", lambda: object())
         monkeypatch.setattr(init, "_build_taste_profile", lambda: object())
-        monkeypatch.setattr("rich.prompt.Prompt.ask", lambda *a, **k: "Maestra")
+        # Com existing_playlist_id fornecido, o fluxo pula o prompt de link.
         # Depois da 1ª falha, _ask_retry = tentar de novo
         monkeypatch.setattr(init, "_ask_retry", lambda: True)
 
         report = init._flow_B_analysis(
-            playlist_name_hint="Maestra", skip_expansion=True
+            playlist_name_hint="Maestra",
+            skip_expansion=True,
+            existing_playlist_id="6c2ppkdUfGKJNWwBl0MC4w",
         )
         assert report["playlist_id"] == "pl_ok"
         assert calls["n"] == 2
+
+    def test_flow_B_sem_playlist_id_pede_link_interativo(self, monkeypatch):  # noqa: N802
+        """Sem existing_playlist_id, flow B instrui e pede link da playlist criada."""
+        from maestra_ai.core import init, onboard
+
+        captured = {}
+        def fake_run(sp, taste, **kw):
+            captured.update(kw)
+            return {
+                "playlist_id": kw.get("existing_playlist_id"),
+                "playlist_name": kw.get("playlist_name", "Maestra"),
+                "signals": {},
+                "suggestions": [],
+                "rationale_path": None,
+                "warnings": [],
+            }
+        monkeypatch.setattr(onboard, "run", fake_run)
+        monkeypatch.setattr(init, "_build_spotify_client", lambda: object())
+        monkeypatch.setattr(init, "_build_taste_profile", lambda: object())
+        monkeypatch.setattr(
+            "rich.prompt.Prompt.ask",
+            lambda *a, **k: "https://open.spotify.com/playlist/6c2ppkdUfGKJNWwBl0MC4w?si=xyz",
+        )
+
+        report = init._flow_B_analysis(skip_expansion=True)
+        assert captured["existing_playlist_id"] == "6c2ppkdUfGKJNWwBl0MC4w"
+        assert report["playlist_id"] == "6c2ppkdUfGKJNWwBl0MC4w"
+
+
+    def test_flow_B_link_invalido_entra_retry(self, monkeypatch):  # noqa: N802
+        """Link malformado repete o prompt até um válido."""
+        from maestra_ai.core import init, onboard
+
+        captured = {}
+        def fake_run(sp, taste, **kw):
+            captured.update(kw)
+            return {
+                "playlist_id": kw.get("existing_playlist_id"),
+                "playlist_name": "Maestra",
+                "signals": {},
+                "suggestions": [],
+                "rationale_path": None,
+                "warnings": [],
+            }
+        monkeypatch.setattr(onboard, "run", fake_run)
+        monkeypatch.setattr(init, "_build_spotify_client", lambda: object())
+        monkeypatch.setattr(init, "_build_taste_profile", lambda: object())
+
+        answers = iter([
+            "lixo qualquer",  # inválido — retry
+            "spotify:playlist:6c2ppkdUfGKJNWwBl0MC4w",  # válido
+        ])
+        monkeypatch.setattr("rich.prompt.Prompt.ask", lambda *a, **k: next(answers))
+        monkeypatch.setattr(init, "_ask_retry", lambda: True)
+
+        init._flow_B_analysis(skip_expansion=True)
+        assert captured["existing_playlist_id"] == "6c2ppkdUfGKJNWwBl0MC4w"
+
 
     def test_flow_B_com_playlist_id_pula_criacao(self, monkeypatch):  # noqa: N802 — ecoa nome do state (B) para legibilidade
         from maestra_ai.core import init, onboard
@@ -657,7 +720,7 @@ class TestRunOrchestration:
         monkeypatch.setattr(init, "detect_state", lambda: "B")
         monkeypatch.setattr(init, "_flow_B_analysis", fake_flow_B)
 
-        report = init.run_auto()
+        report = init.run_auto(playlist_id="spotify:playlist:6c2ppkdUfGKJNWwBl0MC4w")
         assert report["action"] == "initial_analysis"
         assert captured.get("playlist_name_hint") == "Maestra"
         assert captured.get("skip_expansion") is True
@@ -686,6 +749,14 @@ class TestRunOrchestration:
         report = init.run_auto()
         assert report["action"] == "update_full"
         assert captured.get("mode") == "full"
+
+    def test_run_auto_B_sem_playlist_id_falha(self, monkeypatch):  # noqa: N802
+        """--auto em estado B sem --playlist-id levanta UserError."""
+        from maestra_ai.core import init
+        from maestra_ai.core.errors import UserError
+        monkeypatch.setattr(init, "detect_state", lambda: "B")
+        with pytest.raises(UserError, match="--playlist-id"):
+            init.run_auto()
 
     def test_run_auto_com_playlist_id_repassa_ao_flow_B(self, monkeypatch):  # noqa: N802 — ecoa nome do state (B) para legibilidade
         from maestra_ai.core import init

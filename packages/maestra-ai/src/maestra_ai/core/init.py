@@ -16,6 +16,7 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 
 from maestra_ai.core import storage
+from maestra_ai.core.config import normalize_playlist_id
 from maestra_ai.core.init_types import InitReport, InitState
 
 # URLs e valores padrão usados nos fluxos
@@ -438,6 +439,43 @@ def _print_onboard_results(report: dict) -> None:
     )
 
 
+# Instrução didática exibida antes de pedir o link da playlist criada pelo
+# usuário. Motivo: Spotify retorna 403 em POST /users/.../playlists para
+# muitos apps em Development Mode mesmo com User Management correto — pular
+# a criação automática virou o fluxo padrão.
+_PLAYLIST_INSTRUCTIONS = (
+    "\n[bold]Agora preciso de uma playlist no Spotify onde as sugestões vão "
+    "aparecer.[/bold]\n\n"
+    "Crie no seu app Spotify (celular ou desktop):\n"
+    "  1) Toque/clique em 'Nova playlist' e dê um nome (ex: 'Maestra').\n"
+    "  2) Deixe ela privada (sem 'Public' marcado).\n"
+    "  3) Botão direito/menu → 'Compartilhar' → 'Copiar link para playlist'.\n"
+    "  4) Cole o link aqui.\n"
+)
+
+
+def _prompt_playlist_id() -> str:
+    """Prompt com retry até obter URL/URI/ID válido de playlist Spotify."""
+    _console.print(_PLAYLIST_INSTRUCTIONS)
+
+    def do_prompt() -> str:
+        raw = Prompt.ask(
+            "Cole o link (ou URI 'spotify:playlist:...' ou ID)"
+        )
+        return normalize_playlist_id((raw or "").strip())
+
+    return _retry_loop(
+        do_prompt,
+        classifier=lambda e: "invalid_playlist_link",
+        hints={
+            "invalid_playlist_link": (
+                "O link precisa ser do Spotify. Tente copiar de novo o link "
+                "da playlist (botão direito → Compartilhar → Copiar link)."
+            ),
+        },
+    )
+
+
 def _flow_B_analysis(  # noqa: N802 — ecoa nome do state (B) para legibilidade
     *,
     playlist_name_hint: str | None = None,
@@ -461,28 +499,17 @@ def _flow_B_analysis(  # noqa: N802 — ecoa nome do state (B) para legibilidade
     from maestra_ai.core import onboard
     from maestra_ai.core.errors import PlaylistCreateForbiddenError
 
-    # Define nome da playlist: prompt se hint=None, exceto quando já temos
-    # playlist_id — nesse caso o nome é só um hint (não recria).
-    if existing_playlist_id is not None:
-        name = playlist_name_hint or "Maestra"
-    elif playlist_name_hint is None:
-        name = Prompt.ask(
-            "Nome da playlist onde as sugestões vão aparecer?",
-            default="Maestra",
-        )
-    else:
-        name = playlist_name_hint
+    # Se não há playlist pré-existente, pede ao usuário que crie uma no
+    # app Spotify e cole o link. Fluxo padrão — criação automática via API
+    # foi descontinuada (403 User Management em Development Mode).
+    if existing_playlist_id is None:
+        existing_playlist_id = _prompt_playlist_id()
 
-    if existing_playlist_id is not None:
-        _console.print(
-            f"\nUsando playlist existente [bold]{existing_playlist_id}[/bold]. "
-            "As curadorias futuras vão popular ela (~2s por rodada).\n"
-        )
-    else:
-        _console.print(
-            f"\nVou criar uma playlist privada chamada [bold]'{name}'[/bold]. "
-            "As curadorias futuras vão popular ela (~2s por rodada).\n"
-        )
+    name = playlist_name_hint or "Maestra"
+    _console.print(
+        f"\n✓ Usando playlist [bold]{existing_playlist_id}[/bold]. "
+        "Agora vou analisar suas preferências.\n"
+    )
 
     sp = _build_spotify_client()
     taste = _build_taste_profile()
@@ -724,7 +751,6 @@ def run_interactive(*, playlist_id: str | None = None) -> InitReport:
     # Normaliza playlist_id se fornecido (aceita URI/URL/ID).
     normalized_pid: str | None = None
     if playlist_id is not None:
-        from maestra_ai.core.config import normalize_playlist_id
         normalized_pid = normalize_playlist_id(playlist_id)
 
     state = detect_state()
@@ -811,7 +837,6 @@ def run_auto(*, playlist_id: str | None = None) -> InitReport:
     # Normaliza playlist_id se fornecido (aceita URI/URL/ID).
     normalized_pid: str | None = None
     if playlist_id is not None:
-        from maestra_ai.core.config import normalize_playlist_id
         normalized_pid = normalize_playlist_id(playlist_id)
 
     state = detect_state()
@@ -821,6 +846,11 @@ def run_auto(*, playlist_id: str | None = None) -> InitReport:
             "e/ou autorizar OAuth). Rode `maestra init` sem --auto."
         )
     if state == "B":
+        if normalized_pid is None:
+            raise UserError(
+                "Em `--auto`, você precisa passar `--playlist-id`. Crie a "
+                "playlist no Spotify primeiro e informe o link/URI/ID."
+            )
         return _flow_B_analysis(
             playlist_name_hint="Maestra",
             skip_expansion=True,
