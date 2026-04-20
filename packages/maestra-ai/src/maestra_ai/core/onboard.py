@@ -247,10 +247,13 @@ def _derive_suggestions(tracks_by_weight: list[dict]) -> list[str]:
 
 def _resolve_playlist_name(sp, desired: str) -> str:
     """Se já existe playlist com esse nome, acrescenta sufixo numérico."""
+    from maestra_ai.core.errors import MaestraError
     try:
         existing = sp.current_user_playlists(limit=50).get("items", [])
+    except MaestraError:
+        raise  # AuthError/RateLimit/API → pipeline central (cli/__init__.py:246)
     except Exception:
-        return desired
+        return desired  # shape inesperada da API → fallback benigno
     existing_names = {p.get("name") for p in existing}
     if desired not in existing_names:
         return desired

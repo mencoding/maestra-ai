@@ -1102,6 +1102,42 @@ class TestExpansionContextShape:
             )
 
 
+class TestResolvePlaylistName:
+    """M1 v0.6.2: _resolve_playlist_name propaga MaestraError em vez
+    de engolir; fallback só para shape inesperado."""
+
+    def test_propaga_auth_error_e_nao_silencia(self):
+        from unittest.mock import MagicMock
+        import pytest
+        from maestra_ai.core.errors import AuthError
+
+        sp = MagicMock()
+        sp.current_user_playlists.side_effect = AuthError("token revogado")
+
+        with pytest.raises(AuthError, match="token revogado"):
+            onboard._resolve_playlist_name(sp, "Maestra")
+
+    def test_propaga_rate_limit_error(self):
+        from unittest.mock import MagicMock
+        import pytest
+        from maestra_ai.core.errors import RateLimitError
+
+        sp = MagicMock()
+        sp.current_user_playlists.side_effect = RateLimitError(
+            "429", retry_after=30,
+        )
+        with pytest.raises(RateLimitError):
+            onboard._resolve_playlist_name(sp, "Maestra")
+
+    def test_retorna_desired_quando_shape_inesperada(self):
+        """AttributeError/TypeError em resp.get(...) → fallback benigno."""
+        from unittest.mock import MagicMock
+
+        sp = MagicMock()
+        sp.current_user_playlists.return_value = object()
+        assert onboard._resolve_playlist_name(sp, "Maestra") == "Maestra"
+
+
 class TestFetchOwnPlaylistsCap:
     """M6 v0.6.2: _fetch_own_playlists tem cap de 200 páginas contra
     loop infinito (bug de servidor, mock quebrado, Spotify retornando
