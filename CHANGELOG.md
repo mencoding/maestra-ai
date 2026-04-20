@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0-alpha.4] — 2026-04-20
+
+### Adicionado
+- **Diversificação de mood entre as top-K sugestões (C1)**: antes, 3 de
+  5 sugestões convergiam no mesmo contexto quando um artista dominava
+  a biblioteca (ex: "metal para garagem", "alternative metal para
+  garagem", "throat singing para garagem"). Agora `_select_mood`
+  aceita `used_contexts: set[str]` que o `_derive_suggestions` mantém
+  e alimenta a cada sugestão — o próximo mood evita contextos já
+  emitidos, caindo para a próxima opção do par, depois para outro
+  mood do matched pool, e só em último caso repete.
+- **Famílias de gênero + overrides contextuais (C2)**: novo mapa
+  `_GENRE_FAMILIES` (40 keywords → 9 famílias: `metal`, `world`,
+  `classical`, `jazz`, `electronic-ambient`, `electronic-dance`,
+  `hip-hop`, `soul`, `folk`, `indie`, `post-rock`, `rock`, `pop`).
+  Combinações `(família, mood)` problemáticas ganham overrides
+  explícitos em `_MOOD_CONTEXT_BY_FAMILY`. Exemplo real: `heavy` bate
+  com metal → "para garagem" (OK), com world → "para foco profundo"
+  (evita o absurdo "throat singing para garagem").
+- **Agregação de tags de top-3 artistas por gênero (C3)**: antes só o
+  artista #1 contribuía tags. Agora `genre_to_top_artist_ids: dict
+  [genre, list[spotify_aid]]` guarda até 3 artistas por gênero e
+  `_select_mood` une as tags preservando ordem, ampliando o pool de
+  moods candidatos quando há diversidade na biblioteca.
+
+### Alterado
+- `_select_mood` ganha parâmetro `used_contexts: set[str] | None`.
+  Assinatura de `genre_to_top_artist_id: str` virou
+  `genre_to_top_artist_ids: list[str]`.
+- Nova função `_matched_moods_from_tags` (pública) retorna lista
+  ordenada de moods casando com tags. `_derive_mood_from_tags` mantida
+  para backward compat, reutilizando a nova.
+- Nova função `_resolve_context_for_mood` centraliza a lógica de
+  escolha de contexto com família + diversificação.
+- Nova função `_family_for_genre` faz match por substring case-insensitive
+  na lista ordenada `_GENRE_FAMILIES`.
+
+### Nota sobre o comportamento esperado
+- Quando 1 artista domina, a diversificação limita a repetição mas não
+  elimina completamente — o pool de moods ainda vem do mesmo conjunto
+  de tags. Esperar ~2 moods distintos em vez dos 3-4 que apareciam
+  antes, a depender da riqueza das tags MB desse artista.
+
 ## [0.9.0-alpha.3] — 2026-04-20
 
 ### Adicionado
