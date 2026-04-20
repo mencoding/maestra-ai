@@ -29,8 +29,13 @@ from maestra_ai.core.errors import MaestraError, PlaylistCreateForbiddenError
 from maestra_ai.core.onboard_types import (
     ExpansionContext,
     ExpansionInfo,
+    FailedPlaylist,
+    OnboardSignals,
     OwnPlaylist,
     PlaylistSelector,
+    RationaleEntry,
+    SelectedPlaylist,
+    TrackRationale,
 )
 
 WEIGHTS = {
@@ -361,7 +366,7 @@ def _derive_suggestions(
     *,
     top_k: int = 5,
     cap_per_artist: int = _DEFAULT_CAP_PER_ARTIST,
-):
+) -> tuple[list[str], list[RationaleEntry], OnboardSignals]:
     """Deriva sugestões ricas + rationale + signals (v0.7.0 B3).
 
     Retorna (texts, rationale_entries, signals) onde:
@@ -405,14 +410,14 @@ def _derive_suggestions(
             for g in artists_genres.get(aname, []):
                 genre_counter[g.lower()] += w / max(len(artists), 1)
 
-    signals = {
+    signals: OnboardSignals = {
         "top_genres": [(g, round(s, 2)) for g, s in genre_counter.most_common(10)],
         "dominant_decades": [(d, round(s, 2)) for d, s in decade_counter.most_common(3)],
         "top_artists": [(a, round(s, 2)) for a, s in artist_counter.most_common(10)],
     }
 
     texts: list[str] = []
-    rationale: list[dict] = []
+    rationale: list[RationaleEntry] = []
 
     if not signals["top_genres"]:
         texts, rationale = _fallback_suggestions(
@@ -468,11 +473,12 @@ def _derive_suggestions(
         if fallback_text in texts:
             break
         texts.append(fallback_text)
-        rationale.append({
+        fallback_entry: RationaleEntry = {
             "text": fallback_text,
             "based_on": {"genres": [], "decades": [], "artists": []},
             "contributing_tracks": [],
-        })
+        }
+        rationale.append(fallback_entry)
 
     return texts[:top_k], rationale[:top_k], signals
 
@@ -489,7 +495,7 @@ def _fallback_suggestions(
 ):
     """Comportamento v0.5.x: 2 personalizadas + 3 genéricas."""
     texts: list[str] = []
-    rationale: list[dict] = []
+    rationale: list[RationaleEntry] = []
     if len(top_artists) >= 2:
         a1, a2 = top_artists[0][0], top_artists[1][0]
         sug1 = f"ambient instrumental inspirado em {a1} e {a2}"
@@ -502,21 +508,23 @@ def _fallback_suggestions(
         sug2 = "faixas melódicas para foco profundo"
     for t in (sug1, sug2):
         texts.append(t)
-        rationale.append({
+        entry: RationaleEntry = {
             "text": t,
             "based_on": {"genres": [], "decades": [],
                          "artists": [a for a, _ in top_artists[:2]]},
             "contributing_tracks": [],
-        })
+        }
+        rationale.append(entry)
     for ft in _FALLBACK_SUGGESTIONS:
         if len(texts) >= top_k:
             break
         texts.append(ft)
-        rationale.append({
+        generic: RationaleEntry = {
             "text": ft,
             "based_on": {"genres": [], "decades": [], "artists": []},
             "contributing_tracks": [],
-        })
+        }
+        rationale.append(generic)
     return texts, rationale
 
 
@@ -531,9 +539,9 @@ def _build_rationale(
     match_decade: str | None = None,
     match_artist: str | None = None,
     limit: int = 10,
-) -> dict:
+) -> RationaleEntry:
     """Escolhe até `limit` tracks que matcham o critério e compõe RationaleEntry."""
-    contributing = []
+    contributing: list[TrackRationale] = []
     for t in ordered:
         if len(contributing) >= limit:
             break
@@ -558,22 +566,24 @@ def _build_rationale(
 
         uri = t.get("uri", "")
         profile_track = taste.data.get("tracks", {}).get(uri, {})
-        contributing.append({
+        track_item: TrackRationale = {
             "uri": uri,
             "name": t.get("name") or "",
             "artist": first_artist,
             "weight": 0.0,
             "feedback": profile_track.get("feedback"),
             "skip_count": profile_track.get("skip_count", 0) or 0,
-        })
-    return {
+        }
+        contributing.append(track_item)
+    entry: RationaleEntry = {
         "text": text,
         "based_on": based_on,
         "contributing_tracks": contributing,
     }
+    return entry
 
 
-def _persist_rationale(rationale_entries: list[dict]) -> Path:
+def _persist_rationale(rationale_entries: list[RationaleEntry]) -> Path:
     """Persiste as rationale entries em state_dir/onboard_rationale.json.
 
     Sobrescreve a cada chamada (lifetime = último onboard).
@@ -855,10 +865,11 @@ def run(
             # Relatórios humanos e JSON podem mostrar nomes sem precisar
             # refazer lookup na API.
             name_by_id = {p["id"]: p.get("name", p["id"]) for p in own_playlists}
-            expansion_info["selected_playlists"] = [
+            selected: list[SelectedPlaylist] = [
                 {"id": pid, "name": name_by_id.get(pid, pid)}
                 for pid in selected_ids
             ]
+            expansion_info["selected_playlists"] = selected
             if selected_ids:
                 # URIs já vistos, para não duplicar trabalho de fetch nem
                 # inflar artificialmente o contador
@@ -877,10 +888,11 @@ def run(
                         # v0.5.5 #6-#7: registra a falha sem abortar a
                         # expansão. Truncamento em 80 chars evita explodir
                         # o report com stack traces longos.
-                        expansion_info["failed_playlists"].append({
+                        failed: FailedPlaylist = {
                             "id": pid,
                             "reason": str(fetch_err)[:80],
-                        })
+                        }
+                        expansion_info["failed_playlists"].append(failed)
                         continue
                     for t in tracks:
                         uri = t.get("uri")
