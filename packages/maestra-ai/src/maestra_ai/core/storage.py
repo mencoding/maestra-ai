@@ -1,4 +1,4 @@
-"""Armazenamento local com XDG + env overrides + keyring (fallback chmod 600)."""
+"""Armazenamento local com XDG + env overrides (fallback chmod 600)."""
 from __future__ import annotations
 
 import fcntl
@@ -6,11 +6,6 @@ import json
 import os
 from pathlib import Path
 from typing import Any
-
-try:
-    import keyring  # type: ignore[import-untyped]
-except ImportError:
-    keyring = None  # type: ignore[assignment]
 
 
 def _env_or(env_key: str, xdg_key: str, xdg_default: str, suffix: str = "maestra") -> Path:
@@ -165,16 +160,6 @@ def write_config(data: dict) -> None:
     atomic_write_json(p, data)
 
 
-def _keyring_backend_ok() -> bool:
-    if keyring is None:
-        return False
-    try:
-        backend = keyring.get_keyring()
-        return backend is not None and "fail" not in type(backend).__name__.lower()
-    except Exception:
-        return False
-
-
 def save_refresh_token(token: str) -> None:
     """Shim: delega para default_token_store().save().
 
@@ -191,13 +176,3 @@ def load_refresh_token() -> str | None:
     return default_token_store().load()
 
 
-def _flag_keyring_used(used: bool) -> None:
-    flag = config_dir() / "token.keyring.flag"
-    if used:
-        flag.touch()
-    elif flag.exists():
-        flag.unlink()
-
-
-def _flag_keyring_used_get() -> bool:
-    return (config_dir() / "token.keyring.flag").exists()

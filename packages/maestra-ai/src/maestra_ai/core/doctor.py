@@ -105,7 +105,8 @@ def check_config() -> dict:
 
 
 def check_keyring() -> dict:
-    ok = storage._keyring_backend_ok()
+    from maestra_ai.core.token_store import _keyring_backend_ok
+    ok = _keyring_backend_ok()
     return {
         "name": "Keyring",
         "status": "ok" if ok else "warning",
