@@ -190,6 +190,16 @@ def _prompt_external_sources_optin() -> bool:
         return choice == "3"
 
 
+def _state_c_should_offer_external() -> bool:
+    """True se o usuário ainda não decidiu sobre fontes externas.
+
+    Ausência da chave `external_sources_enabled` no config = indeciso.
+    Presença (true ou false) = já decidiu, respeita.
+    """
+    cfg = storage.read_config()
+    return "external_sources_enabled" not in cfg
+
+
 def _retry_loop(
     fn: Callable[[], T],
     *,
@@ -875,6 +885,15 @@ def run_interactive(*, playlist_id: str | None = None) -> InitReport:
         )
 
     # state == "C"
+    if _state_c_should_offer_external():
+        _console.print(
+            "\n[yellow]Novo em v0.9:[/yellow] você pode habilitar fontes externas "
+            "para melhorar a curadoria."
+        )
+        enable = _prompt_external_sources_optin()
+        cfg = storage.read_config()
+        cfg["external_sources_enabled"] = enable
+        storage.write_config(cfg)
     choice = Prompt.ask("Escolha", choices=["1", "2", "3"], default="1")
     if choice == "3":
         return _report_exit("C")
