@@ -2,9 +2,14 @@
 from __future__ import annotations
 
 import argparse
+import re
 from importlib import resources
 
 from maestra_ai.cli import register
+
+# S3 — defesa-em-profundidade contra path traversal no argumento `topic`.
+# Nome deve começar por letra minúscula e conter apenas [a-z0-9_-].
+_TOPIC_RE = re.compile(r"^[a-z][a-z0-9_-]*$")
 
 
 def _topic_path(topic: str) -> str | None:
@@ -39,6 +44,14 @@ def _handle(args: argparse.Namespace) -> int:
         for t in topics:
             print(f"  maestra help {t}")
         return 0
+
+    # Valida formato do tópico (letras minúsculas, dígitos, '-' e '_').
+    if not _TOPIC_RE.fullmatch(args.topic):
+        print(
+            f"Tópico inválido: {args.topic!r}. "
+            "Use letras minúsculas, dígitos, '-' ou '_'."
+        )
+        return 1
 
     content = _topic_path(args.topic)
     if not content:

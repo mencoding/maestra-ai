@@ -489,7 +489,22 @@ def _onboard_rationale(args):
             "Nenhum rationale persistido.",
             where={"hint": "Rode `maestra onboard` primeiro."},
         )
-    data = _json.loads(path.read_text(encoding="utf-8"))
+    # S9 — valida JSON e shape antes de consumir; qualquer erro vira UserError
+    # explícito em vez de propagar JSONDecodeError/KeyError pelo boundary.
+    try:
+        data = _json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, _json.JSONDecodeError) as e:
+        raise UserError(
+            "Arquivo de rationale do onboard corrompido ou ilegível. "
+            "Rode `maestra onboard` novamente.",
+            where={"path": str(path)},
+        ) from e
+    if not isinstance(data, dict) or "suggestions" not in data:
+        raise UserError(
+            "Rationale do onboard em formato inesperado. "
+            "Rode `maestra onboard` novamente.",
+            where={"path": str(path)},
+        )
     target = args.get("suggestion")
     if target is None:
         return data

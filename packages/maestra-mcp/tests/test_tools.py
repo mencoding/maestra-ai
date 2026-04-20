@@ -510,3 +510,64 @@ class TestOnboardRationaleTool:
         )
         assert len(result["suggestions"]) == 1
         assert result["suggestions"][0]["text"] == "indie folk melancólico"
+
+
+class TestOnboardRationaleValidation:
+    """S9 — rationale corrompido ou com shape inválido deve virar UserError."""
+
+    @pytest.mark.asyncio
+    async def test_rationale_corrompido_retorna_user_error(
+        self, tmp_path, monkeypatch,
+    ):
+        monkeypatch.setenv("MAESTRA_STATE_DIR", str(tmp_path / "state"))
+        from maestra_ai.core.storage import state_dir
+        path = state_dir()
+        path.mkdir(parents=True, exist_ok=True)
+        (path / "onboard_rationale.json").write_text(
+            "{nope not json", encoding="utf-8",
+        )
+
+        from maestra_mcp.tools import call_tool
+        result = await call_tool("onboard_rationale", {})
+        assert "error" in result
+        assert result["error"]["code"] == "UserError"
+        msg = result["error"].get("what_happened", "")
+        assert "corromp" in msg.lower() or "ileg" in msg.lower()
+
+    @pytest.mark.asyncio
+    async def test_rationale_sem_chave_suggestions_retorna_user_error(
+        self, tmp_path, monkeypatch,
+    ):
+        import json as _json
+        monkeypatch.setenv("MAESTRA_STATE_DIR", str(tmp_path / "state"))
+        from maestra_ai.core.storage import state_dir
+        path = state_dir()
+        path.mkdir(parents=True, exist_ok=True)
+        (path / "onboard_rationale.json").write_text(
+            _json.dumps({"foo": "bar"}), encoding="utf-8",
+        )
+
+        from maestra_mcp.tools import call_tool
+        result = await call_tool("onboard_rationale", {})
+        assert "error" in result
+        assert result["error"]["code"] == "UserError"
+        msg = result["error"].get("what_happened", "")
+        assert "inesperado" in msg.lower() or "format" in msg.lower()
+
+    @pytest.mark.asyncio
+    async def test_rationale_lista_em_vez_de_dict_retorna_user_error(
+        self, tmp_path, monkeypatch,
+    ):
+        import json as _json
+        monkeypatch.setenv("MAESTRA_STATE_DIR", str(tmp_path / "state"))
+        from maestra_ai.core.storage import state_dir
+        path = state_dir()
+        path.mkdir(parents=True, exist_ok=True)
+        (path / "onboard_rationale.json").write_text(
+            _json.dumps([1, 2, 3]), encoding="utf-8",
+        )
+
+        from maestra_mcp.tools import call_tool
+        result = await call_tool("onboard_rationale", {})
+        assert "error" in result
+        assert result["error"]["code"] == "UserError"
