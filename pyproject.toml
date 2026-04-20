@@ -6,3 +6,9 @@ dev-dependencies = [
     "pytest>=8.0",
     "pytest-mock>=3.12",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["packages/maestra-ai/tests", "packages/maestra-mcp/tests"]
+pythonpath = ["packages/maestra-ai/src", "packages/maestra-mcp/src"]
+asyncio_mode = "auto"
+addopts = "--import-mode=importlib"
