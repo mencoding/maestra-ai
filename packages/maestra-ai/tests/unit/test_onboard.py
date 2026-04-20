@@ -1282,3 +1282,51 @@ class TestDecadeOf:
     def test_decada_de_virada_de_seculo(self):
         assert onboard._decade_of("2000-01-01") == "2000s"
         assert onboard._decade_of("1999-12-31") == "1990s"
+
+
+class TestPreservaMetadata:
+    """v0.7.0: index tracks (em run()) preservam release_date e artist_id
+    para downstream (_derive_suggestions usa década e gênero)."""
+
+    def test_run_preserva_release_date_e_artist_id_no_index(
+        self, tmp_path, monkeypatch,
+    ):
+        from maestra_ai.core.taste import TasteProfile
+        monkeypatch.setenv("MAESTRA_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("MAESTRA_DATA_DIR", str(tmp_path / "data"))
+
+        sp = _make_sp(top_long=0, top_medium=0, top_short=0,
+                      saved_pages=[{"items": []}], recent=0)
+        sp.current_user_top_tracks.side_effect = lambda limit, time_range: (
+            {"items": [{
+                "uri": "spotify:track:abc",
+                "name": "Song A",
+                "artists": [{"id": "art1", "name": "Artist A"}],
+                "album": {"release_date": "2015-04-13"},
+            }]} if time_range == "long_term" else {"items": []}
+        )
+        sp.artists.return_value = {"artists": []}
+
+        captured = {}
+
+        def spy(tracks_by_weight, *args, **kwargs):
+            captured["tracks"] = tracks_by_weight
+            return []
+
+        monkeypatch.setattr(onboard, "_derive_suggestions", spy)
+
+        taste = TasteProfile(tmp_path / "taste.json")
+        onboard.run(
+            sp, taste, playlist_name="Test",
+            seed_count=0, playlist_selector=None, total_cap=5000,
+        )
+        tracks = captured.get("tracks", [])
+        assert len(tracks) >= 1, "no tracks captured"
+        found = next((t for t in tracks if t.get("uri") == "spotify:track:abc"), None)
+        assert found is not None, "track não encontrada no sorted_tracks"
+        assert found.get("release_date") == "2015-04-13", \
+            "release_date precisa ser preservado no index"
+        artists = found.get("artists", [])
+        assert artists, "artists não preservado"
+        assert artists[0].get("id") == "art1", \
+            "artist_id precisa estar nos artists[]"

@@ -604,12 +604,28 @@ def run(
         if uri:
             weights[uri] = weights.get(uri, 0) + WEIGHTS["playlist"]
 
-    # Índice uri → track para recuperar name/artist
+    # v0.7.0: index enriquecido com release_date e artist IDs para
+    # permitir que _derive_suggestions agregue década e resolva gêneros.
     index: dict[str, dict] = {}
     for t in top_long + top_medium + top_short + saved + recent + playlist_tracks:
         uri = t.get("uri")
-        if uri and uri not in index:
-            index[uri] = t
+        if not uri or uri in index:
+            continue
+        artists = t.get("artists") or []
+        norm_artists = [
+            {"id": a.get("id"), "name": a.get("name")}
+            for a in artists if a.get("name")
+        ]
+        release_date = ""
+        album = t.get("album") or {}
+        if isinstance(album, dict):
+            release_date = album.get("release_date") or ""
+        index[uri] = {
+            "uri": uri,
+            "name": t.get("name"),
+            "artists": norm_artists,
+            "release_date": release_date,
+        }
 
     if not dry_run:
         for uri, score in weights.items():
