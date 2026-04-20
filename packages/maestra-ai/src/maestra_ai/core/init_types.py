@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from typing import Literal, TypedDict
 
-
 InitState = Literal["A", "A2", "B", "C"]
 
 

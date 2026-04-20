@@ -1,5 +1,6 @@
 """Integration tests para maestra init (fluxo end-to-end)."""
 from __future__ import annotations
+
 import subprocess
 from pathlib import Path
 
@@ -22,7 +23,7 @@ def test_cli_init_help_nao_quebra():
 
 
 @pytest.mark.integration
-def test_init_auto_estado_B_produz_taste_profile(tmp_path):
+def test_init_auto_estado_B_produz_taste_profile(tmp_path):  # noqa: N802 — ecoa nome do state (B) para legibilidade
     """Com creds + token mockados, init --auto --json gera taste_profile.
 
     Skeleton — requer fixtures de rede (VCR/responses) pra simular Spotify API.

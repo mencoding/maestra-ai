@@ -18,7 +18,6 @@ from rich.prompt import Prompt
 from maestra_ai.core import storage
 from maestra_ai.core.init_types import InitReport, InitState
 
-
 # URLs e valores padrão usados nos fluxos
 _DASHBOARD_URL = "https://developer.spotify.com/dashboard"
 _DEFAULT_REDIRECT_URI = "https://example.com/callback"
@@ -26,7 +25,7 @@ _DEFAULT_REDIRECT_URI = "https://example.com/callback"
 T = TypeVar("T")
 
 
-class UserAbort(Exception):
+class UserAbort(Exception):  # noqa: N818 — abort não é error; é controle de fluxo voluntário do usuário
     """Usuário escolheu sair voluntariamente."""
 
 _console = Console()
@@ -204,10 +203,10 @@ def _retry_loop(
                     continue
                 raise UserAbort(
                     f"Desistiu após {same_kind_count} tentativas ({kind})"
-                )
+                ) from e
 
             if not _ask_retry():
-                raise UserAbort("Usuário escolheu sair")
+                raise UserAbort("Usuário escolheu sair") from e
 
 
 def _open_url(url: str) -> bool:
@@ -218,7 +217,7 @@ def _open_url(url: str) -> bool:
         return False
 
 
-def _flow_A_collect_credentials() -> None:
+def _flow_A_collect_credentials() -> None:  # noqa: N802 — ecoa nome do state (A) para legibilidade
     """Fluxo de criação de app Spotify + coleta de credenciais (estado A → [1]).
 
     Abre o dashboard no navegador, guia o usuário através da criação do app,
@@ -341,7 +340,7 @@ def _extract_code_from_url(url: str) -> str:
     return codes[0]
 
 
-def _flow_A2_oauth_paste_back() -> None:
+def _flow_A2_oauth_paste_back() -> None:  # noqa: N802 — ecoa nome do state (A2) para legibilidade
     """Fluxo A2 → [1]: autorização OAuth via paste-back.
 
     Constrói URL de autorização, abre no navegador, pede a URL de retorno
@@ -370,7 +369,7 @@ def _flow_A2_oauth_paste_back() -> None:
         try:
             from spotipy.oauth2 import SpotifyOauthError  # type: ignore
         except ImportError:  # pragma: no cover — spotipy sempre presente
-            SpotifyOauthError = ()  # type: ignore
+            SpotifyOauthError = ()  # type: ignore  # noqa: N806 — alias convencional da classe importada
         if isinstance(err, ValueError):
             return "bad_url"
         if SpotifyOauthError and isinstance(err, SpotifyOauthError):
@@ -439,7 +438,7 @@ def _print_onboard_results(report: dict) -> None:
     )
 
 
-def _flow_B_analysis(
+def _flow_B_analysis(  # noqa: N802 — ecoa nome do state (B) para legibilidade
     *,
     playlist_name_hint: str | None = None,
     skip_expansion: bool = False,
@@ -522,7 +521,7 @@ def _flow_B_analysis(
     }
 
 
-def _flow_C_update(*, mode: Literal["recent_mood", "full"]) -> InitReport:
+def _flow_C_update(*, mode: Literal["recent_mood", "full"]) -> InitReport:  # noqa: N802 — ecoa nome do state (C) para legibilidade
     """Fluxo C → [1]: atualização incremental das preferências.
 
     Dois modos:

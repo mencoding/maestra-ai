@@ -9,7 +9,7 @@ import pytest
 class TestDetectState:
     """Cobre as 4 combinações legítimas + 3 inconsistentes."""
 
-    def test_empty_is_A(self, tmp_path, monkeypatch):
+    def test_empty_is_A(self, tmp_path, monkeypatch):  # noqa: N802 — ecoa nome do state (A) para legibilidade
         from maestra_ai.core import init, storage
         monkeypatch.setattr(storage, "config_dir", lambda: tmp_path / "cfg")
         monkeypatch.setattr(storage, "data_dir", lambda: tmp_path / "data")
@@ -17,7 +17,7 @@ class TestDetectState:
         monkeypatch.setattr(init, "_has_token", lambda: False)
         assert init.detect_state() == "A"
 
-    def test_config_only_is_A2(self, tmp_path, monkeypatch):
+    def test_config_only_is_A2(self, tmp_path, monkeypatch):  # noqa: N802 — ecoa nome do state (A2) para legibilidade
         from maestra_ai.core import init, storage
         cfg_dir = tmp_path / "cfg"
         cfg_dir.mkdir()
@@ -31,7 +31,7 @@ class TestDetectState:
         monkeypatch.setattr(init, "_has_token", lambda: False)
         assert init.detect_state() == "A2"
 
-    def test_connected_no_taste_is_B(self, tmp_path, monkeypatch):
+    def test_connected_no_taste_is_B(self, tmp_path, monkeypatch):  # noqa: N802 — ecoa nome do state (B) para legibilidade
         from maestra_ai.core import init, storage
         cfg_dir = tmp_path / "cfg"
         cfg_dir.mkdir()
@@ -45,10 +45,12 @@ class TestDetectState:
         monkeypatch.setattr(init, "_has_token", lambda: True)
         assert init.detect_state() == "B"
 
-    def test_everything_present_is_C(self, tmp_path, monkeypatch):
+    def test_everything_present_is_C(self, tmp_path, monkeypatch):  # noqa: N802 — ecoa nome do state (C) para legibilidade
         from maestra_ai.core import init, storage
-        cfg_dir = tmp_path / "cfg"; cfg_dir.mkdir()
-        data_dir = tmp_path / "data"; data_dir.mkdir()
+        cfg_dir = tmp_path / "cfg"
+        cfg_dir.mkdir()
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
         (cfg_dir / "config.json").write_text(json.dumps({
             "client_id": "x", "client_secret": "y",
             "redirect_uri": "https://example.com/callback",
@@ -62,7 +64,7 @@ class TestDetectState:
         monkeypatch.setattr(init, "_has_token", lambda: True)
         assert init.detect_state() == "C"
 
-    def test_token_without_config_treated_as_A(self, tmp_path, monkeypatch):
+    def test_token_without_config_treated_as_A(self, tmp_path, monkeypatch):  # noqa: N802 — ecoa nome do state (A) para legibilidade
         """Token órfão sem config = inconsistente, volta pra A + aviso."""
         from maestra_ai.core import init, storage
         monkeypatch.setattr(storage, "config_dir", lambda: tmp_path / "cfg")
@@ -71,10 +73,11 @@ class TestDetectState:
         monkeypatch.setattr(init, "_has_token", lambda: True)
         assert init.detect_state() == "A"
 
-    def test_taste_without_token_treated_as_A(self, tmp_path, monkeypatch):
+    def test_taste_without_token_treated_as_A(self, tmp_path, monkeypatch):  # noqa: N802 — ecoa nome do state (A) para legibilidade
         """Taste órfão sem token = inconsistente, volta pra A + aviso."""
         from maestra_ai.core import init, storage
-        data_dir = tmp_path / "data"; data_dir.mkdir()
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
         (data_dir / "taste_profile.json").write_text(json.dumps({
             "global_signal": {"x": {"weight": 1.0}},
         }))
@@ -84,11 +87,13 @@ class TestDetectState:
         monkeypatch.setattr(init, "_has_token", lambda: False)
         assert init.detect_state() == "A"
 
-    def test_taste_profile_empty_global_signal_is_B(self, tmp_path, monkeypatch):
+    def test_taste_profile_empty_global_signal_is_B(self, tmp_path, monkeypatch):  # noqa: N802 — ecoa nome do state (B) para legibilidade
         """taste_profile existe mas global_signal vazio = ainda B."""
         from maestra_ai.core import init, storage
-        cfg_dir = tmp_path / "cfg"; cfg_dir.mkdir()
-        data_dir = tmp_path / "data"; data_dir.mkdir()
+        cfg_dir = tmp_path / "cfg"
+        cfg_dir.mkdir()
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
         (cfg_dir / "config.json").write_text(json.dumps({
             "client_id": "x", "client_secret": "y",
             "redirect_uri": "https://example.com/callback",
@@ -104,7 +109,7 @@ class TestDetectState:
 
 
 class TestMenuRendering:
-    def test_menu_A_mostra_saudacao_e_duas_opcoes(self, capsys):
+    def test_menu_A_mostra_saudacao_e_duas_opcoes(self, capsys):  # noqa: N802 — ecoa nome do state (A) para legibilidade
         from maestra_ai.core import init
         init.render_menu("A")
         out = capsys.readouterr().out
@@ -112,7 +117,7 @@ class TestMenuRendering:
         assert "[1]" in out and "Começar agora" in out
         assert "[2]" in out and "Sair" in out
 
-    def test_menu_A2_mostra_app_configurada(self, capsys):
+    def test_menu_A2_mostra_app_configurada(self, capsys):  # noqa: N802 — ecoa nome do state (A2) para legibilidade
         from maestra_ai.core import init
         init.render_menu("A2")
         out = capsys.readouterr().out
@@ -121,7 +126,7 @@ class TestMenuRendering:
         assert "[2]" in out and "Recomeçar" in out
         assert "[3]" in out and "Sair" in out
 
-    def test_menu_B_mostra_conta_conectada(self, capsys):
+    def test_menu_B_mostra_conta_conectada(self, capsys):  # noqa: N802 — ecoa nome do state (B) para legibilidade
         from maestra_ai.core import init
         init.render_menu("B")
         out = capsys.readouterr().out
@@ -129,7 +134,7 @@ class TestMenuRendering:
         assert "analisar preferências" in out
         assert "[3]" in out
 
-    def test_menu_C_mostra_tudo_pronto(self, capsys):
+    def test_menu_C_mostra_tudo_pronto(self, capsys):  # noqa: N802 — ecoa nome do state (C) para legibilidade
         from maestra_ai.core import init
         init.render_menu("C")
         out = capsys.readouterr().out
@@ -278,7 +283,7 @@ class TestFlowA2:
 class TestFlowB:
     """Fluxo B → [1]: análise de preferências delegando a `onboard.run`."""
 
-    def test_flow_B_delega_onboard_run_e_imprime_narrativa(
+    def test_flow_B_delega_onboard_run_e_imprime_narrativa(  # noqa: N802 — ecoa nome do state (B) para legibilidade
         self, tmp_path, monkeypatch, capsys
     ):
         from maestra_ai.core import init, onboard
@@ -338,7 +343,7 @@ class TestFlowB:
         # onboard.run foi chamado com playlist_name
         assert captured["kw"].get("playlist_name") == "Maestra"
 
-    def test_flow_B_403_playlist_create_classifica_como_user_management(
+    def test_flow_B_403_playlist_create_classifica_como_user_management(  # noqa: N802 — ecoa nome do state (B) para legibilidade
         self, monkeypatch
     ):
         from maestra_ai.core import init, onboard
@@ -577,7 +582,7 @@ class TestReset:
 class TestRunOrchestration:
     """Orquestração `run_interactive` / `run_auto` — dispatch por estado."""
 
-    def test_run_interactive_estado_A_menu_sair(self, monkeypatch):
+    def test_run_interactive_estado_A_menu_sair(self, monkeypatch):  # noqa: N802 — ecoa nome do state (A) para legibilidade
         from maestra_ai.core import init
 
         monkeypatch.setattr(init, "detect_state", lambda: "A")
@@ -587,7 +592,7 @@ class TestRunOrchestration:
         assert report["action"] == "exit"
         assert report["state_before"] == "A"
 
-    def test_run_auto_estado_A_falha_com_erro(self, monkeypatch):
+    def test_run_auto_estado_A_falha_com_erro(self, monkeypatch):  # noqa: N802 — ecoa nome do state (A) para legibilidade
         from maestra_ai.core import init
         from maestra_ai.core.errors import UserError
 
@@ -595,7 +600,7 @@ class TestRunOrchestration:
         with pytest.raises(UserError, match="requer interação"):
             init.run_auto()
 
-    def test_run_auto_estado_A2_falha_com_erro(self, monkeypatch):
+    def test_run_auto_estado_A2_falha_com_erro(self, monkeypatch):  # noqa: N802 — ecoa nome do state (A2) para legibilidade
         from maestra_ai.core import init
         from maestra_ai.core.errors import UserError
 
@@ -603,12 +608,12 @@ class TestRunOrchestration:
         with pytest.raises(UserError, match="requer interação"):
             init.run_auto()
 
-    def test_run_auto_estado_B_executa_analise(self, monkeypatch):
+    def test_run_auto_estado_B_executa_analise(self, monkeypatch):  # noqa: N802 — ecoa nome do state (B) para legibilidade
         from maestra_ai.core import init
 
         captured = {}
 
-        def fake_flow_B(**kwargs):
+        def fake_flow_B(**kwargs):  # noqa: N802 — ecoa nome do state (B) para legibilidade
             captured.update(kwargs)
             return {
                 "state_before": "B",
@@ -629,12 +634,12 @@ class TestRunOrchestration:
         assert captured.get("playlist_name_hint") == "Maestra"
         assert captured.get("skip_expansion") is True
 
-    def test_run_auto_estado_C_executa_update_full(self, monkeypatch):
+    def test_run_auto_estado_C_executa_update_full(self, monkeypatch):  # noqa: N802 — ecoa nome do state (C) para legibilidade
         from maestra_ai.core import init
 
         captured = {}
 
-        def fake_flow_C(**kwargs):
+        def fake_flow_C(**kwargs):  # noqa: N802 — ecoa nome do state (C) para legibilidade
             captured.update(kwargs)
             return {
                 "state_before": "C",
