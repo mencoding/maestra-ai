@@ -16,7 +16,7 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 
 from maestra_ai.core import storage
-from maestra_ai.core.init_types import InitState
+from maestra_ai.core.init_types import InitReport, InitState
 
 
 # URLs e valores padrão usados nos fluxos
@@ -389,3 +389,134 @@ def _flow_A2_oauth_paste_back() -> None:
     token = _retry_loop(do_oauth, classifier=classify, hints=hints)
     _persist_refresh_token(token)
     _console.print("\nAutorização concluída.\n")
+
+
+def _build_spotify_client():
+    """Constrói cliente Spotipy autenticado usando config + token persistidos.
+
+    Reutiliza `SpotifyController` (core.client), que lê config e refresh_token
+    dos stores default e monta `spotipy.Spotify` com cache em memória.
+    """
+    from maestra_ai.core.client import SpotifyController
+
+    return SpotifyController().sp
+
+
+def _build_taste_profile():
+    """Instancia o `TasteProfile` no caminho canônico usado pelo CLI."""
+    from maestra_ai.cli import TASTE_PATH
+    from maestra_ai.core.taste import TasteProfile
+
+    return TasteProfile(TASTE_PATH)
+
+
+def _print_onboard_results(report: dict) -> None:
+    """Imprime narrativa pós-análise: gêneros/décadas dominantes + sugestões."""
+    signals = report.get("signals") or {}
+    _console.print("\n[bold]Análise concluída![/bold]\n")
+
+    top_genres = signals.get("top_genres") or []
+    if top_genres:
+        nomes = ", ".join(g for g, _ in top_genres[:5])
+        _console.print(f"Gêneros dominantes: {nomes}")
+
+    decades = signals.get("dominant_decades") or []
+    if decades:
+        nomes = ", ".join(d for d, _ in decades[:3])
+        _console.print(f"Décadas dominantes: {nomes}")
+
+    suggestions = report.get("suggestions") or []
+    if suggestions:
+        _console.print("\n[bold]Sugestões de contextos:[/bold]")
+        for i, s in enumerate(suggestions, 1):
+            _console.print(f"  {i}. {s}")
+
+    _console.print(
+        "\n[dim]Para usar:[/dim]\n"
+        '  maestra context set "<contexto>"\n'
+        "  maestra curate\n"
+        "  maestra play\n"
+    )
+
+
+def _flow_B_analysis(
+    *,
+    playlist_name_hint: str | None = None,
+    skip_expansion: bool = False,
+) -> InitReport:
+    """Fluxo B → [1]: análise inicial de preferências.
+
+    Delega para `onboard.run`, envelopando em `_retry_loop` com classificação
+    específica para 403 (User Management). Em sucesso, imprime narrativa e
+    retorna `InitReport` com `action="initial_analysis"`.
+
+    Parâmetros:
+      playlist_name_hint: nome pré-definido (modo --auto). None = prompt.
+      skip_expansion: pula a expansão por playlists próprias (não passa
+        selector). Default False para interativo.
+    """
+    from maestra_ai.core import onboard
+    from maestra_ai.core.errors import PlaylistCreateForbiddenError
+
+    # Define nome da playlist: prompt se hint=None
+    if playlist_name_hint is None:
+        name = Prompt.ask(
+            "Nome da playlist onde as sugestões vão aparecer?",
+            default="Maestra",
+        )
+    else:
+        name = playlist_name_hint
+
+    _console.print(
+        f"\nVou criar uma playlist privada chamada [bold]'{name}'[/bold]. "
+        "As curadorias futuras vão popular ela (~2s por rodada).\n"
+    )
+
+    sp = _build_spotify_client()
+    taste = _build_taste_profile()
+
+    def do_run():
+        kwargs = {"playlist_name": name}
+        if skip_expansion:
+            # Sem selector = onboard.run pula expansão
+            # (reason="selector_not_provided").
+            pass
+        return onboard.run(sp, taste, **kwargs)
+
+    def classify(err: Exception) -> str:
+        if isinstance(err, PlaylistCreateForbiddenError):
+            return "403_user_management"
+        return "unknown"
+
+    hints = {
+        "403_user_management": (
+            "Você precisa adicionar seu email no User Management do painel "
+            "Spotify. Abra o app no dashboard, vá em 'User Management' e "
+            "adicione o email exato da sua conta."
+        ),
+        "unknown": "Tente novamente em alguns segundos.",
+    }
+
+    def open_user_mgmt(kind: str) -> None:
+        if kind == "403_user_management":
+            _open_url(_DASHBOARD_URL)
+
+    report = _retry_loop(
+        do_run,
+        classifier=classify,
+        hints=hints,
+        on_smart_exit_link=open_user_mgmt,
+    )
+
+    _print_onboard_results(report)
+
+    return {
+        "state_before": "B",
+        "action": "initial_analysis",
+        "playlist_id": report.get("playlist_id"),
+        "taste_profile_updated": True,
+        "rationale_path": report.get("rationale_path"),
+        "signals": report.get("signals"),
+        "suggestions": report.get("suggestions") or [],
+        "warnings": report.get("warnings") or [],
+    }

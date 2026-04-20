@@ -273,3 +273,100 @@ class TestFlowA2:
         init._flow_A2_oauth_paste_back()
         assert saved["code"] == "AQD_ok"
         assert saved["token"] == "tok"
+
+
+class TestFlowB:
+    """Fluxo B → [1]: análise de preferências delegando a `onboard.run`."""
+
+    def test_flow_B_delega_onboard_run_e_imprime_narrativa(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        from maestra_ai.core import init, onboard
+
+        # Report fake devolvido por onboard.run, no shape atual
+        fake_report = {
+            "playlist_id": "pl_123",
+            "playlist_name": "Maestra",
+            "tracks_analyzed": 150,
+            "signals": {
+                "top_genres": [("indie folk", 100.0), ("ambient", 80.0)],
+                "dominant_decades": [("2010s", 200.0)],
+                "top_artists": [("Artist A", 50.0)],
+            },
+            "suggestions": ["contexto A", "contexto B"],
+            "rationale_path": str(tmp_path / "onboard_rationale.json"),
+            "warnings": [],
+        }
+
+        captured = {}
+
+        def fake_run(sp, taste, **kw):
+            captured["sp"] = sp
+            captured["taste"] = taste
+            captured["kw"] = kw
+            return fake_report
+
+        monkeypatch.setattr(onboard, "run", fake_run)
+
+        # Prompt.ask devolve o nome da playlist (hint=None)
+        monkeypatch.setattr("rich.prompt.Prompt.ask", lambda *a, **k: "Maestra")
+
+        class FakeSP:
+            pass
+
+        class FakeTaste:
+            pass
+
+        monkeypatch.setattr(init, "_build_spotify_client", lambda: FakeSP())
+        monkeypatch.setattr(init, "_build_taste_profile", lambda: FakeTaste())
+
+        report = init._flow_B_analysis(
+            playlist_name_hint=None, skip_expansion=True
+        )
+
+        out = capsys.readouterr().out
+        # Narrativa: menciona playlist e contextos sugeridos
+        assert "playlist" in out.lower()
+        assert "contexto a" in out.lower() or "contexto A" in out
+        assert "indie folk" in out.lower()
+        # InitReport
+        assert report["state_before"] == "B"
+        assert report["action"] == "initial_analysis"
+        assert report["playlist_id"] == "pl_123"
+        assert report["taste_profile_updated"] is True
+        assert report["suggestions"] == ["contexto A", "contexto B"]
+        # onboard.run foi chamado com playlist_name
+        assert captured["kw"].get("playlist_name") == "Maestra"
+
+    def test_flow_B_403_playlist_create_classifica_como_user_management(
+        self, monkeypatch
+    ):
+        from maestra_ai.core import init, onboard
+        from maestra_ai.core.errors import PlaylistCreateForbiddenError
+
+        calls = {"n": 0}
+
+        def fake_run(sp, taste, **kw):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise PlaylistCreateForbiddenError("403", status=403)
+            return {
+                "playlist_id": "pl_ok",
+                "signals": {},
+                "suggestions": [],
+                "rationale_path": None,
+                "warnings": [],
+            }
+
+        monkeypatch.setattr(onboard, "run", fake_run)
+        monkeypatch.setattr(init, "_build_spotify_client", lambda: object())
+        monkeypatch.setattr(init, "_build_taste_profile", lambda: object())
+        monkeypatch.setattr("rich.prompt.Prompt.ask", lambda *a, **k: "Maestra")
+        # Depois da 1ª falha, _ask_retry = tentar de novo
+        monkeypatch.setattr(init, "_ask_retry", lambda: True)
+
+        report = init._flow_B_analysis(
+            playlist_name_hint="Maestra", skip_expansion=True
+        )
+        assert report["playlist_id"] == "pl_ok"
+        assert calls["n"] == 2
