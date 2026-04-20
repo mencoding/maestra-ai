@@ -58,7 +58,8 @@ def _default_external_sources() -> dict:
 def migrate_external_sources(cfg: dict) -> dict:
     """Migra `external_sources_enabled: bool` flat para `external_sources: {...}` nested.
 
-    Idempotente: se já estiver nested, retorna como está (completando campos faltantes).
+    Muta `cfg` in-place e retorna o mesmo objeto. Idempotente: se já estiver
+    nested, completa campos faltantes in-place.
     """
     if "external_sources" in cfg and isinstance(cfg["external_sources"], dict):
         defaults = _default_external_sources()
@@ -100,20 +101,15 @@ def any_source_enabled(cfg: dict) -> bool:
 
 
 def load_and_migrate() -> dict:
-    """Carrega config.json e aplica migração flat → nested se necessário.
+    """Carrega config, aplica migrações e persiste se mudou."""
+    import copy
 
-    Se `external_sources_enabled` estava presente (shape antigo), migra para
-    `external_sources: {...}` nested e persiste de volta — para não reescrever
-    o arquivo em cada acesso, compara as chaves antes de gravar.
-    """
     from maestra_ai.core import storage
 
     data = storage.read_config()
-    if "external_sources_enabled" not in data:
-        return data
-    original_keys = set(data.keys())
+    original = copy.deepcopy(data)
     data = migrate_external_sources(data)
-    if set(data.keys()) != original_keys:
+    if data != original:
         storage.write_config(data)
     return data
 
