@@ -11,12 +11,14 @@ from collections.abc import Callable
 from typing import Literal, TypeVar
 from urllib.parse import parse_qs, urlparse
 
+import questionary
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
 
 from maestra_ai.core import storage
 from maestra_ai.core.config import migrate_external_sources, normalize_playlist_id
+from maestra_ai.core.external.setup_guides import guide_getsongbpm, guide_lastfm
 from maestra_ai.core.init_types import InitReport, InitState
 
 # URLs e valores padrão usados nos fluxos
@@ -159,35 +161,54 @@ def _ask_smart_exit(error_kind: str, hint: str) -> bool:
     return choice == "1"
 
 
-def _prompt_external_sources_optin() -> bool:
-    """Pergunta se o usuário quer habilitar fontes externas.
+def _prompt_external_sources_optin() -> dict:
+    """Prompt de opt-in v0.10 com 3 opções. Retorna shape de external_sources.
 
-    v0.9: apenas 2 opções ativas — (2) pular, (3) só MusicBrainz.
-    Opção 1 (Last.fm/BPM) chega em v0.10.
+    - Só MusicBrainz: apenas MB ativado, sem chaves.
+    - Configurar: roda guide_lastfm + guide_getsongbpm; MB sempre ativo.
+    - Pular: tudo desativado.
     """
-    from rich.prompt import Prompt
+    choice_mb_only = "Só MusicBrainz (não preciso mexer em mais nada agora)"
+    choice_all = "Configurar Last.fm e/ou GetSongBPM agora (guias passo-a-passo)"
+    choice_skip = "Pular tudo, configurar depois com 'maestra config external'"
 
-    _console.print(
-        "\n[bold]━━━ Melhorar curadoria com fontes externas (opcional) ━━━[/bold]\n"
-    )
-    _console.print(
-        "A Maestra pode consultar o MusicBrainz (banco público) para"
-        " identificar gêneros canônicos das faixas. Isso recupera"
-        " sugestões mais ricas agora que o Spotify removeu o campo"
-        " `genres` da API pública.\n"
-    )
-    _console.print("  [2] Pular — curadoria segue só com dados do Spotify")
-    _console.print("  [3] Usar MusicBrainz (sem chave, sem configuração)\n")
+    _console.print()
+    _console.print("[bold]━━━ Fontes externas de metadata ━━━[/bold]")
+    _console.print("O melhoramento usa fontes públicas para preencher gêneros, mood e BPM")
+    _console.print("das faixas. Isso melhora muito a qualidade da curadoria.")
+    _console.print()
+    _console.print("Fontes:")
+    _console.print("  • MusicBrainz — gêneros e tags (grátis, sem chave).")
+    _console.print("  • Last.fm — tags ricas + artistas similares (grátis, ~2 min).")
+    _console.print("  • GetSongBPM — BPM e tonalidade (grátis, chave por e-mail).")
+    _console.print()
 
-    while True:
-        choice = Prompt.ask("Escolha", choices=["1", "2", "3"], default="3")
-        if choice == "1":
-            _console.print(
-                "[yellow]Last.fm e BPM chegam em v0.10 — por ora só MusicBrainz. "
-                "Escolha 2 ou 3.[/yellow]\n"
-            )
-            continue
-        return choice == "3"
+    choice = questionary.select(
+        "O que deseja fazer?",
+        choices=[choice_mb_only, choice_all, choice_skip],
+    ).ask()
+
+    result = {
+        "musicbrainz": {"enabled": False},
+        "lastfm":      {"enabled": False, "api_key": None},
+        "getsongbpm":  {"enabled": False, "api_key": None},
+    }
+
+    if choice == choice_skip or choice is None:
+        return result
+
+    # Em ambos os casos restantes, MB vai ativado
+    result["musicbrainz"]["enabled"] = True
+
+    if choice == choice_all:
+        enabled, key = guide_lastfm()
+        result["lastfm"]["enabled"] = enabled
+        result["lastfm"]["api_key"] = key if enabled else None
+        enabled, key = guide_getsongbpm()
+        result["getsongbpm"]["enabled"] = enabled
+        result["getsongbpm"]["api_key"] = key if enabled else None
+
+    return result
 
 
 def _state_c_should_offer_external() -> bool:
@@ -617,12 +638,12 @@ def _flow_B_analysis(  # noqa: N802 — ecoa nome do state (B) para legibilidade
         # antes o user ficava sem feedback durante dezenas de segundos em
         # fetches com paginação longa.
         kwargs["progress_cb"] = _make_onboard_progress_cb()
-        enable_external = _prompt_external_sources_optin()
+        ext_config = _prompt_external_sources_optin()
         cfg = storage.read_config()
         cfg = migrate_external_sources(cfg)
-        cfg["external_sources"]["musicbrainz"]["enabled"] = enable_external
+        cfg["external_sources"] = ext_config
         storage.write_config(cfg)
-        kwargs["enhance_external"] = enable_external
+        kwargs["enhance_external"] = ext_config["musicbrainz"]["enabled"]
         return onboard.run(sp, taste, **kwargs)
 
     def classify(err: Exception) -> str:
@@ -914,10 +935,10 @@ def run_interactive(*, playlist_id: str | None = None) -> InitReport:
             "\n[yellow]Novo em v0.9:[/yellow] você pode habilitar fontes externas "
             "para melhorar a curadoria."
         )
-        enable = _prompt_external_sources_optin()
+        ext_config = _prompt_external_sources_optin()
         cfg = storage.read_config()
         cfg = migrate_external_sources(cfg)
-        cfg["external_sources"]["musicbrainz"]["enabled"] = enable
+        cfg["external_sources"] = ext_config
         storage.write_config(cfg)
     choice = Prompt.ask("Escolha", choices=["1", "2", "3"], default="1")
     if choice == "3":

@@ -327,6 +327,13 @@ class TestFlowB:
 
         monkeypatch.setattr(init, "_build_spotify_client", lambda: FakeSP())
         monkeypatch.setattr(init, "_build_taste_profile", lambda: FakeTaste())
+        monkeypatch.setattr(init, "_prompt_external_sources_optin", lambda: {
+            "musicbrainz": {"enabled": False},
+            "lastfm": {"enabled": False, "api_key": None},
+            "getsongbpm": {"enabled": False, "api_key": None},
+        })
+        monkeypatch.setattr(init.storage, "read_config", lambda: {})
+        monkeypatch.setattr(init.storage, "write_config", lambda d: None)
 
         report = init._flow_B_analysis(
             playlist_name_hint=None, skip_expansion=True
@@ -372,7 +379,11 @@ class TestFlowB:
         # Com existing_playlist_id fornecido, o fluxo pula o prompt de link.
         # Depois da 1ª falha, _ask_retry = tentar de novo
         monkeypatch.setattr(init, "_ask_retry", lambda: True)
-        monkeypatch.setattr(init, "_prompt_external_sources_optin", lambda: False)
+        monkeypatch.setattr(init, "_prompt_external_sources_optin", lambda: {
+            "musicbrainz": {"enabled": False},
+            "lastfm": {"enabled": False, "api_key": None},
+            "getsongbpm": {"enabled": False, "api_key": None},
+        })
         monkeypatch.setattr(init.storage, "read_config", lambda: {})
         monkeypatch.setattr(init.storage, "write_config", lambda d: None)
 
@@ -406,6 +417,13 @@ class TestFlowB:
             "rich.prompt.Prompt.ask",
             lambda *a, **k: "https://open.spotify.com/playlist/6c2ppkdUfGKJNWwBl0MC4w?si=xyz",
         )
+        monkeypatch.setattr(init, "_prompt_external_sources_optin", lambda: {
+            "musicbrainz": {"enabled": False},
+            "lastfm": {"enabled": False, "api_key": None},
+            "getsongbpm": {"enabled": False, "api_key": None},
+        })
+        monkeypatch.setattr(init.storage, "read_config", lambda: {})
+        monkeypatch.setattr(init.storage, "write_config", lambda d: None)
 
         report = init._flow_B_analysis(skip_expansion=True)
         assert captured["existing_playlist_id"] == "6c2ppkdUfGKJNWwBl0MC4w"
@@ -437,7 +455,11 @@ class TestFlowB:
         ])
         monkeypatch.setattr("rich.prompt.Prompt.ask", lambda *a, **k: next(answers))
         monkeypatch.setattr(init, "_ask_retry", lambda: True)
-        monkeypatch.setattr(init, "_prompt_external_sources_optin", lambda: False)
+        monkeypatch.setattr(init, "_prompt_external_sources_optin", lambda: {
+            "musicbrainz": {"enabled": False},
+            "lastfm": {"enabled": False, "api_key": None},
+            "getsongbpm": {"enabled": False, "api_key": None},
+        })
         monkeypatch.setattr(init.storage, "read_config", lambda: {})
         monkeypatch.setattr(init.storage, "write_config", lambda d: None)
 
@@ -464,7 +486,11 @@ class TestFlowB:
         monkeypatch.setattr(onboard, "run", fake_run)
         monkeypatch.setattr(init, "_build_spotify_client", lambda: object())
         monkeypatch.setattr(init, "_build_taste_profile", lambda: object())
-        monkeypatch.setattr(init, "_prompt_external_sources_optin", lambda: False)
+        monkeypatch.setattr(init, "_prompt_external_sources_optin", lambda: {
+            "musicbrainz": {"enabled": False},
+            "lastfm": {"enabled": False, "api_key": None},
+            "getsongbpm": {"enabled": False, "api_key": None},
+        })
         monkeypatch.setattr(init.storage, "read_config", lambda: {})
         monkeypatch.setattr(init.storage, "write_config", lambda d: None)
 
@@ -508,7 +534,11 @@ class TestFlowB:
         monkeypatch.setattr(onboard, "run", fake_run)
         monkeypatch.setattr(init, "_build_spotify_client", lambda: object())
         monkeypatch.setattr(init, "_build_taste_profile", lambda: object())
-        monkeypatch.setattr(init, "_prompt_external_sources_optin", lambda: False)
+        monkeypatch.setattr(init, "_prompt_external_sources_optin", lambda: {
+            "musicbrainz": {"enabled": False},
+            "lastfm": {"enabled": False, "api_key": None},
+            "getsongbpm": {"enabled": False, "api_key": None},
+        })
         monkeypatch.setattr(init.storage, "read_config", lambda: {})
         monkeypatch.setattr(init.storage, "write_config", lambda d: None)
 
