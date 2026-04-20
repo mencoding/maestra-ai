@@ -353,3 +353,40 @@ async def test_history_outside_playlist_retorna_shape_consistente_sem_playlist_i
 async def test_total_23_tools():
     from maestra_mcp.tools import iter_tool_defs
     assert len(iter_tool_defs()) == 23
+
+
+# ---------------------------------------------------------------------------
+# clear_context — N5 v0.6.2
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_clear_context_registrado_no_registry():
+    """clear_context deve constar em iter_tool_defs."""
+    from maestra_mcp.tools import iter_tool_defs
+    names = [t.name for t in iter_tool_defs()]
+    assert "clear_context" in names, f"clear_context ausente do registry; tools: {names}"
+
+
+@pytest.mark.asyncio
+async def test_clear_context_chama_context_state_clear():
+    """Round-trip: call_tool('clear_context', {}) deve delegar a context_state.clear()."""
+    from maestra_mcp.tools import call_tool
+    mock_ctx = MagicMock()
+    mock_ctx.clear.return_value = {"status": "cleared", "cleared_context": "workout"}
+    with patch("maestra_mcp.tools.build_deps", return_value={"context_state": mock_ctx}):
+        result = await call_tool("clear_context", {})
+    mock_ctx.clear.assert_called_once()
+    assert result.get("status") == "cleared"
+    assert result.get("cleared_context") == "workout"
+
+
+@pytest.mark.asyncio
+async def test_clear_context_retorna_resultado_do_handler():
+    """Shape de retorno: o dict devolvido por context_state.clear() é propagado sem alteração."""
+    from maestra_mcp.tools import call_tool
+    mock_ctx = MagicMock()
+    mock_ctx.clear.return_value = {"status": "cleared", "cleared_context": None}
+    with patch("maestra_mcp.tools.build_deps", return_value={"context_state": mock_ctx}):
+        result = await call_tool("clear_context", {})
+    assert "status" in result
+    assert result["cleared_context"] is None
