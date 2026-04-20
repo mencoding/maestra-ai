@@ -272,13 +272,15 @@ def start(
         "--import-outside", import_outside,
     ]
     log_path = pid_path.parent / "director.log"
-    log_fd = open(log_path, "a", encoding="utf-8")
-    proc = subprocess.Popen(
-        cmd,
-        stdout=log_fd,
-        stderr=log_fd,
-        start_new_session=True,
-    )
+    # Abre o log em context manager: o Popen dup'a o fd para o processo filho,
+    # e o `with` fecha a cópia do pai ao sair do bloco. Evita fd leak no servidor MCP long-lived.
+    with open(log_path, "a", encoding="utf-8") as log_fd:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=log_fd,
+            stderr=log_fd,
+            start_new_session=True,
+        )
     pid_path.write_text(str(proc.pid), encoding="utf-8")
     return {"status": "started", "pid": proc.pid, "log": str(log_path)}
 
