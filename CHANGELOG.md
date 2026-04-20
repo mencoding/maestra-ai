@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0-alpha.0] — 2026-04-20
+
+### Adicionado
+- `maestra init` — wizard guiado de configuração unificado. Detecta estado
+  (A / A2 / B / C) e apresenta menu contextual. Linguagem sem jargão,
+  tom caloroso, retry loop com smart exit após 3 falhas consecutivas do
+  mesmo tipo.
+- Flags `--auto` (sem prompts, requer estado B ou C) e `--json` (saída
+  estruturada, implica `--auto`).
+- Help topic `maestra help init`.
+- Módulo `core/init.py` + `core/init_types.py` com `InitState` e `InitReport`.
+- Kwargs `skip_library`, `skip_long_term`, `skip_medium_term`,
+  `skip_playlist_creation` em `onboard.run` (usados por `init --auto` e
+  `_flow_C_update`).
+
+### Depreciado
+- `maestra onboard` — warning em stderr ao rodar. Será removido em v0.9.
+  Migração: `maestra init` (interativo) ou `maestra init --auto` (scripts).
+  `maestra help onboarding` ganhou banner de depreciação no topo.
+
+### Contratos preservados
+- `taste_profile.json`, `onboard_rationale.json` inalterados.
+- Tool MCP `onboard_rationale` continua funcionando (lê artefato gerado por
+  `init` do mesmo jeito que antes por `onboard`).
+
 ## [0.7.0-alpha.1] - 2026-04-20
 
 Cleanup + segurança pós-v0.7.0-alpha.0. Fecha 10 itens S* (segurança)
