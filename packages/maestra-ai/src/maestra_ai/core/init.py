@@ -586,3 +586,107 @@ def _flow_C_update(*, mode: Literal["recent_mood", "full"]) -> InitReport:
         "suggestions": report.get("suggestions") or [],
         "warnings": report.get("warnings") or [],
     }
+
+
+def _delete_refresh_token() -> None:
+    """Apaga o refresh_token do token store default.
+
+    Idempotente: swallow em qualquer erro (keyring ausente, entrada já
+    inexistente, etc.) — chamadores de reset não devem quebrar por isso.
+    """
+    from maestra_ai.core.token_store import default_token_store
+
+    try:
+        default_token_store().delete()
+    except Exception:
+        pass
+
+
+def _report_exit(state: InitState) -> InitReport:
+    """Helper — constrói InitReport com action='exit' e campos zerados."""
+    return {
+        "state_before": state,
+        "action": "exit",
+        "playlist_id": None,
+        "taste_profile_updated": False,
+        "rationale_path": None,
+        "signals": None,
+        "suggestions": [],
+        "warnings": [],
+    }
+
+
+def _flow_reset_partial() -> InitReport:
+    """Fluxo B → [2]: apaga token + config.json, preserva taste_profile.
+
+    Confirmação única com default conservador ("n"). Se o usuário cancelar,
+    retorna `_report_exit("B")` sem tocar em nada.
+    """
+    _console.print(
+        "\n[yellow]Isso vai apagar a conexão com sua conta Spotify. "
+        "Você vai precisar criar um app novo (ou reutilizar o atual) "
+        "e autorizar de novo.[/yellow]"
+    )
+    if Prompt.ask("Continuar?", choices=["s", "n"], default="n") != "s":
+        return _report_exit("B")
+
+    _delete_refresh_token()
+    cfg = storage.config_dir() / "config.json"
+    if cfg.exists():
+        cfg.unlink()
+    _console.print("\nConexão apagada.\n")
+    return {
+        "state_before": "B",
+        "action": "reset_partial",
+        "playlist_id": None,
+        "taste_profile_updated": False,
+        "rationale_path": None,
+        "signals": None,
+        "suggestions": [],
+        "warnings": [],
+    }
+
+
+def _flow_reset_full() -> InitReport:
+    """Fluxo C → [2]: apaga TUDO (token + config + taste + rationale).
+
+    Exige CONFIRMAÇÃO DUPLA sequencial — duas perguntas s/s com default "n".
+    Qualquer "n" aborta e retorna `_report_exit("C")` sem apagar nada.
+    """
+    _console.print(
+        "\n[red]ATENÇÃO: Isso vai apagar TUDO — conexão, preferências "
+        "analisadas, rationale. Você vai recomeçar do zero.[/red]"
+    )
+    if Prompt.ask("Continuar?", choices=["s", "n"], default="n") != "s":
+        return _report_exit("C")
+    if (
+        Prompt.ask(
+            "[red]Confirmar apagar tudo?[/red]",
+            choices=["s", "n"],
+            default="n",
+        )
+        != "s"
+    ):
+        return _report_exit("C")
+
+    _delete_refresh_token()
+    for p in [
+        storage.config_dir() / "config.json",
+        storage.data_dir() / "taste_profile.json",
+        storage.state_dir() / "onboard_rationale.json",
+    ]:
+        if p.exists():
+            p.unlink()
+    _console.print(
+        "\nTudo apagado. Rode `maestra init` de novo para começar.\n"
+    )
+    return {
+        "state_before": "C",
+        "action": "reset_full",
+        "playlist_id": None,
+        "taste_profile_updated": False,
+        "rationale_path": None,
+        "signals": None,
+        "suggestions": [],
+        "warnings": [],
+    }

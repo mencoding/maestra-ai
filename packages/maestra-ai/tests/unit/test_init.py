@@ -437,3 +437,138 @@ class TestFlowC:
         assert not captured_kwargs.get("skip_library", False)
         assert not captured_kwargs.get("skip_long_term", False)
         assert not captured_kwargs.get("skip_medium_term", False)
+
+
+class TestReset:
+    """Fluxos de Recomeçar: B→[2] (parcial) e C→[2] (total)."""
+
+    def test_reset_partial_apaga_token_e_config_nao_mexe_taste(
+        self, tmp_path, monkeypatch
+    ):
+        from maestra_ai.core import init, storage
+
+        cfg_dir = tmp_path / "cfg"
+        cfg_dir.mkdir()
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (cfg_dir / "config.json").write_text("{}")
+        (data_dir / "taste_profile.json").write_text("{}")
+
+        monkeypatch.setattr(storage, "config_dir", lambda: cfg_dir)
+        monkeypatch.setattr(storage, "data_dir", lambda: data_dir)
+        monkeypatch.setattr(storage, "state_dir", lambda: tmp_path / "state")
+        monkeypatch.setattr("rich.prompt.Prompt.ask", lambda *a, **k: "s")
+
+        removed_tokens = {"n": 0}
+        monkeypatch.setattr(
+            init, "_delete_refresh_token", lambda: removed_tokens.update(n=1)
+        )
+
+        report = init._flow_reset_partial()
+        assert report["action"] == "reset_partial"
+        assert report["state_before"] == "B"
+        assert not (cfg_dir / "config.json").exists()
+        # taste_profile NÃO pode ter sido apagado
+        assert (data_dir / "taste_profile.json").exists()
+        assert removed_tokens["n"] == 1
+
+    def test_reset_full_apaga_tudo_com_confirmacao_dupla(
+        self, tmp_path, monkeypatch
+    ):
+        from maestra_ai.core import init, storage
+
+        cfg_dir = tmp_path / "cfg"
+        cfg_dir.mkdir()
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        state_dir = tmp_path / "state"
+        state_dir.mkdir()
+        (cfg_dir / "config.json").write_text("{}")
+        (data_dir / "taste_profile.json").write_text("{}")
+        (state_dir / "onboard_rationale.json").write_text("{}")
+
+        monkeypatch.setattr(storage, "config_dir", lambda: cfg_dir)
+        monkeypatch.setattr(storage, "data_dir", lambda: data_dir)
+        monkeypatch.setattr(storage, "state_dir", lambda: state_dir)
+
+        answers = iter(["s", "s"])
+        monkeypatch.setattr(
+            "rich.prompt.Prompt.ask", lambda *a, **k: next(answers)
+        )
+        monkeypatch.setattr(init, "_delete_refresh_token", lambda: None)
+
+        report = init._flow_reset_full()
+        assert report["action"] == "reset_full"
+        assert report["state_before"] == "C"
+        assert not (cfg_dir / "config.json").exists()
+        assert not (data_dir / "taste_profile.json").exists()
+        assert not (state_dir / "onboard_rationale.json").exists()
+
+    def test_reset_partial_cancela_se_usuario_responde_n(
+        self, tmp_path, monkeypatch
+    ):
+        from maestra_ai.core import init, storage
+
+        cfg_dir = tmp_path / "cfg"
+        cfg_dir.mkdir()
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (cfg_dir / "config.json").write_text("{}")
+        (data_dir / "taste_profile.json").write_text("{}")
+
+        monkeypatch.setattr(storage, "config_dir", lambda: cfg_dir)
+        monkeypatch.setattr(storage, "data_dir", lambda: data_dir)
+        monkeypatch.setattr(storage, "state_dir", lambda: tmp_path / "state")
+        monkeypatch.setattr("rich.prompt.Prompt.ask", lambda *a, **k: "n")
+
+        token_calls = {"n": 0}
+        monkeypatch.setattr(
+            init, "_delete_refresh_token", lambda: token_calls.update(n=1)
+        )
+
+        report = init._flow_reset_partial()
+        assert report["action"] == "exit"
+        assert report["state_before"] == "B"
+        # Nada foi apagado
+        assert (cfg_dir / "config.json").exists()
+        assert (data_dir / "taste_profile.json").exists()
+        assert token_calls["n"] == 0
+
+    def test_reset_full_cancela_se_segunda_confirmacao_n(
+        self, tmp_path, monkeypatch
+    ):
+        from maestra_ai.core import init, storage
+
+        cfg_dir = tmp_path / "cfg"
+        cfg_dir.mkdir()
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        state_dir = tmp_path / "state"
+        state_dir.mkdir()
+        (cfg_dir / "config.json").write_text("{}")
+        (data_dir / "taste_profile.json").write_text("{}")
+        (state_dir / "onboard_rationale.json").write_text("{}")
+
+        monkeypatch.setattr(storage, "config_dir", lambda: cfg_dir)
+        monkeypatch.setattr(storage, "data_dir", lambda: data_dir)
+        monkeypatch.setattr(storage, "state_dir", lambda: state_dir)
+
+        # Primeira "s", segunda "n" — aborta antes de apagar
+        answers = iter(["s", "n"])
+        monkeypatch.setattr(
+            "rich.prompt.Prompt.ask", lambda *a, **k: next(answers)
+        )
+
+        token_calls = {"n": 0}
+        monkeypatch.setattr(
+            init, "_delete_refresh_token", lambda: token_calls.update(n=1)
+        )
+
+        report = init._flow_reset_full()
+        assert report["action"] == "exit"
+        assert report["state_before"] == "C"
+        # Nada foi apagado — taste preservado
+        assert (cfg_dir / "config.json").exists()
+        assert (data_dir / "taste_profile.json").exists()
+        assert (state_dir / "onboard_rationale.json").exists()
+        assert token_calls["n"] == 0
