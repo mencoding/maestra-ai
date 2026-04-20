@@ -269,12 +269,17 @@ def _apply_taste_to_weights(
 
 
 def _fetch_artists_genres(
-    sp, *, artist_ids: list[str],
+    sp, *, artist_ids: list[str], warnings: list[str] | None = None,
 ) -> dict[str, list[str]]:
     """Resolve artist IDs → {artist_name: [genres]} via sp.artists batch.
 
     Spotify API aceita até 50 IDs por call — trunca se mais.
     MaestraError propaga; outras exceções viram dict vazio (fallback).
+
+    v0.8.0-alpha.3: se `warnings` (list mutável) for fornecida, falhas
+    não-MaestraError append uma mensagem legível. Apps em Spotify Dev
+    Mode podem receber 403 em `GET /v1/artists` mesmo sendo endpoint
+    público — o report precisa expor que gêneros não foram enriquecidos.
     """
     if not artist_ids:
         return {}
@@ -283,7 +288,14 @@ def _fetch_artists_genres(
         resp = sp.artists(batch)
     except MaestraError:
         raise
-    except Exception:
+    except Exception as e:
+        if warnings is not None:
+            status = getattr(e, "http_status", None) or getattr(e, "status", None)
+            status_txt = f" ({status})" if status else ""
+            warnings.append(
+                f"artists-fetch falhou{status_txt}: gêneros não disponíveis "
+                f"nesta análise (top artistas e décadas continuam funcionando).",
+            )
         return {}
     out: dict[str, list[str]] = {}
     for artist in (resp or {}).get("artists", []):
@@ -696,6 +708,11 @@ def run(
     else:
         effective_cap = min(saved_cap, _MAX_SAVED * 2)
 
+    # v0.8.0-alpha.3: buffer local de warnings (falhas parciais toleradas
+    # que o user precisa conhecer no report final). Preferível a global/
+    # thread-local — mantém run() reentrante.
+    warnings: list[str] = []
+
     def report_step(step, name, detail=None):
         if progress_cb:
             ev = {"step": step, "name": name}
@@ -1008,7 +1025,9 @@ def run(
                     break
             if aname in {a.get("name") for a in t.get("artists") or []}:
                 break
-    artists_genres = _fetch_artists_genres(sp, artist_ids=top_artist_ids)
+    artists_genres = _fetch_artists_genres(
+        sp, artist_ids=top_artist_ids, warnings=warnings,
+    )
 
     sorted_tracks = sorted(
         [t for t in tracks_list if t.get("uri") in adjusted_weights],
@@ -1035,4 +1054,5 @@ def run(
         "context_suggestions": suggestions,
         "signals": signals,
         "rationale_path": str(rationale_path),
+        "warnings": warnings,
     }

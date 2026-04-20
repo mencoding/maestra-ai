@@ -467,6 +467,51 @@ class TestFlowB:
         assert captured["existing_playlist_id"] == "6c2ppkdUfGKJNWwBl0MC4w"
         assert report["playlist_id"] == "6c2ppkdUfGKJNWwBl0MC4w"
 
+    def test_flow_B_passa_progress_cb_que_imprime_fetch_updates(  # noqa: N802
+        self, monkeypatch, capsys,
+    ):
+        """v0.8.0-alpha.3: _flow_B_analysis conecta progress_cb ao _console.
+
+        O user não via nada durante fetches longos. Agora cada step emitido
+        por onboard.run (via ev dict) é impresso no console.
+        """
+        from maestra_ai.core import init, onboard
+
+        captured_cb = {"cb": None}
+
+        def fake_run(sp, taste, **kw):
+            captured_cb["cb"] = kw.get("progress_cb")
+            # Simula onboard chamando progress_cb em etapas
+            cb = kw.get("progress_cb")
+            if cb:
+                cb({"step": 3, "name": "Top tracks (3 janelas)"})
+                cb({"step": 4, "name": "Biblioteca", "detail": "50/500"})
+                cb({"step": 5, "name": "Recently played"})
+            return {
+                "playlist_id": kw.get("existing_playlist_id", "abc"),
+                "playlist_name": "Maestra",
+                "signals": {},
+                "suggestions": [],
+                "rationale_path": None,
+                "warnings": [],
+            }
+
+        monkeypatch.setattr(onboard, "run", fake_run)
+        monkeypatch.setattr(init, "_build_spotify_client", lambda: object())
+        monkeypatch.setattr(init, "_build_taste_profile", lambda: object())
+
+        init._flow_B_analysis(
+            skip_expansion=True,
+            existing_playlist_id="6c2ppkdUfGKJNWwBl0MC4w",
+        )
+
+        assert captured_cb["cb"] is not None
+        out = capsys.readouterr().out.lower()
+        # Pelo menos um dos nomes de steps deve aparecer no console
+        assert any(tok in out for tok in [
+            "top tracks", "biblioteca", "recently", "faixa", "página",
+        ])
+
 
 class TestFlowC:
     """Fluxo C → [1]: atualização incremental.

@@ -1258,6 +1258,65 @@ class TestFetchArtistsGenres:
         called_ids = sp.artists.call_args[0][0]
         assert len(called_ids) == 50
 
+    def test_erro_api_acumula_warning_quando_warnings_list_fornecida(self):
+        """v0.8.0-alpha.3: quando `warnings` list é passada, falha no fetch
+        de gêneros append uma mensagem para chegar ao report final."""
+        from unittest.mock import MagicMock
+        sp = MagicMock()
+        sp.artists.side_effect = RuntimeError("403 Forbidden (Dev Mode)")
+        warnings: list[str] = []
+        result = onboard._fetch_artists_genres(
+            sp, artist_ids=["a1", "a2"], warnings=warnings,
+        )
+        assert result == {}
+        assert len(warnings) == 1
+        assert "artists-fetch" in warnings[0].lower() or "gêneros" in warnings[0].lower()
+
+
+class TestOnboardRunWarnings:
+    """v0.8.0-alpha.3: onboard.run retorna campo `warnings` no report."""
+
+    def test_report_contem_warnings_quando_artists_falha(self, monkeypatch, tmp_path):
+        """Se sp.artists falha com 403, report['warnings'] expõe a mensagem."""
+        from unittest.mock import MagicMock
+
+        from maestra_ai.core.taste import TasteProfile
+
+        sp = MagicMock()
+        sp.current_user.return_value = {"id": "u1", "country": "BR", "product": "premium"}
+        # Top tracks: 1 track com 1 artista real (id resolvível)
+        sp.current_user_top_tracks.return_value = {
+            "items": [
+                {
+                    "uri": "spotify:track:t1",
+                    "id": "t1",
+                    "name": "Track 1",
+                    "artists": [{"name": "Artist 1", "id": "a1"}],
+                    "album": {"release_date": "2015"},
+                },
+            ],
+            "next": None,
+        }
+        sp.current_user_saved_tracks.return_value = {"items": [], "next": None}
+        sp.current_user_recently_played.return_value = {"items": [], "next": None}
+        sp.playlist.return_value = {"name": "Maestra"}
+        # O ponto crítico: sp.artists falha com 403
+        sp.artists.side_effect = RuntimeError("403 Forbidden")
+
+        taste = TasteProfile(tmp_path / "taste.json")
+        report = onboard.run(
+            sp,
+            taste,
+            playlist_name="Maestra",
+            seed_count=0,
+            dry_run=True,
+            existing_playlist_id="pl_existing",
+        )
+        assert "warnings" in report
+        assert isinstance(report["warnings"], list)
+        assert any("artists" in w.lower() or "gêneros" in w.lower() or "generos" in w.lower()
+                   for w in report["warnings"])
+
 
 class TestDecadeOf:
     """_decade_of converte release_date em década legível."""

@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0-alpha.3] — 2026-04-20
+
+### Corrigido
+- `_fetch_artists_genres` em `core/onboard.py` agora é tolerante a 403 do
+  Spotify (Dev Mode bloqueia `GET /v1/artists` em alguns apps mesmo sendo
+  endpoint público). Em erro, retorna dict vazio e append mensagem em
+  `report["warnings"]`; a análise segue com décadas e top artistas
+  (gêneros ficam ausentes). Antes a análise completava sem sinal visível
+  de falha — user via "Décadas dominantes" mas não "Gêneros dominantes"
+  e não sabia por quê.
+
+### Alterado
+- `onboard.run` passa a incluir `warnings: list[str]` no report final.
+- `maestra init` (flows B e C) conecta `progress_cb` de `onboard.run` e
+  imprime progresso ao longo dos fetches (top tracks, biblioteca
+  paginada, recently played, análise). Antes a CLI ficava silenciosa
+  durante dezenas de segundos em bibliotecas grandes.
+- `_print_onboard_results` exibe bloco "Avisos" ao final quando
+  `report["warnings"]` não está vazio.
+
 ## [0.8.0-alpha.2] — 2026-04-20
 
 ### Alterado

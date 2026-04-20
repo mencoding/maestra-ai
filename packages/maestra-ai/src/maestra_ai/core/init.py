@@ -431,6 +431,14 @@ def _print_onboard_results(report: dict) -> None:
         for i, s in enumerate(suggestions, 1):
             _console.print(f"  {i}. {s}")
 
+    # v0.8.0-alpha.3: warnings expostos no final — ex.: artists-fetch 403
+    # em Dev Mode faz a análise seguir sem gêneros; user precisa saber.
+    warnings = report.get("warnings") or []
+    if warnings:
+        _console.print("\n[yellow]Avisos:[/yellow]")
+        for w in warnings:
+            _console.print(f"  [yellow]•[/yellow] {w}")
+
     _console.print(
         "\n[dim]Para usar:[/dim]\n"
         '  maestra context set "<contexto>"\n'
@@ -474,6 +482,25 @@ def _prompt_playlist_id() -> str:
             ),
         },
     )
+
+
+def _make_onboard_progress_cb():
+    """Cria callback compatível com `onboard.run(progress_cb=...)`.
+
+    v0.8.0-alpha.3: o protocolo real é `cb(ev: dict)` com
+    `ev = {"step": int, "name": str, "detail": str | None}`. Imprime no
+    _console com estilo dim para não roubar atenção do conteúdo principal.
+    """
+    def cb(ev):
+        if not isinstance(ev, dict):
+            return
+        name = ev.get("name") or ""
+        detail = ev.get("detail")
+        if detail:
+            _console.print(f"  [dim]→ {name} — {detail}[/dim]")
+        else:
+            _console.print(f"  [dim]→ {name}...[/dim]")
+    return cb
 
 
 def _flow_B_analysis(  # noqa: N802 — ecoa nome do state (B) para legibilidade
@@ -522,6 +549,10 @@ def _flow_B_analysis(  # noqa: N802 — ecoa nome do state (B) para legibilidade
             # Sem selector = onboard.run pula expansão
             # (reason="selector_not_provided").
             pass
+        # v0.8.0-alpha.3: progress_cb conecta steps do onboard ao console —
+        # antes o user ficava sem feedback durante dezenas de segundos em
+        # fetches com paginação longa.
+        kwargs["progress_cb"] = _make_onboard_progress_cb()
         return onboard.run(sp, taste, **kwargs)
 
     def classify(err: Exception) -> str:
@@ -597,6 +628,7 @@ def _flow_C_update(*, mode: Literal["recent_mood", "full"]) -> InitReport:  # no
             skip_long_term=True,
             skip_medium_term=True,
             skip_playlist_creation=True,
+            progress_cb=_make_onboard_progress_cb(),
         )
         action: Literal["update_recent_mood", "update_full"] = "update_recent_mood"
     else:  # "full"
@@ -612,6 +644,7 @@ def _flow_C_update(*, mode: Literal["recent_mood", "full"]) -> InitReport:  # no
             dry_run=False,
             skip_playlist_creation=True,
             playlist_selector=None,  # sem expansão por playlists próprias
+            progress_cb=_make_onboard_progress_cb(),
         )
         action = "update_full"
 
