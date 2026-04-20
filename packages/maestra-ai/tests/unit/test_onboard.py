@@ -1202,6 +1202,65 @@ class TestFetchOwnPlaylistsCap:
         assert len(collected) == 200
 
 
+class TestFetchArtistsGenres:
+    """_fetch_artists_genres resolve artist_ids → genres via sp.artists batch."""
+
+    def test_resolve_top_artistas_em_uma_call(self):
+        from unittest.mock import MagicMock
+        sp = MagicMock()
+        sp.artists.return_value = {
+            "artists": [
+                {"id": "a1", "name": "Sufjan Stevens",
+                 "genres": ["indie folk", "chamber folk"]},
+                {"id": "a2", "name": "Nils Frahm",
+                 "genres": ["neo-classical", "ambient"]},
+            ],
+        }
+        result = onboard._fetch_artists_genres(
+            sp, artist_ids=["a1", "a2"],
+        )
+        assert result == {
+            "Sufjan Stevens": ["indie folk", "chamber folk"],
+            "Nils Frahm": ["neo-classical", "ambient"],
+        }
+        sp.artists.assert_called_once_with(["a1", "a2"])
+
+    def test_lista_vazia_nao_chama_api(self):
+        from unittest.mock import MagicMock
+        sp = MagicMock()
+        result = onboard._fetch_artists_genres(sp, artist_ids=[])
+        assert result == {}
+        sp.artists.assert_not_called()
+
+    def test_erro_api_retorna_dict_vazio_fallback(self):
+        """Falha não-MaestraError em sp.artists cai em fallback sem gêneros."""
+        from unittest.mock import MagicMock
+        sp = MagicMock()
+        sp.artists.side_effect = RuntimeError("spotify flaky")
+        result = onboard._fetch_artists_genres(sp, artist_ids=["a1"])
+        assert result == {}
+
+    def test_maestra_error_propaga(self):
+        """AuthError/RateLimit propagam (pipeline central)."""
+        import pytest
+        from unittest.mock import MagicMock
+        from maestra_ai.core.errors import AuthError
+        sp = MagicMock()
+        sp.artists.side_effect = AuthError("token revogado")
+        with pytest.raises(AuthError):
+            onboard._fetch_artists_genres(sp, artist_ids=["a1"])
+
+    def test_batch_maximo_50_ids(self):
+        """Se passar > 50 IDs, corta em 50 (hard limit Spotify)."""
+        from unittest.mock import MagicMock
+        sp = MagicMock()
+        sp.artists.return_value = {"artists": []}
+        many_ids = [f"a{i}" for i in range(80)]
+        onboard._fetch_artists_genres(sp, artist_ids=many_ids)
+        called_ids = sp.artists.call_args[0][0]
+        assert len(called_ids) == 50
+
+
 class TestDecadeOf:
     """_decade_of converte release_date em década legível."""
 

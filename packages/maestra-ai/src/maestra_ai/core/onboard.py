@@ -216,6 +216,32 @@ def _compute_weights(
     return dict(w)
 
 
+def _fetch_artists_genres(
+    sp, *, artist_ids: list[str],
+) -> dict[str, list[str]]:
+    """Resolve artist IDs → {artist_name: [genres]} via sp.artists batch.
+
+    Spotify API aceita até 50 IDs por call — trunca se mais.
+    MaestraError propaga; outras exceções viram dict vazio (fallback).
+    """
+    if not artist_ids:
+        return {}
+    batch = artist_ids[:50]
+    try:
+        resp = sp.artists(batch)
+    except MaestraError:
+        raise
+    except Exception:
+        return {}
+    out: dict[str, list[str]] = {}
+    for artist in (resp or {}).get("artists", []):
+        name = artist.get("name")
+        if not name:
+            continue
+        out[name] = list(artist.get("genres", []))
+    return out
+
+
 def _decade_of(release_date: str) -> str:
     """Converte 'YYYY-MM-DD', 'YYYY-MM' ou 'YYYY' em string da década.
 
