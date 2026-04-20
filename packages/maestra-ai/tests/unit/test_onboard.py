@@ -1100,3 +1100,34 @@ class TestExpansionContextShape:
                 sp, taste, playlist_name="M", seed_count=0,
                 playlist_selector=old_selector,
             )
+
+
+class TestFetchOwnPlaylistsCap:
+    """M6 v0.6.2: _fetch_own_playlists tem cap de 200 páginas contra
+    loop infinito (bug de servidor, mock quebrado, Spotify retornando
+    `next` indefinidamente)."""
+
+    def test_para_em_200_paginas_mesmo_com_next_infinito(self):
+        from unittest.mock import MagicMock
+        sp = MagicMock()
+        call_count = {"n": 0}
+
+        def _pages(limit, offset):
+            call_count["n"] += 1
+            return {
+                "items": [
+                    {
+                        "id": f"p{offset}",
+                        "name": f"pl{offset}",
+                        "owner": {"id": "me"},
+                        "tracks": {"total": 3},
+                    },
+                ],
+                "next": "https://api.spotify.com/next-page-fake",  # nunca None
+            }
+
+        sp.current_user_playlists.side_effect = _pages
+
+        collected, _empty = onboard._fetch_own_playlists(sp, me_id="me")
+        assert call_count["n"] <= 200
+        assert len(collected) == 200

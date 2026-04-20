@@ -100,6 +100,12 @@ def _fetch_saved(
     return collected[:max_tracks]
 
 
+# M6 v0.6.2: cap anti-loop. 200 × _PAGE(50) = 10_000 playlists
+# (Spotify hard limit para conta de usuário). Defense-in-depth contra
+# bug de servidor ou mock com `next` fixo.
+_PLAYLIST_PAGE_CAP = 200
+
+
 def _fetch_own_playlists(
     sp, me_id: str, *, progress_cb: Callable | None = None,
 ) -> tuple[list[OwnPlaylist], int]:
@@ -119,7 +125,7 @@ def _fetch_own_playlists(
     collected: list[dict] = []
     empty_count = 0
     offset = 0
-    while True:
+    for _ in range(_PLAYLIST_PAGE_CAP):
         resp = sp.current_user_playlists(limit=_PAGE, offset=offset)
         items = resp.get("items", []) or []
         if not items:
