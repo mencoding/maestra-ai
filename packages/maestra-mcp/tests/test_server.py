@@ -213,7 +213,7 @@ def test_server_subprocess_responde_initialize_e_list_tools(tmp_path, monkeypatc
         names = {t["name"] for t in tools}
         assert "now" in names
         assert "doctor" in names
-        assert len(names) == 23
+        assert len(names) == 24
     finally:
         proc.terminate()
         try:

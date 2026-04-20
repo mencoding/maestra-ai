@@ -446,3 +446,48 @@ def _onboard(args):
 def _doctor(args):
     from maestra_ai.core import doctor as doctor_mod
     return {"checks": doctor_mod.run_all()}
+
+
+# ========================================================================
+# Onboard rationale (v0.7.0 B3)
+# ========================================================================
+
+@tool(
+    "onboard_rationale",
+    "Retorna o rationale persistido das últimas sugestões do onboard. "
+    "Permite explicar ao usuário por que cada sugestão apareceu, "
+    "incluindo tracks que mais contribuíram e feedback histórico. "
+    "Sem args: retorna todas. Com 'suggestion': filtra para uma específica.",
+    {
+        "type": "object",
+        "properties": {
+            "suggestion": {
+                "type": "string",
+                "description": "Texto exato de uma sugestão (opcional).",
+            },
+        },
+        "additionalProperties": False,
+    },
+)
+def _onboard_rationale(args):
+    import json as _json
+    from maestra_ai.core.errors import UserError
+    from maestra_ai.core import storage
+
+    path = storage.state_dir() / "onboard_rationale.json"
+    if not path.exists():
+        raise UserError(
+            "Nenhum rationale persistido.",
+            where={"hint": "Rode `maestra onboard` primeiro."},
+        )
+    data = _json.loads(path.read_text(encoding="utf-8"))
+    target = args.get("suggestion")
+    if target is None:
+        return data
+    match = [e for e in data.get("suggestions", []) if e.get("text") == target]
+    if not match:
+        raise UserError(
+            f"Sugestão não encontrada: {target}",
+            where={"available": [e.get("text") for e in data.get("suggestions", [])]},
+        )
+    return {"generated_at": data.get("generated_at"), "suggestions": match}

@@ -350,9 +350,9 @@ async def test_history_outside_playlist_retorna_shape_consistente_sem_playlist_i
 
 
 @pytest.mark.asyncio
-async def test_total_23_tools():
+async def test_total_24_tools():
     from maestra_mcp.tools import iter_tool_defs
-    assert len(iter_tool_defs()) == 23
+    assert len(iter_tool_defs()) == 24
 
 
 # ---------------------------------------------------------------------------
@@ -390,3 +390,72 @@ async def test_clear_context_retorna_resultado_do_handler():
         result = await call_tool("clear_context", {})
     assert "status" in result
     assert result["cleared_context"] is None
+
+
+class TestOnboardRationaleTool:
+    """v0.7.0: tool onboard_rationale lê state_dir/onboard_rationale.json
+    e retorna dados estruturados. Se ausente, UserError."""
+
+    @pytest.mark.asyncio
+    async def test_retorna_erro_quando_sem_rationale(
+        self, tmp_path, monkeypatch,
+    ):
+        monkeypatch.setenv("MAESTRA_STATE_DIR", str(tmp_path / "state"))
+        from maestra_mcp.tools import call_tool
+        result = await call_tool("onboard_rationale", {})
+        assert "error" in result
+        assert result["error"]["code"] == "UserError"
+
+    @pytest.mark.asyncio
+    async def test_retorna_todas_sugestoes_sem_args(
+        self, tmp_path, monkeypatch,
+    ):
+        import json as _json
+        monkeypatch.setenv("MAESTRA_STATE_DIR", str(tmp_path / "state"))
+        from maestra_ai.core.storage import state_dir
+        path = state_dir()
+        path.mkdir(parents=True, exist_ok=True)
+        (path / "onboard_rationale.json").write_text(_json.dumps({
+            "generated_at": "2026-04-20T09:00:00-03:00",
+            "suggestions": [
+                {"text": "indie folk melancólico",
+                 "based_on": {"genres": ["indie folk"], "decades": [], "artists": []},
+                 "contributing_tracks": []},
+                {"text": "synthwave dos anos 80 para viagem",
+                 "based_on": {"genres": ["synthwave"], "decades": ["1980s"], "artists": []},
+                 "contributing_tracks": []},
+            ],
+        }), encoding="utf-8")
+
+        from maestra_mcp.tools import call_tool
+        result = await call_tool("onboard_rationale", {})
+        assert result["generated_at"] == "2026-04-20T09:00:00-03:00"
+        assert len(result["suggestions"]) == 2
+
+    @pytest.mark.asyncio
+    async def test_filtra_por_suggestion_exata(
+        self, tmp_path, monkeypatch,
+    ):
+        import json as _json
+        monkeypatch.setenv("MAESTRA_STATE_DIR", str(tmp_path / "state"))
+        from maestra_ai.core.storage import state_dir
+        path = state_dir()
+        path.mkdir(parents=True, exist_ok=True)
+        (path / "onboard_rationale.json").write_text(_json.dumps({
+            "generated_at": "2026-04-20T09:00:00-03:00",
+            "suggestions": [
+                {"text": "indie folk melancólico",
+                 "based_on": {"genres": ["indie folk"], "decades": [], "artists": []},
+                 "contributing_tracks": []},
+                {"text": "synthwave dos anos 80 para viagem",
+                 "based_on": {"genres": ["synthwave"], "decades": ["1980s"], "artists": []},
+                 "contributing_tracks": []},
+            ],
+        }), encoding="utf-8")
+
+        from maestra_mcp.tools import call_tool
+        result = await call_tool(
+            "onboard_rationale", {"suggestion": "indie folk melancólico"},
+        )
+        assert len(result["suggestions"]) == 1
+        assert result["suggestions"][0]["text"] == "indie folk melancólico"
