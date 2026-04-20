@@ -394,6 +394,97 @@ _FALLBACK_SUGGESTIONS = [
 ]
 
 
+# v0.9.0-alpha.4 (C2): família de gênero — usado para rotear overrides
+# de contexto. Se o gênero contém qualquer substring da key, entra na
+# família. Ordem importa: testamos do mais específico para o genérico.
+_GENRE_FAMILIES: list[tuple[str, str]] = [
+    ("throat singing", "world"),
+    ("mongolian", "world"),
+    ("tuvan", "world"),
+    ("celtic", "world"),
+    ("latin", "world"),
+    ("world music", "world"),
+    ("neo-classical", "classical"),
+    ("classical", "classical"),
+    ("chamber", "classical"),
+    ("orchestral", "classical"),
+    ("symphonic", "classical"),
+    ("death metal", "metal"),
+    ("black metal", "metal"),
+    ("doom metal", "metal"),
+    ("folk metal", "metal"),
+    ("metal", "metal"),
+    ("hardcore", "metal"),
+    ("punk", "metal"),
+    ("jazz", "jazz"),
+    ("bebop", "jazz"),
+    ("swing", "jazz"),
+    ("ambient", "electronic-ambient"),
+    ("drone", "electronic-ambient"),
+    ("techno", "electronic-dance"),
+    ("house", "electronic-dance"),
+    ("trance", "electronic-dance"),
+    ("edm", "electronic-dance"),
+    ("electronic", "electronic-dance"),
+    ("hip hop", "hip-hop"),
+    ("rap", "hip-hop"),
+    ("r&b", "soul"),
+    ("soul", "soul"),
+    ("funk", "soul"),
+    ("country", "folk"),
+    ("bluegrass", "folk"),
+    ("folk", "folk"),
+    ("indie", "indie"),
+    ("shoegaze", "indie"),
+    ("post-rock", "post-rock"),
+    ("post-metal", "post-rock"),
+    ("rock", "rock"),
+    ("pop", "pop"),
+]
+
+
+def _family_for_genre(genre: str) -> str | None:
+    """Retorna a família do gênero, ou None se não classificado.
+
+    Match por substring case-insensitive. Ordem de _GENRE_FAMILIES é
+    do mais específico para o genérico.
+    """
+    lowered = genre.lower()
+    for key, family in _GENRE_FAMILIES:
+        if key in lowered:
+            return family
+    return None
+
+
+# v0.9.0-alpha.4 (C2): overrides de contexto para combinações
+# (família, mood) onde o contexto default do `_MOOD_CONTEXT` não casa.
+# Ex: "heavy" em metal → "para garagem" faz sentido; em world music
+# ou classical → não. Os contextos aqui substituem os de _MOOD_CONTEXT
+# quando o match é encontrado.
+_MOOD_CONTEXT_BY_FAMILY: dict[tuple[str, str], list[str]] = {
+    # World music: mood "heavy/intense/aggressive/dark" redireciona
+    # para contextos contemplativos/cinematográficos.
+    ("world", "heavy"):       ["para foco profundo", "para contemplação"],
+    ("world", "intense"):     ["para foco imersivo", "para meditação ativa"],
+    ("world", "aggressive"):  ["para despertar cultural", "para energia ancestral"],
+    ("world", "dark"):        ["noturno para contemplação", "para foco silencioso"],
+    ("world", "epic"):        ["para imersão cultural", "para contemplação épica"],
+    # Classical: moods pesados/energéticos viram contemplativos.
+    ("classical", "heavy"):      ["para foco profundo", "para imersão"],
+    ("classical", "intense"):    ["para estudo intenso", "para foco profundo"],
+    ("classical", "aggressive"): ["para trabalho analítico", "para foco sustentado"],
+    ("classical", "dark"):       ["noturno para leitura", "para escrita longa"],
+    ("classical", "epic"):       ["para imersão", "para momento grandioso"],
+    # Electronic-ambient: mood "energetic/upbeat" não casa — redireciona.
+    ("electronic-ambient", "energetic"): ["para trabalho analítico", "para foco analítico"],
+    ("electronic-ambient", "upbeat"):    ["para trabalho matinal", "para foco leve"],
+    # Folk (country, bluegrass): "heavy/intense" não casa.
+    ("folk", "heavy"):      ["para tarde acústica", "para fim de tarde longo"],
+    ("folk", "intense"):    ["para tarde contemplativa", "para reflexão prolongada"],
+    ("folk", "aggressive"): ["para tarde enérgica", "para caminhada matinal"],
+}
+
+
 _DEFAULT_CAP_PER_ARTIST = 10
 
 
@@ -419,9 +510,10 @@ def _derive_suggestions(
     artist_counter: Counter[str] = Counter()
     artist_track_count: Counter[str] = Counter()
 
-    # v0.9.0-alpha.3 (B): para cada gênero, lembrar o artist_id que mais
-    # contribuiu. Usado depois para derivar mood das tags desse artista.
-    genre_to_top_artist_id: dict[str, str] = {}
+    # v0.9.0-alpha.4 (C3): para cada gênero, lembrar os top-3 artist_ids
+    # que mais contribuíram. Usado depois para derivar mood das tags
+    # agregadas desses artistas (pool mais rico que top-1 apenas).
+    genre_to_top_artist_ids: dict[str, list[str]] = {}
     genre_artist_score: dict[tuple[str, str], float] = {}
 
     ordered = sorted(
@@ -458,10 +550,15 @@ def _derive_suggestions(
                 key = (g.lower(), aid)
                 genre_artist_score[key] = genre_artist_score.get(key, 0.0) + w
 
-    for (genre, aid), score in genre_artist_score.items():
-        current = genre_to_top_artist_id.get(genre)
-        if current is None or genre_artist_score.get((genre, current), 0) < score:
-            genre_to_top_artist_id[genre] = aid
+    # C3: resolve top-3 artistas por gênero.
+    for genre in {k[0] for k in genre_artist_score.keys()}:
+        scored = [
+            (aid, score)
+            for (g, aid), score in genre_artist_score.items()
+            if g == genre
+        ]
+        scored.sort(key=lambda x: x[1], reverse=True)
+        genre_to_top_artist_ids[genre] = [aid for aid, _ in scored[:3]]
 
     signals: OnboardSignals = {
         "top_genres": [(g, round(s, 2)) for g, s in genre_counter.most_common(10)],
@@ -478,13 +575,18 @@ def _derive_suggestions(
         )
         return texts, rationale, signals
 
+    # C1: rastreia contextos já usados para evitar repetição entre sugestões.
+    used_contexts: set[str] = set()
+
     used_genres: list[str] = []
     for genre, _score in signals["top_genres"][:3]:
         mood = _select_mood(
             genre, seed=genre,
             artists_tags=artists_tags,
-            genre_to_top_artist_id=genre_to_top_artist_id,
+            genre_to_top_artist_ids=genre_to_top_artist_ids,
+            used_contexts=used_contexts,
         )
+        used_contexts.add(mood)
         text = f"{genre} {mood}"
         texts.append(text)
         used_genres.append(genre)
@@ -502,8 +604,10 @@ def _derive_suggestions(
         mood = _select_mood(
             second_genre, seed=f"{top_decade}-{second_genre}",
             artists_tags=artists_tags,
-            genre_to_top_artist_id=genre_to_top_artist_id,
+            genre_to_top_artist_ids=genre_to_top_artist_ids,
+            used_contexts=used_contexts,
         )
+        used_contexts.add(mood)
         text = f"{top_decade} — faixas {second_genre} {mood}"
         if text not in texts:
             texts.append(text)
@@ -551,27 +655,71 @@ def _pick_mood_for_genre(genre: str, *, seed: str) -> str:
     return moods[idx]
 
 
-def _derive_mood_from_tags(tags: list[str], *, seed: str) -> str | None:
-    """Deriva um contexto de uso a partir de tags MB.
+def _matched_moods_from_tags(tags: list[str]) -> list[str]:
+    """Retorna lista deduplicada e ORDENADA de moods que casam com as tags.
 
-    Procura em `tags` palavras que casam com `MOOD_TAG_KEYWORDS`. Se
-    nenhuma casar, retorna None. Se uma ou mais casam, escolhe
-    deterministicamente uma via hash(seed) e devolve um dos contextos
-    do `_MOOD_CONTEXT` para essa mood (também via hash).
+    Preserva ordem de aparição (primeira ocorrência) — isso importa porque
+    `_select_mood` depois consulta com um hash determinístico.
     """
     if not tags:
-        return None
-    matched_moods: list[str] = []
+        return []
+    matched: list[str] = []
     for tag in tags:
         if not tag:
             continue
         lowered = tag.lower()
         for mood_key in MOOD_TAG_KEYWORDS:
-            if mood_key in lowered and mood_key not in matched_moods:
-                matched_moods.append(mood_key)
-    if not matched_moods:
+            if mood_key in lowered and mood_key not in matched:
+                matched.append(mood_key)
+    return matched
+
+
+def _resolve_context_for_mood(
+    mood: str,
+    *,
+    family: str | None,
+    seed: str,
+    used_contexts: set[str],
+) -> str | None:
+    """Escolhe um contexto de uso para um mood, considerando família e repetição.
+
+    Prioridade de busca de contextos:
+      1. `_MOOD_CONTEXT_BY_FAMILY[(family, mood)]` se a família for dada
+         e houver override para esse par.
+      2. `_MOOD_CONTEXT[mood]` — default.
+
+    Dentro da lista escolhida, tenta primeiro uma opção NÃO em
+    `used_contexts`. Se todos já foram usados, retorna None (para que o
+    chamador tente outro mood). Se a lista escolhida não tem contextos,
+    retorna None.
+    """
+    contexts: list[str] = []
+    if family is not None:
+        contexts = _MOOD_CONTEXT_BY_FAMILY.get((family, mood), [])
+    if not contexts:
+        contexts = _MOOD_CONTEXT.get(mood, [])
+    if not contexts:
         return None
-    primary = matched_moods[hash(seed) % len(matched_moods)]
+
+    # Tenta escolher em ordem determinística (pelo hash) mas pulando repetidos.
+    start = hash(seed + mood) % len(contexts)
+    for offset in range(len(contexts)):
+        candidate = contexts[(start + offset) % len(contexts)]
+        if candidate not in used_contexts:
+            return candidate
+    return None
+
+
+def _derive_mood_from_tags(tags: list[str], *, seed: str) -> str | None:
+    """Deriva um contexto de uso a partir de tags MB (legado, single-pick).
+
+    Use `_matched_moods_from_tags` + `_resolve_context_for_mood` para o
+    pipeline novo com família e diversificação.
+    """
+    matched = _matched_moods_from_tags(tags)
+    if not matched:
+        return None
+    primary = matched[hash(seed) % len(matched)]
     contexts = _MOOD_CONTEXT.get(primary, [])
     if not contexts:
         return None
@@ -583,24 +731,68 @@ def _select_mood(
     *,
     seed: str,
     artists_tags: dict[str, list[str]] | None,
-    genre_to_top_artist_id: dict[str, str],
+    genre_to_top_artist_ids: dict[str, list[str]],
+    used_contexts: set[str] | None = None,
 ) -> str:
-    """Escolhe mood em três níveis: mapa curado → tags MB → fallback."""
-    # 1. Mapa curado
+    """Escolhe um contexto de uso para um gênero.
+
+    Prioridade:
+      1. `_GENRE_MOOD_TEMPLATES[genre]` — mapa curado por gênero.
+      2. Para cada mood derivado das tags MB dos top-3 artistas deste
+         gênero, tenta resolver um contexto via família (se houver) ou
+         via `_MOOD_CONTEXT`, respeitando `used_contexts` (C1).
+      3. Se nenhum mood der, cai em `_FALLBACK_MOODS`.
+
+    `used_contexts` pode ser mutado pelo chamador entre chamadas
+    sucessivas para garantir diversidade entre as top-K sugestões.
+    """
+    if used_contexts is None:
+        used_contexts = set()
+
+    # 1. Mapa curado por gênero
     if genre.lower() in _GENRE_MOOD_TEMPLATES:
-        return _pick_mood_for_genre(genre, seed=seed)
+        # Dentro do mapa, também respeita used_contexts.
+        curated = _GENRE_MOOD_TEMPLATES[genre.lower()]
+        start = hash(seed) % len(curated)
+        for offset in range(len(curated)):
+            candidate = curated[(start + offset) % len(curated)]
+            if candidate not in used_contexts:
+                return candidate
+        # Todos os curados usados → primeira opção mesmo assim.
+        return curated[start]
 
-    # 2. Tags MB do artista dominante deste gênero
+    # 2. Tags MB com família de gênero
+    family = _family_for_genre(genre)
     if artists_tags:
-        top_aid = genre_to_top_artist_id.get(genre.lower())
-        if top_aid:
-            tags = artists_tags.get(top_aid) or []
-            mood_from_tags = _derive_mood_from_tags(tags, seed=seed)
-            if mood_from_tags:
-                return mood_from_tags
+        top_aids = genre_to_top_artist_ids.get(genre.lower(), [])
+        # C3: une tags dos top-3 artistas preservando ordem de aparição.
+        merged_tags: list[str] = []
+        seen_tags: set[str] = set()
+        for aid in top_aids:
+            for t in artists_tags.get(aid, []) or []:
+                low = t.lower()
+                if low not in seen_tags:
+                    seen_tags.add(low)
+                    merged_tags.append(t)
 
-    # 3. Fallback genérico
-    return _pick_mood_for_genre(genre, seed=seed)  # cai em _FALLBACK_MOODS
+        matched_moods = _matched_moods_from_tags(merged_tags)
+        # Tenta cada mood até um resolver contexto não-usado.
+        start_m = hash(seed) % max(len(matched_moods), 1) if matched_moods else 0
+        for offset in range(len(matched_moods)):
+            mood = matched_moods[(start_m + offset) % len(matched_moods)]
+            ctx = _resolve_context_for_mood(
+                mood, family=family, seed=seed, used_contexts=used_contexts,
+            )
+            if ctx is not None:
+                return ctx
+
+    # 3. Fallback genérico, evitando repetição se possível.
+    start_f = hash(seed) % len(_FALLBACK_MOODS)
+    for offset in range(len(_FALLBACK_MOODS)):
+        candidate = _FALLBACK_MOODS[(start_f + offset) % len(_FALLBACK_MOODS)]
+        if candidate not in used_contexts:
+            return candidate
+    return _FALLBACK_MOODS[start_f]
 
 
 def _fallback_suggestions(

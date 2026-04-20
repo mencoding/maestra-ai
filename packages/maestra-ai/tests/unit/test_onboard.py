@@ -1757,7 +1757,7 @@ class TestSelectMood:
         result = _select_mood(
             "ambient", seed="ambient",
             artists_tags=None,
-            genre_to_top_artist_id={},
+            genre_to_top_artist_ids={},
         )
         # ambient está no _GENRE_MOOD_TEMPLATES
         assert any(w in result for w in ("trabalho", "escrita", "noturno"))
@@ -1767,7 +1767,7 @@ class TestSelectMood:
         result = _select_mood(
             "metal", seed="metal",
             artists_tags={"artist-1": ["aggressive", "heavy", "intense"]},
-            genre_to_top_artist_id={"metal": "artist-1"},
+            genre_to_top_artist_ids={"metal": ["artist-1"]},
         )
         # Deve vir do _MOOD_CONTEXT (aggressive/heavy/intense), não do fallback genérico.
         assert any(w in result for w in ("treino", "garagem", "direção", "energia", "foco"))
@@ -1777,9 +1777,94 @@ class TestSelectMood:
         result = _select_mood(
             "unknown-genre", seed="x",
             artists_tags=None,
-            genre_to_top_artist_id={},
+            genre_to_top_artist_ids={},
         )
         # Cai no _FALLBACK_MOODS
         assert any(w in result for w in ("concentração", "relaxar", "caminhada", "pausa"))
+
+
+class TestFamilyForGenre:
+    def test_throat_singing_vira_world(self):
+        from maestra_ai.core.onboard import _family_for_genre
+        assert _family_for_genre("central asian throat singing") == "world"
+
+    def test_alternative_metal_vira_metal(self):
+        from maestra_ai.core.onboard import _family_for_genre
+        assert _family_for_genre("alternative metal") == "metal"
+
+    def test_neo_classical_vira_classical(self):
+        from maestra_ai.core.onboard import _family_for_genre
+        assert _family_for_genre("neo-classical") == "classical"
+
+    def test_desconhecido_retorna_none(self):
+        from maestra_ai.core.onboard import _family_for_genre
+        assert _family_for_genre("xyz") is None
+
+
+class TestResolveContextWithFamily:
+    def test_world_heavy_redireciona_para_contemplacao(self):
+        from maestra_ai.core.onboard import _resolve_context_for_mood
+        ctx = _resolve_context_for_mood(
+            "heavy", family="world", seed="x", used_contexts=set(),
+        )
+        assert ctx in ("para foco profundo", "para contemplação")
+
+    def test_metal_heavy_mantem_contexto_default(self):
+        from maestra_ai.core.onboard import _resolve_context_for_mood
+        ctx = _resolve_context_for_mood(
+            "heavy", family="metal", seed="x", used_contexts=set(),
+        )
+        # família "metal" não tem override para "heavy" → cai no default
+        assert ctx in ("para garagem", "para direção intensa")
+
+
+class TestDiversification:
+    def test_used_context_e_pulado(self):
+        from maestra_ai.core.onboard import _resolve_context_for_mood
+        # Usa o primeiro contexto
+        ctx1 = _resolve_context_for_mood(
+            "heavy", family="metal", seed="x", used_contexts=set(),
+        )
+        # Segunda chamada com ctx1 já usado deve retornar o outro
+        ctx2 = _resolve_context_for_mood(
+            "heavy", family="metal", seed="x", used_contexts={ctx1},
+        )
+        assert ctx1 != ctx2
+        assert ctx2 in ("para garagem", "para direção intensa")
+
+
+class TestSelectMoodWithTopN:
+    def test_top_3_artistas_merged(self):
+        """C3: tags de 3 artistas juntam-se no pool de moods."""
+        from maestra_ai.core.onboard import _select_mood
+        result = _select_mood(
+            "folk metal", seed="folk metal",
+            artists_tags={
+                "a1": ["aggressive"],
+                "a2": ["melancholic"],
+                "a3": ["heavy"],
+            },
+            genre_to_top_artist_ids={"folk metal": ["a1", "a2", "a3"]},
+            used_contexts=set(),
+        )
+        # Qualquer dos moods (treino/reflexão/garagem/direção) é OK
+        assert result is not None
+
+    def test_used_contexts_evitam_repeticao(self):
+        """C1: passando used_contexts, evita repetir."""
+        from maestra_ai.core.onboard import _select_mood
+        ctx1 = _select_mood(
+            "alternative metal", seed="x",
+            artists_tags={"a1": ["heavy"]},
+            genre_to_top_artist_ids={"alternative metal": ["a1"]},
+            used_contexts=set(),
+        )
+        ctx2 = _select_mood(
+            "alternative metal", seed="x",
+            artists_tags={"a1": ["heavy"]},
+            genre_to_top_artist_ids={"alternative metal": ["a1"]},
+            used_contexts={ctx1},
+        )
+        assert ctx1 != ctx2
 
 
