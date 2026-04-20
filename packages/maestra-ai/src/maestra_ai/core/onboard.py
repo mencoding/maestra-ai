@@ -216,6 +216,51 @@ def _compute_weights(
     return dict(w)
 
 
+# v0.7.0: constantes de adjustment por feedback. Module-level para
+# facilitar tuning; não são configuráveis por usuário (YAGNI).
+_GOOD_BONUS = 2.0
+_SKIP_PENALTY = 0.5
+
+
+def _apply_taste_to_weights(
+    weights: dict[str, float],
+    tracks: list[dict],
+    taste,
+) -> dict[str, float]:
+    """Filtra rejeitados e aplica bonus/penalty baseado em feedback.
+
+    - `taste.is_rejected(uri)` ou artista em `rejected_artists` → remove.
+    - `track["feedback"] == "good"` → +_GOOD_BONUS.
+    - Penalty = skip_count * _SKIP_PENALTY, floor em 0.
+    - Tracks com peso final <= 0 são removidas do dict.
+
+    Não muta `weights`. Retorna dict novo.
+    """
+    rejected_artists = set(taste.get_rejected_artists())
+    track_index = {t["uri"]: t for t in tracks if t.get("uri")}
+    out: dict[str, float] = {}
+    for uri, base in weights.items():
+        if taste.is_rejected(uri):
+            continue
+        track = track_index.get(uri, {})
+        first_artist = ""
+        artists = track.get("artists") or []
+        if artists:
+            first_artist = artists[0].get("name") or ""
+        if first_artist in rejected_artists:
+            continue
+        adjusted = float(base)
+        profile_track = taste.data.get("tracks", {}).get(uri, {})
+        if profile_track.get("feedback") == "good":
+            adjusted += _GOOD_BONUS
+        skip_count = profile_track.get("skip_count", 0) or 0
+        adjusted -= skip_count * _SKIP_PENALTY
+        if adjusted <= 0:
+            continue
+        out[uri] = adjusted
+    return out
+
+
 def _fetch_artists_genres(
     sp, *, artist_ids: list[str],
 ) -> dict[str, list[str]]:

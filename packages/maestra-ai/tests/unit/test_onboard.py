@@ -1330,3 +1330,72 @@ class TestPreservaMetadata:
         assert artists, "artists não preservado"
         assert artists[0].get("id") == "art1", \
             "artist_id precisa estar nos artists[]"
+
+
+class TestApplyTasteToWeights:
+    """_apply_taste_to_weights filtra rejeitados + adjusta pesos com feedback."""
+
+    def _sample_tracks(self):
+        return [
+            {"uri": "spotify:track:t1", "name": "T1",
+             "artists": [{"id": "a1", "name": "A1"}], "release_date": "2020"},
+            {"uri": "spotify:track:t2", "name": "T2",
+             "artists": [{"id": "a2", "name": "A2"}], "release_date": "2018"},
+            {"uri": "spotify:track:t3", "name": "T3",
+             "artists": [{"id": "a3", "name": "BannedArtist"}],
+             "release_date": "2019"},
+        ]
+
+    def test_sem_taste_data_pesos_inalterados(self, tmp_path):
+        from maestra_ai.core.taste import TasteProfile
+        taste = TasteProfile(tmp_path / "taste.json")
+        weights = {"spotify:track:t1": 5.0, "spotify:track:t2": 3.0}
+        out = onboard._apply_taste_to_weights(
+            weights, self._sample_tracks(), taste,
+        )
+        assert out["spotify:track:t1"] == 5.0
+        assert out["spotify:track:t2"] == 3.0
+
+    def test_is_rejected_remove_track(self, tmp_path):
+        from maestra_ai.core.taste import TasteProfile
+        taste = TasteProfile(tmp_path / "taste.json")
+        taste.record_feedback("spotify:track:t1", "bad")
+        weights = {"spotify:track:t1": 5.0, "spotify:track:t2": 3.0}
+        out = onboard._apply_taste_to_weights(
+            weights, self._sample_tracks(), taste,
+        )
+        assert "spotify:track:t1" not in out
+        assert out["spotify:track:t2"] == 3.0
+
+    def test_rejected_artist_remove_todas_tracks_do_artista(self, tmp_path):
+        from maestra_ai.core.taste import TasteProfile
+        taste = TasteProfile(tmp_path / "taste.json")
+        taste.data.setdefault("rejected_artists", []).append("BannedArtist")
+        taste.save()
+        weights = {"spotify:track:t3": 5.0}
+        out = onboard._apply_taste_to_weights(
+            weights, self._sample_tracks(), taste,
+        )
+        assert "spotify:track:t3" not in out
+
+    def test_good_feedback_amplifica_peso(self, tmp_path):
+        from maestra_ai.core.taste import TasteProfile
+        taste = TasteProfile(tmp_path / "taste.json")
+        taste.record_feedback("spotify:track:t2", "good")
+        weights = {"spotify:track:t1": 3.0, "spotify:track:t2": 3.0}
+        out = onboard._apply_taste_to_weights(
+            weights, self._sample_tracks(), taste,
+        )
+        assert out["spotify:track:t2"] == 5.0  # 3.0 + 2.0 good_bonus
+        assert out["spotify:track:t1"] == 3.0
+
+    def test_skip_count_penaliza_com_floor_em_zero(self, tmp_path):
+        from maestra_ai.core.taste import TasteProfile
+        taste = TasteProfile(tmp_path / "taste.json")
+        taste.record_feedback("spotify:track:t1", "skip")
+        taste.record_feedback("spotify:track:t1", "skip")
+        weights = {"spotify:track:t1": 0.3}
+        out = onboard._apply_taste_to_weights(
+            weights, self._sample_tracks(), taste,
+        )
+        assert "spotify:track:t1" not in out or out["spotify:track:t1"] == 0.0
