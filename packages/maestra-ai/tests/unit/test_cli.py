@@ -48,6 +48,7 @@ def test_playlist_add_aceita_argumentos_extras_do_dispatcher(capsys):
             {"track": "Track B", "artist": "Artist B", "uri": "spotify:track:b"},
         ],
         ["foco instrumental"],
+        [],
     )
 
     cli.cmd_playlist_add(
@@ -76,6 +77,7 @@ def test_playlist_add_sem_contexto_usa_fallback_foco(capsys):
     curator.curate.return_value = (
         [{"track": "Track A", "artist": "Artist A", "uri": "spotify:track:a"}],
         ["lo-fi instrumental"],
+        [],
     )
 
     cli.cmd_playlist_add(
@@ -103,6 +105,7 @@ def test_playlist_add_sem_contexto_usa_contexto_ativo(capsys):
     curator.curate.return_value = (
         [{"track": "Track A", "artist": "Artist A", "uri": "spotify:track:a"}],
         ["epic orchestral"],
+        [],
     )
 
     cli.cmd_playlist_add(
@@ -135,6 +138,7 @@ def test_playlist_top_up_aceita_argumentos_extras_do_dispatcher(capsys):
             {"track": "Track C", "artist": "Artist C", "uri": "spotify:track:c"},
         ],
         ["foco instrumental"],
+        [],
     )
 
     cli.cmd_playlist_top_up(

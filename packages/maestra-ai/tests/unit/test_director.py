@@ -103,6 +103,7 @@ def test_adiciona_a_playlist_quando_buffer_de_contexto_esta_baixo(tmp_path):
             {"track": "Track C", "artist": "Artist C", "uri": "spotify:track:c"},
         ],
         ["ambient study"],
+        [],
     )
 
     result = director.run_once(target=2, add_count=2)
@@ -138,6 +139,7 @@ def test_dry_run_nao_altera_playlist_nem_gosto(tmp_path):
     curator.curate.return_value = (
         [{"track": "Track B", "artist": "Artist B", "uri": "spotify:track:b"}],
         ["lo-fi instrumental"],
+        [],
     )
 
     result = director.run_once(target=1, add_count=1, dry_run=True)
@@ -169,6 +171,7 @@ def test_director_bloqueia_artista_dominante_na_curadoria(tmp_path):
     curator.curate.return_value = (
         [{"track": "Nova", "artist": "Nova", "uri": "spotify:track:n"}],
         ["ambient study"],
+        [],
     )
 
     result = director.run_once(target=10, add_count=1, max_artist_share=0.5)
@@ -291,6 +294,7 @@ def test_import_outside_seguro_ignora_sinal_contextual_negativo(tmp_path):
     curator.curate.return_value = (
         [{"track": "Track B", "artist": "Artist B", "uri": "spotify:track:b"}],
         ["ambient study"],
+        [],
     )
 
     result = director.run_once(target=10, add_count=1, import_outside="safe")

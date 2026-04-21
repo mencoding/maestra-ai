@@ -33,7 +33,7 @@ def curator(mock_controller, taste):
 
 class TestCurate:
     def test_retorna_uris_para_contexto_semantico(self, curator, mock_controller):
-        result, queries = curator.curate("foco", count=3)
+        result, queries, _sources = curator.curate("foco", count=3)
 
         assert len(result) <= 3
         assert all(r["uri"].startswith("spotify:track:") for r in result)
@@ -42,14 +42,14 @@ class TestCurate:
 
     def test_retorna_lista_vazia_se_search_falha(self, curator, mock_controller):
         mock_controller.search.return_value = []
-        result, queries = curator.curate("contexto impossível", count=5)
+        result, queries, _sources = curator.curate("contexto impossível", count=5)
         assert result == []
 
     def test_filtra_faixas_rejeitadas(self, curator, mock_controller, taste):
         taste.record_feedback("spotify:track:a", "bad")
         taste.save()
 
-        result, _ = curator.curate("foco", count=5)
+        result, _, _sources = curator.curate("foco", count=5)
         uris = [r["uri"] for r in result]
         assert "spotify:track:a" not in uris
 
@@ -60,14 +60,14 @@ class TestCurate:
             "last_used": "2026-04-16",
         }
 
-        _, queries = curator.curate("energia", count=3)
+        _, queries, _sources = curator.curate("energia", count=3)
 
         assert "power metal" in queries
         calls = [str(c) for c in mock_controller.search.call_args_list]
         assert any("power metal" in c for c in calls)
 
     def test_exclui_uris_ja_presentes(self, curator):
-        result, _ = curator.curate("foco", count=3, exclude_uris={"spotify:track:a"})
+        result, _, _sources = curator.curate("foco", count=3, exclude_uris={"spotify:track:a"})
 
         uris = [r["uri"] for r in result]
         assert "spotify:track:a" not in uris
@@ -81,7 +81,7 @@ class TestCurate:
         ]
         mock_controller.search.return_value = first_results
 
-        result, _ = curator.curate(
+        result, _, _sources = curator.curate(
             "foco",
             count=2,
             exclude_uris={"spotify:track:a", "spotify:track:b"},
@@ -99,7 +99,7 @@ class TestCurate:
             weight=2,
         )
 
-        result, _ = curator.curate("foco", count=3)
+        result, _, _sources = curator.curate("foco", count=3)
 
         assert result[0]["uri"] == "spotify:track:c"
 
@@ -112,7 +112,7 @@ class TestCurate:
             weight=-1,
         )
 
-        result, _ = curator.curate("foco", count=3)
+        result, _, _sources = curator.curate("foco", count=3)
         uris = [r["uri"] for r in result]
 
         assert "spotify:track:a" not in uris
@@ -126,13 +126,13 @@ class TestCurate:
             weight=-1,
         )
 
-        result, _ = curator.curate("foco", count=3)
+        result, _, _sources = curator.curate("foco", count=3)
         uris = [r["uri"] for r in result]
 
         assert "spotify:track:a" in uris
 
     def test_exclui_artistas_dominantes(self, curator):
-        result, _ = curator.curate(
+        result, _, _sources = curator.curate(
             "foco",
             count=3,
             exclude_artists={"Artist A"},
@@ -148,7 +148,7 @@ class TestCurate:
             {"track": "B1", "artist": "Artist B", "uri": "spotify:track:b1", "album": "Album"},
         ]
 
-        result, _ = curator.curate("foco", count=2, max_per_artist=1)
+        result, _, _sources = curator.curate("foco", count=2, max_per_artist=1)
 
         assert [r["uri"] for r in result] == ["spotify:track:a1", "spotify:track:b1"]
 

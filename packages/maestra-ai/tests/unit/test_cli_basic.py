@@ -63,7 +63,7 @@ class TestQueueContextFailedField:
             {"uri": "spotify:track:t1", "track": "a", "artist": "x"},
             {"uri": "spotify:track:t2", "track": "b", "artist": "y"},
         ]
-        curator.curate.return_value = (tracks, ["q1"])
+        curator.curate.return_value = (tracks, ["q1"], [])
 
         def _queue_add(uri):
             if uri == "spotify:track:t2":
@@ -101,7 +101,7 @@ class TestQueueContextFailedField:
         tracks = [
             {"uri": "spotify:track:t1", "track": "a", "artist": "x"},
         ]
-        curator.curate.return_value = (tracks, ["q1"])
+        curator.curate.return_value = (tracks, ["q1"], [])
 
         args = MagicMock(human=False, count=1)
         args.context = None
