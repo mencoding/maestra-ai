@@ -588,10 +588,9 @@ class TestValidateArtistsMb:
     def test_build_informed_query_mb_ausente_mantem_artists(
         self, mock_controller, taste, monkeypatch
     ):
-        """Curator sem atributo musicbrainz → artists_hint passa direto sem validação."""
-        curator = Curator(mock_controller, taste)
-        # Garante que não há atributo musicbrainz (regressão: sem source)
-        assert not hasattr(curator, "musicbrainz")
+        """Curator com musicbrainz=None → artists_hint passa direto sem validação."""
+        curator = Curator(mock_controller, taste)  # default musicbrainz=None
+        assert curator.musicbrainz is None
         monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: [])
 
         parsed = self._ctx(artists_hint=("FakeBand",))

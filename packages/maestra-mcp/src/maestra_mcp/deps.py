@@ -60,7 +60,9 @@ def _build_and_cache() -> dict:
     controller = SpotifyController()
     history_analyzer = HistoryAnalyzer(controller)
     flow_analyzer = FlowAnalyzer(taste)
-    curator = Curator(controller, taste)
+    from maestra_ai.core.external.enhancer import build_musicbrainz_source_if_enabled
+    mb_source = build_musicbrainz_source_if_enabled()
+    curator = Curator(controller, taste, musicbrainz=mb_source)
     playback_observer = PlaybackObserver(
         str(base / "playback_state.json"),
         str(base / "playback_events.jsonl"),

@@ -62,6 +62,10 @@ _http_last_request_time: float = 0.0
 
 _MB_API_BASE = "https://musicbrainz.org/ws/2"
 
+# Score mínimo do search_artists para considerar artist real.
+# Valores abaixo indicam match fraco (nome parcial, aliás ambíguo).
+_MB_ARTIST_SCORE_THRESHOLD = 85
+
 
 class MusicBrainzSource:
     """Cliente `EnhancementSource` para MusicBrainz."""
@@ -94,9 +98,9 @@ class MusicBrainzSource:
     def artist_exists(self, name: str) -> bool:
         """Retorna True se houver match forte para o nome de artista no MusicBrainz.
 
-        Usa search_artists com score >= 85 como critério. Fallback gracioso
-        (retorna True) em caso de erro/timeout — evita penalizar usuário por
-        instabilidade da API externa.
+        Usa search_artists com score >= _MB_ARTIST_SCORE_THRESHOLD. Fallback
+        gracioso (retorna True) em caso de erro/timeout — evita penalizar
+        usuário por instabilidade da API externa.
         """
         if not name or not name.strip():
             return False
@@ -113,7 +117,7 @@ class MusicBrainzSource:
             score = int(top.get("ext:score", 0))
         except (ValueError, TypeError):
             score = 0
-        return score >= 85
+        return score >= _MB_ARTIST_SCORE_THRESHOLD
 
     def _lookup_by_isrc(self, isrc: str) -> SourceResult | None:
         try:

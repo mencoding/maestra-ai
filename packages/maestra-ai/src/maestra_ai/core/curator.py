@@ -49,9 +49,13 @@ MIN_CANDIDATES = 10
 class Curator:
     """Traduz contexto em queries de busca e retorna URIs filtradas."""
 
-    def __init__(self, controller, taste):
+    def __init__(self, controller, taste, *, musicbrainz=None):
         self.controller = controller
         self.taste = taste
+        # Source MusicBrainz opcional. Quando None, _validate_artists_mb vira no-op
+        # e artist_hint passa direto. Injetado pelos callers (cli, mcp/deps) quando
+        # ext_config["musicbrainz"]["enabled"] for True.
+        self.musicbrainz = musicbrainz
         # Cache em memória para evitar lookups repetidos ao MusicBrainz na mesma sessão.
         # Chave: nome do artista (string original). Valor: bool (existe ou não).
         # Invalidado apenas por reinício da instância — persistência fica como otimização futura.
@@ -69,19 +73,19 @@ class Curator:
     def _validate_artists_mb(self, names: list[str]) -> list[str]:
         """Filtra lista de artistas mantendo apenas os reconhecidos pelo MusicBrainz.
 
-        Usa self.musicbrainz.artist_exists (score >= 85). Cache em memória evita
-        lookups repetidos para o mesmo nome dentro da mesma instância do Curator.
+        Usa self.musicbrainz.artist_exists (score >= _MB_ARTIST_SCORE_THRESHOLD).
+        Cache em memória evita lookups repetidos para o mesmo nome dentro da
+        mesma instância do Curator.
 
-        Se self.musicbrainz não estiver disponível, retorna a lista intacta
-        (não bloqueia quando a source não está configurada).
+        Se self.musicbrainz for None, retorna a lista intacta (não bloqueia
+        quando a source não está configurada).
         """
-        mb = getattr(self, "musicbrainz", None)
-        if mb is None:
+        if self.musicbrainz is None:
             return names
         validated: list[str] = []
         for name in names:
             if name not in self._mb_artist_cache:
-                self._mb_artist_cache[name] = mb.artist_exists(name)
+                self._mb_artist_cache[name] = self.musicbrainz.artist_exists(name)
             if self._mb_artist_cache[name]:
                 validated.append(name)
         return validated
