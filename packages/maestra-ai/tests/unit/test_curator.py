@@ -446,6 +446,7 @@ class TestCurateIntegracaoV013:
     def test_curate_degraded_log_warning(self, curator, mock_controller, monkeypatch, caplog):
         """Quando hard filter esvaziaria (todos candidatos têm tag negada), loga warning."""
         import logging
+
         from maestra_ai.core.external import cache as cache_mod
         # Todos os candidatos passam a ter tag ambient → filtro esvazia → degrada
         monkeypatch.setattr(cache_mod, "get_track",

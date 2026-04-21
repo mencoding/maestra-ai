@@ -7,7 +7,6 @@ de memória estruturada.
 """
 from __future__ import annotations
 
-import pytest
 
 
 def test_instructions_module_exporta_constante():
