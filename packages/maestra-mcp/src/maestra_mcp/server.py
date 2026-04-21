@@ -116,8 +116,15 @@ def _build_call_tool_handler():
 
 
 def create_server() -> Server:
-    """Cria instância do Server com handlers registrados."""
-    server = Server("maestra")
+    """Cria instância do Server com handlers registrados.
+
+    As `instructions` (issue #14) são injetadas no handshake pelo SDK MCP e
+    chegam ao cliente como `serverInfo.instructions`. Clientes como Claude
+    Code injetam automaticamente no contexto inicial do agente.
+    """
+    from maestra_mcp.instructions import INSTRUCTIONS
+
+    server = Server("maestra", instructions=INSTRUCTIONS)
     server.list_tools()(_build_list_tools_handler())
     server.call_tool()(_build_call_tool_handler())
     return server
