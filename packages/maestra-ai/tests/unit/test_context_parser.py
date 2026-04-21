@@ -91,6 +91,70 @@ class TestArtistsHint:
         p = parse("tipo rock")
         assert p.artists_hint == ()
 
+    def test_artist_nao_vaza_para_positive(self):
+        """Regressão: `parse("tipo The HU")` devia ter positive=() e
+        artists_hint=('The HU',), não positive=('the',)."""
+        from maestra_ai.core.context_parser import parse
+        p = parse("tipo The HU")
+        assert "The HU" in p.artists_hint
+        assert p.positive == ()
+
+    def test_artist_e_genero_coexistem_na_mesma_clausula(self):
+        """Se o primeiro token é capitalizado (artist) o positive fica
+        vazio. Se artist vem depois, positive captura o primeiro token."""
+        from maestra_ai.core.context_parser import parse
+        # Primeiro token minúsculo → positive; artist detectado separadamente
+        p = parse("tipo metal Gojira")
+        assert "metal" in p.positive
+        assert "Gojira" in p.artists_hint
+
+
+class TestBpmRange:
+    def test_bpmrange_e_frozen(self):
+        from dataclasses import FrozenInstanceError
+        from maestra_ai.core.context_parser import BpmRange
+        b = BpmRange(min=100, max=120)
+        with pytest.raises(FrozenInstanceError):
+            b.min = 200  # type: ignore[misc]
+
+    def test_from_any_aceita_none(self):
+        from maestra_ai.core.context_parser import BpmRange
+        assert BpmRange.from_any(None) is None
+
+    def test_from_any_aceita_dict(self):
+        from maestra_ai.core.context_parser import BpmRange
+        b = BpmRange.from_any({"min": 100, "max": 120})
+        assert b == BpmRange(min=100, max=120)
+
+    def test_from_any_aceita_bpmrange_passa_direto(self):
+        from maestra_ai.core.context_parser import BpmRange
+        original = BpmRange(min=100, max=120)
+        assert BpmRange.from_any(original) is original
+
+    def test_from_any_rejeita_tipo_invalido(self):
+        from maestra_ai.core.context_parser import BpmRange
+        with pytest.raises(TypeError):
+            BpmRange.from_any("100-120")  # type: ignore[arg-type]
+
+
+class TestParsedContextHashable:
+    def test_hash_funciona_sem_bpm(self):
+        from maestra_ai.core.context_parser import parse
+        p = parse("foco")
+        hash(p)  # não deve explodir
+
+    def test_hash_funciona_com_bpm(self):
+        from maestra_ai.core.context_parser import parse
+        p = parse("foco", bpm={"min": 100, "max": 120})
+        hash(p)  # não deve explodir
+
+    def test_parse_com_dict_bpm_equivalente_a_parse_com_bpmrange(self):
+        from maestra_ai.core.context_parser import BpmRange, parse
+        p1 = parse("foco", bpm={"min": 100, "max": 120})
+        p2 = parse("foco", bpm=BpmRange(min=100, max=120))
+        assert p1 == p2
+        assert p1.bpm == BpmRange(min=100, max=120)
+
 
 class TestNormalizacao:
     def test_nao_e_nao_sao_equivalentes(self):

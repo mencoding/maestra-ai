@@ -26,12 +26,33 @@ POSITIVE_MARKERS: tuple[str, ...] = (
 
 
 @dataclass(frozen=True)
+class BpmRange:
+    """Intervalo de BPM. Frozen pra ser hashable e coabitar com ParsedContext
+    em caches por valor."""
+    min: int | None = None
+    max: int | None = None
+
+    @classmethod
+    def from_any(cls, value: "BpmRange | dict | None") -> "BpmRange | None":
+        """Aceita BpmRange, dict com keys min/max, ou None. Normaliza para
+        BpmRange. Usado por parse() e por ContextState.parsed() para ingress
+        do formato {min, max} persistido em disco."""
+        if value is None:
+            return None
+        if isinstance(value, cls):
+            return value
+        if isinstance(value, dict):
+            return cls(min=value.get("min"), max=value.get("max"))
+        raise TypeError(f"unsupported bpm type: {type(value).__name__}")
+
+
+@dataclass(frozen=True)
 class ParsedContext:
     text: str
     positive: tuple[str, ...] = ()
     negative: tuple[str, ...] = ()
     artists_hint: tuple[str, ...] = ()
-    bpm: dict | None = None
+    bpm: BpmRange | None = None
 
 
 def _normalize_for_match(text: str) -> str:
@@ -44,38 +65,54 @@ def _split_clauses(text: str) -> list[str]:
     return [c.strip() for c in re.split(r"[,.;]", text) if c.strip()]
 
 
-def _extract_after_marker(clause: str, markers: tuple[str, ...]) -> str | None:
-    """Se clause começa com um marker, retorna o resto. Caso contrário, None."""
-    for marker in markers:
-        idx = clause.find(marker)
-        if idx >= 0:
-            return clause[idx + len(marker):].strip()
+def _extract_after_marker_pair(
+    clause: str,
+    clause_norm: str,
+    markers_norm: tuple[str, ...],
+) -> tuple[str, str] | None:
+    """Tenta matchar algum marker (normalizado) em clause_norm e retorna
+    (rest_norm, rest_original) stripped. Retorna None se nenhum marker bate.
+
+    Pressupõe len(clause) == len(clause_norm), válido para ASCII e PT-BR
+    (NFKC e casefold preservam comprimento para esses ranges). Se a
+    invariante for violada (ex: 'İ'.casefold() = 'i̇', 2 chars), o fallback
+    silencioso é usar clause_norm para ambos — sem crash, degradação leve.
+    """
+    for marker in markers_norm:
+        idx = clause_norm.find(marker)
+        if idx < 0:
+            continue
+        rest_start = idx + len(marker)
+        if len(clause) == len(clause_norm):
+            return clause_norm[rest_start:].strip(), clause[rest_start:].strip()
+        # Fallback defensivo: índices não batem, usa o normalizado pros dois
+        return clause_norm[rest_start:].strip(), clause_norm[rest_start:].strip()
     return None
 
 
-def _extract_artists(original_clause: str, term: str) -> list[str]:
-    """Se o term extraído começa com maiúscula(s), considera artista.
+def _extract_artists(original_clause: str) -> list[str]:
+    """Extrai sequências capitalizadas do clause original (não normalizado).
 
-    Recebe o original_clause (não normalizado) e o term já extraído.
-    Procura a sequência capitalizada começando na posição do term.
+    Regex: sequência de palavras capitalizadas (cada uma começa maiúscula).
     """
-    # Regex: sequência de palavras capitalizadas (cada uma começa maiúscula)
     pattern = r"\b([A-Z][A-Za-z]*(?:\s+[A-Z][A-Za-z]*)*)\b"
     matches = re.findall(pattern, original_clause)
     return [m for m in matches if len(m) > 1]
 
 
-def parse(text: str, bpm: dict | None = None) -> ParsedContext:
+def parse(text: str, bpm: "BpmRange | dict | None" = None) -> ParsedContext:
     """Extrai intenção estruturada de texto livre.
 
     Puro, idempotente, determinístico. Nenhum I/O, nenhum logging.
-    O matching é feito sobre texto normalizado (NFKC + casefold); o texto
-    original é preservado em ParsedContext.text.
-    """
-    if not text:
-        return ParsedContext(text="", bpm=bpm)
 
-    # Markers normalizados (computados uma vez para comparação)
+    `bpm` aceita dict {min, max}, BpmRange ou None; normalizado para
+    BpmRange internamente para preservar hashability do ParsedContext.
+    """
+    bpm_norm = BpmRange.from_any(bpm)
+
+    if not text:
+        return ParsedContext(text="", bpm=bpm_norm)
+
     neg_markers_norm = tuple(_normalize_for_match(m) for m in NEGATIVE_MARKERS)
     pos_markers_norm = tuple(_normalize_for_match(m) for m in POSITIVE_MARKERS)
 
@@ -86,30 +123,29 @@ def parse(text: str, bpm: dict | None = None) -> ParsedContext:
     for clause in _split_clauses(text):
         clause_norm = _normalize_for_match(clause)
 
-        neg_rest_norm = _extract_after_marker(clause_norm, neg_markers_norm)
-        pos_rest_norm = _extract_after_marker(clause_norm, pos_markers_norm)
+        neg = _extract_after_marker_pair(clause, clause_norm, neg_markers_norm)
+        if neg is not None:
+            _rest_norm, rest_orig = neg
+            parts = rest_orig.split()
+            if parts:
+                negative.append(parts[0].casefold())
+            continue
 
-        # Negativos têm prioridade sobre positivos em caso de conflito
-        if neg_rest_norm is not None:
-            first = neg_rest_norm.split()[0] if neg_rest_norm.split() else ""
-            if first:
-                negative.append(first)
-            continue  # não processa positivo nesta cláusula
-
-        if pos_rest_norm is not None:
-            # Para artists_hint: coleta palavras capitalizadas do clause ORIGINAL
-            # (clause_norm perde as maiúsculas; artistas precisam de capitalização)
-            caps = _extract_artists(clause, pos_rest_norm)
+        pos = _extract_after_marker_pair(clause, clause_norm, pos_markers_norm)
+        if pos is not None:
+            _rest_norm, rest_orig = pos
+            caps = _extract_artists(rest_orig)
             artists_hint.extend(caps)
-            # Para positive: primeiro token do rest normalizado
-            first = pos_rest_norm.split()[0] if pos_rest_norm.split() else ""
-            if first and first[0].islower():
-                positive.append(first)
+            parts = rest_orig.split()
+            # Só vira positive se primeiro token começa com minúscula no
+            # texto original. Capitalizado = artist, tratado em _extract_artists.
+            if parts and parts[0] and parts[0][0].islower():
+                positive.append(parts[0].casefold())
 
     return ParsedContext(
         text=text,
         positive=tuple(positive),
         negative=tuple(negative),
         artists_hint=tuple(artists_hint),
-        bpm=bpm,
+        bpm=bpm_norm,
     )
