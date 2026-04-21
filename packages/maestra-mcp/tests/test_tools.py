@@ -273,6 +273,32 @@ async def test_director_once_chama_run_once():
 
 
 @pytest.mark.asyncio
+async def test_director_once_respeita_assinatura_real_de_run_once():
+    """Regressão issue #7: o handler deve passar kwargs compatíveis com
+    MusicDirector.run_once(). MagicMock(spec=...) valida kwargs contra a
+    assinatura real — se o handler passar `count=` (kwarg inexistente),
+    o mock levanta TypeError exatamente como o director de verdade.
+    """
+    from maestra_ai.core.director import MusicDirector
+    from maestra_mcp.tools import call_tool
+
+    mock_director = MagicMock(spec=MusicDirector)
+    mock_director.run_once.return_value = {"added": 0, "action": "hold"}
+    with patch("maestra_mcp.tools.build_deps", return_value={"director": mock_director}):
+        result = await call_tool("director_once", {"count": 5})
+    # Sem o fix, esta asserção nunca é alcançada: TypeError acontece antes.
+    assert "error" not in result, f"director_once retornou erro: {result}"
+    # Valida que o kwarg correto (add_count) foi propagado do MCP.
+    kwargs = mock_director.run_once.call_args.kwargs
+    assert kwargs.get("add_count") == 5, (
+        f"Esperava add_count=5 em kwargs, obtido: {kwargs}"
+    )
+    assert "count" not in kwargs, (
+        f"kwarg 'count' não deveria vazar para o director (assinatura real usa add_count): {kwargs}"
+    )
+
+
+@pytest.mark.asyncio
 async def test_onboard_default_e_dry_run():
     # Garante que chamar onboard sem argumentos é seguro: dry_run=True.
     from maestra_mcp.tools import call_tool
