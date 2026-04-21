@@ -50,16 +50,23 @@ def test_instructions_menciona_tools_criticas_por_nome():
         )
 
 
-def test_instructions_alerta_bugs_abertos():
-    """Enquanto #6 e #8 não forem fechadas, instructions devem alertar agentes.
-    Quando fecharem, remover os alertas e atualizar este teste."""
+def test_instructions_alerta_bug_6():
+    """Issue #6 ainda aberta — instructions devem alertar agentes sobre
+    director daemon. Quando fechar, remover o alerta e atualizar este teste."""
     from maestra_mcp.instructions import INSTRUCTIONS
-    # Referências a números de issue ou descrição dos bugs
     assert "#6" in INSTRUCTIONS or "director" in INSTRUCTIONS.lower(), (
         "alerta sobre issue #6 (director daemon) ausente"
     )
-    assert "#8" in INSTRUCTIONS or "negaç" in INSTRUCTIONS.lower() or "evitar" in INSTRUCTIONS.lower(), (
-        "alerta sobre issue #8 (negações no contexto) ausente"
+
+
+def test_instructions_nao_mais_alerta_sobre_8():
+    """Issue #8 foi resolvida em v0.13 — alerta deve ter sido removido."""
+    from maestra_mcp.instructions import INSTRUCTIONS
+    # Se este teste quebrar, algum refactor adicionou de volta o aviso
+    # equivocadamente — o fix já está em produção.
+    assert "#8" not in INSTRUCTIONS, (
+        "aviso sobre issue #8 voltou indevidamente — "
+        "a feature está implementada desde v0.13"
     )
 
 

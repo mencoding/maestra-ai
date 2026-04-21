@@ -86,11 +86,6 @@ DJ-explícito com filas curtas e intencionais.
   spawna `python -m maestra_ai.cli` que falha quando `__main__.py` está
   ausente no pacote. Prefira curadoria sob demanda via `play_context`
   até o fix chegar em produção.
-- **Curadoria automática não respeita negações no contexto** (issue #8,
-  v0.13): se o contexto ativo contém "evitar X" ou "sem Y", aplique
-  filtro manual após `play_context` — o scoring ainda não penaliza
-  tags negativas do cache external.
-
 Quando essas limitações forem resolvidas, os avisos correspondentes
 desta seção serão removidos.
 """
