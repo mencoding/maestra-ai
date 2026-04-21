@@ -1,8 +1,12 @@
 """Curator — traduz contexto livre em buscas e retorna faixas filtradas."""
 
+import logging
+
 # Import de módulo (não de símbolo) para permitir monkeypatch em testes de
 # `_track_tags` sem exigir patch do caminho `maestra_ai.core.external.cache`.
 from maestra_ai.core.external import cache as cache_mod
+
+logger = logging.getLogger(__name__)
 
 # Tabela semântica: palavras-chave → queries de busca
 SEMANTIC_MAP = {
@@ -106,8 +110,6 @@ class Curator:
         # v0.12.0: enrich candidates com metadata externa antes do re-rank.
         # Skip se usuário passou --no-enhance (enhance_candidates=False).
         if enhance_candidates and candidates:
-            import logging
-            logger = logging.getLogger(__name__)
             from maestra_ai.core.external import default_enhancer
             from maestra_ai.core.external.types import TrackInfo
 
@@ -215,6 +217,35 @@ class Curator:
         tags.update(filter_lastfm_tags(lf_wrapped))
 
         return tags
+
+    def _apply_negative_filter(
+        self,
+        candidates: list[dict],
+        parsed,  # ParsedContext — tipagem leve pra evitar import circular
+    ) -> tuple[list[dict], bool]:
+        """Hard filter removendo candidatos com tag em parsed.negative.
+
+        Se len(filtered) < MIN_CANDIDATES, retorna originais com degraded=True.
+        Caller usa degraded pra ativar anti_tag_penalty no scoring.
+        """
+        if not parsed.negative:
+            return candidates, False
+
+        negative_set = set(parsed.negative)
+        filtered = [
+            c for c in candidates
+            if not (self._track_tags(c) & negative_set)
+        ]
+
+        if len(filtered) >= MIN_CANDIDATES:
+            return filtered, False
+
+        logger.warning(
+            "hard filter on %s would leave %d candidates (< %d); "
+            "degrading to soft penalty",
+            sorted(negative_set), len(filtered), MIN_CANDIDATES,
+        )
+        return candidates, True
 
     def _context_tags(self, context: str) -> set[str]:
         """Tags do contexto derivadas de MOOD_TAG_KEYWORDS."""

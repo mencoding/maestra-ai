@@ -285,3 +285,53 @@ class TestTrackTags:
         from maestra_ai.core import curator as curator_mod
         monkeypatch.setattr(curator_mod.cache_mod, "get_track", lambda uri: None)
         assert curator._track_tags({"artist": "A"}) == set()
+
+
+class TestApplyNegativeFilter:
+    def _ctx(self, neg):
+        from maestra_ai.core.context_parser import ParsedContext
+        return ParsedContext(text="dummy", negative=tuple(neg))
+
+    def test_sem_negacoes_no_op(self, curator):
+        candidates = [{"uri": f"spotify:track:{i}", "artist": "A"} for i in range(15)]
+        result, degraded = curator._apply_negative_filter(candidates, self._ctx([]))
+        assert result == candidates
+        assert degraded is False
+
+    def test_hard_filter_quando_acima_de_min_candidates(self, curator, monkeypatch):
+        from maestra_ai.core.external import cache as cache_mod
+        def fake_get(uri):
+            # URI "spotify:track:1" tem ambient; restantes têm rock.
+            # Usa comparação exata para evitar match em "spotify:track:11", etc.
+            return {"musicbrainz": {"tags": ["ambient"]}} if uri == "spotify:track:1" else {"musicbrainz": {"tags": ["rock"]}}
+        monkeypatch.setattr(cache_mod, "get_track", fake_get)
+
+        candidates = [{"uri": f"spotify:track:{i}", "artist": "A"} for i in range(20)]
+        # Apenas candidate ...1 tem ambient; outros têm rock. 1 remove → 19 sobram > 10
+        result, degraded = curator._apply_negative_filter(candidates, self._ctx(["ambient"]))
+        assert len(result) == 19
+        assert degraded is False
+
+    def test_degrada_quando_filtro_esvazia_abaixo_de_min(self, curator, monkeypatch):
+        from maestra_ai.core.external import cache as cache_mod
+        # Todos os candidatos têm "ambient"
+        monkeypatch.setattr(cache_mod, "get_track", lambda uri: {"musicbrainz": {"tags": ["ambient"]}})
+
+        candidates = [{"uri": f"spotify:track:{i}", "artist": "A"} for i in range(12)]
+        result, degraded = curator._apply_negative_filter(candidates, self._ctx(["ambient"]))
+        assert result == candidates  # originais preservados
+        assert degraded is True
+
+    def test_fronteira_exatamente_min_candidates_e_sucesso(self, curator, monkeypatch):
+        from maestra_ai.core.external import cache as cache_mod
+        def fake_get(uri):
+            # candidates 0..9 sem ambient; 10..14 com ambient
+            idx = int(uri.split(":")[-1])
+            return {"musicbrainz": {"tags": ["rock"] if idx < 10 else ["ambient"]}}
+        monkeypatch.setattr(cache_mod, "get_track", fake_get)
+
+        candidates = [{"uri": f"spotify:track:{i}", "artist": "A"} for i in range(15)]
+        # Após filter: 10 sobram (exatamente MIN_CANDIDATES=10)
+        result, degraded = curator._apply_negative_filter(candidates, self._ctx(["ambient"]))
+        assert len(result) == 10
+        assert degraded is False  # >= MIN_CANDIDATES aceita
