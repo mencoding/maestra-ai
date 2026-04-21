@@ -234,3 +234,54 @@ class TestCuratorPrune:
         assert result["removed"] >= 1
         controller.playlist_remove.assert_called_once()
         assert result["snapshot_id"]  # id não-vazio
+
+
+class TestTrackTags:
+    """`_track_tags` consome cache external (MB canônico + LF filtrado)."""
+
+    def test_track_sem_entrada_no_cache_retorna_vazio(self, curator, monkeypatch):
+        # Sem entrada no cache → get_track retorna None → set() vazio.
+        from maestra_ai.core import curator as curator_mod
+        monkeypatch.setattr(curator_mod.cache_mod, "get_track", lambda uri: None)
+        track = {"uri": "spotify:track:nao_cacheado", "artist": "X"}
+        assert curator._track_tags(track) == set()
+
+    def test_track_com_tags_mb_retorna_as_tags(self, curator, monkeypatch):
+        # MB traz tags canônicas; entram direto (lowercased).
+        from maestra_ai.core import curator as curator_mod
+        monkeypatch.setattr(curator_mod.cache_mod, "get_track", lambda uri: {
+            "musicbrainz": {"tags": ["folk metal", "viking metal"]},
+        })
+        track = {"uri": "spotify:track:x", "artist": "A"}
+        tags = curator._track_tags(track)
+        assert "folk metal" in tags
+        assert "viking metal" in tags
+
+    def test_track_com_tags_lf_filtradas(self, curator, monkeypatch):
+        # Cache real: lastfm.top_tags é list[str]. Meta-tags (década) são descartadas.
+        from maestra_ai.core import curator as curator_mod
+        monkeypatch.setattr(curator_mod.cache_mod, "get_track", lambda uri: {
+            "lastfm": {"top_tags": ["2010s", "shoegaze"]},
+        })
+        track = {"uri": "spotify:track:x", "artist": "A"}
+        tags = curator._track_tags(track)
+        assert "shoegaze" in tags
+        assert "2010s" not in tags
+
+    def test_merge_mb_e_lf(self, curator, monkeypatch):
+        # Merge MB (canônico) + LF (filtrado); duplicatas dedupadas pelo set.
+        from maestra_ai.core import curator as curator_mod
+        monkeypatch.setattr(curator_mod.cache_mod, "get_track", lambda uri: {
+            "musicbrainz": {"tags": ["folk metal"]},
+            "lastfm": {"top_tags": ["viking"]},
+        })
+        track = {"uri": "spotify:track:x", "artist": "A"}
+        tags = curator._track_tags(track)
+        assert "folk metal" in tags
+        assert "viking" in tags
+
+    def test_uri_ausente_retorna_vazio(self, curator, monkeypatch):
+        # Track sem uri: evita passar string vazia adiante; retorna set() imediatamente.
+        from maestra_ai.core import curator as curator_mod
+        monkeypatch.setattr(curator_mod.cache_mod, "get_track", lambda uri: None)
+        assert curator._track_tags({"artist": "A"}) == set()

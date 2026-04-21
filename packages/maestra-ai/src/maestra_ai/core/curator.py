@@ -1,5 +1,9 @@
 """Curator — traduz contexto livre em buscas e retorna faixas filtradas."""
 
+# Import de módulo (não de símbolo) para permitir monkeypatch em testes de
+# `_track_tags` sem exigir patch do caminho `maestra_ai.core.external.cache`.
+from maestra_ai.core.external import cache as cache_mod
+
 # Tabela semântica: palavras-chave → queries de busca
 SEMANTIC_MAP = {
     "foco": ["lo-fi instrumental", "ambient study", "minimal piano", "post-rock instrumental"],
@@ -175,13 +179,42 @@ class Curator:
         return set()
 
     def _track_tags(self, track: dict) -> set[str]:
-        """Tags do artista via cache external (MB + LF se presente).
+        """Tags do artista/track via cache external.
 
-        v0.10.0-alpha.1: simplificado — retorna vazio (contribui 0 no score
-        via tag_similarity). Integração rica com enhancement cache virá
-        quando houver demanda de calibração real.
+        Merge MB (canônico) + LF (filtrado via tag_filter). Retorna set vazio
+        quando o cache não tem entrada pro URI ou nenhuma source populou.
+
+        Nota sobre a shape real do cache (external_cache.json v2):
+        - `musicbrainz.tags` é `list[str]` — tags canônicas entram direto.
+        - `lastfm.top_tags` é `list[str]` (nomes só, sem count), pois o
+          `LastfmSource` flattena via `_artist_top_tags`. Wrappamos em
+          `[{"name": s, "count": 0}]` para reaproveitar `filter_lastfm_tags`
+          (remoção de meta-tags). O corte top_n por count vira no-op, mas o
+          filtro de ruído (décadas, avaliativos, países) continua valendo.
         """
-        return set()
+        from maestra_ai.core.external.tag_filter import filter_lastfm_tags
+
+        uri = track.get("uri") or ""
+        if not uri:
+            return set()
+        cached = cache_mod.get_track(uri)
+        if not cached:
+            return set()
+
+        tags: set[str] = set()
+
+        # MusicBrainz: tags já canônicas, union direto (lowercased).
+        mb = cached.get("musicbrainz") or {}
+        mb_tags = mb.get("tags") or []
+        tags.update(t.lower() for t in mb_tags if t)
+
+        # Last.fm: wrap strings no shape esperado pelo filtro; garante dedup/filtro.
+        lf = cached.get("lastfm") or {}
+        lf_raw = lf.get("top_tags") or []
+        lf_wrapped = [{"name": t, "count": 0} for t in lf_raw if t]
+        tags.update(filter_lastfm_tags(lf_wrapped))
+
+        return tags
 
     def _context_tags(self, context: str) -> set[str]:
         """Tags do contexto derivadas de MOOD_TAG_KEYWORDS."""
