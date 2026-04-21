@@ -53,31 +53,36 @@ class Curator:
         self.controller = controller
         self.taste = taste
 
+    @staticmethod
+    def _fmt_artist_dsl(names: list[str]) -> str:
+        """Formata lista de artistas em DSL Spotify: artist:"X" OR artist:"Y".
+
+        Remove aspas internas do nome antes do wrap para garantir query válida.
+        """
+        clean = [a.replace('"', "") for a in names]
+        return " OR ".join(f'artist:"{a}"' for a in clean)
+
     def _build_informed_query(self, parsed) -> str | None:
         """Query informada a partir de ParsedContext + taste.
 
         Formato: "{dsl_artists} {positive} {bpm_qualifier}".
-        Artists são formatados com DSL Spotify: artist:"Nome" OR artist:"Outro".
-        Skip top taste que aparecem em negative. Retorna None se nenhum sinal.
+        Artists são formatados com DSL Spotify. Fallback em top taste pega
+        todos os candidatos não-negados (até 5). Retorna None se nenhum sinal.
         """
         negative = set(parsed.negative) if parsed.negative else set()
 
         # Parte 1: artistas com DSL Spotify (artist_hint tem prioridade sobre top taste)
         artist_part: str | None = None
         if parsed.artists_hint:
-            # Todos os artistas do hint, com aspas internas removidas para query válida
-            artists = [a.replace('"', "") for a in parsed.artists_hint]
-            artist_part = " OR ".join(f'artist:"{a}"' for a in artists)
+            artist_part = self._fmt_artist_dsl(list(parsed.artists_hint))
         else:
-            # Top preferred artists que não batam com negative — também usam DSL
             top = self.taste.get_preferred_artists() or []
             candidates = [
                 a for a in top[:5]
                 if not any(n in a.lower() for n in negative)
             ]
             if candidates:
-                artists = [a.replace('"', "") for a in candidates]
-                artist_part = " OR ".join(f'artist:"{a}"' for a in artists)
+                artist_part = self._fmt_artist_dsl(candidates)
 
         # Parte 2: positive (primeiro termo, se houver) — texto livre
         positive_part = parsed.positive[0] if parsed.positive else None

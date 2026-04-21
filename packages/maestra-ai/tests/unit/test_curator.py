@@ -448,6 +448,31 @@ class TestBuildInformedQuery:
         assert q is not None
         assert 'artist:"Heilung"' in q
 
+    def test_build_informed_query_top_taste_multiplos_candidatos_usa_or(self, curator, monkeypatch):
+        """Top taste com N>1 candidatos não-negados: todos entram na DSL via OR."""
+        monkeypatch.setattr(
+            curator.taste, "get_preferred_artists",
+            lambda: ["Heilung", "Wardruna", "The HU"],
+        )
+        q = curator._build_informed_query(self._ctx())
+        assert q is not None
+        assert 'artist:"Heilung"' in q
+        assert 'artist:"Wardruna"' in q
+        assert 'artist:"The HU"' in q
+        assert " OR " in q
+
+    def test_build_informed_query_top_taste_filtra_negados_e_mantem_resto(self, curator, monkeypatch):
+        """Top taste: artistas negados são filtrados; resto ainda entra via OR."""
+        monkeypatch.setattr(
+            curator.taste, "get_preferred_artists",
+            lambda: ["Heilung", "Wardruna", "The HU"],
+        )
+        q = curator._build_informed_query(self._ctx(negative=("heilung",)))
+        assert q is not None
+        assert 'artist:"Heilung"' not in q
+        assert 'artist:"Wardruna"' in q
+        assert 'artist:"The HU"' in q
+
     def test_build_informed_query_aspas_no_nome_artist(self, curator, monkeypatch):
         """Aspas internas no nome do artista são removidas antes do wrap DSL."""
         monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: [])
