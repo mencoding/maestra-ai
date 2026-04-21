@@ -112,6 +112,7 @@ class TestArtistsHint:
 class TestBpmRange:
     def test_bpmrange_e_frozen(self):
         from dataclasses import FrozenInstanceError
+
         from maestra_ai.core.context_parser import BpmRange
         b = BpmRange(min=100, max=120)
         with pytest.raises(FrozenInstanceError):

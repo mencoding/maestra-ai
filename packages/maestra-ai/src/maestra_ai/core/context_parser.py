@@ -11,7 +11,6 @@ import re
 import unicodedata
 from dataclasses import dataclass
 
-
 NEGATIVE_MARKERS: tuple[str, ...] = ("evitar ", "sem ", "não ", "nao ")
 
 # Ordenados do mais longo para o mais curto: "algo tipo " deve ser testado
@@ -33,7 +32,7 @@ class BpmRange:
     max: int | None = None
 
     @classmethod
-    def from_any(cls, value: "BpmRange | dict | None") -> "BpmRange | None":
+    def from_any(cls, value: BpmRange | dict | None) -> BpmRange | None:
         """Aceita BpmRange, dict com keys min/max, ou None. Normaliza para
         BpmRange. Usado por parse() e por ContextState.parsed() para ingress
         do formato {min, max} persistido em disco."""
@@ -100,7 +99,7 @@ def _extract_artists(original_clause: str) -> list[str]:
     return [m for m in matches if len(m) > 1]
 
 
-def parse(text: str, bpm: "BpmRange | dict | None" = None) -> ParsedContext:
+def parse(text: str, bpm: BpmRange | dict | None = None) -> ParsedContext:
     """Extrai intenção estruturada de texto livre.
 
     Puro, idempotente, determinístico. Nenhum I/O, nenhum logging.
