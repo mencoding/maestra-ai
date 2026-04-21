@@ -206,7 +206,7 @@ def _curate(args):
     deps = build_deps()
     ctx = deps["context_state"].show()
     context_name = (ctx or {}).get("context", "default")
-    tracks, queries = deps["curator"].curate(
+    tracks, queries, _sources = deps["curator"].curate(
         context_name,
         count=args.get("max_tracks", 10),
         max_per_artist=args.get("max_per_artist", 1),

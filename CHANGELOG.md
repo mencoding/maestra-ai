@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [maestra-mcp 0.9.1] — 2026-04-21
+
+### Corrigido
+- **MCP `curate` tool**: `_curate` desempacotava `curate()` em 2 valores
+  (`tracks, queries`), mas desde v0.12.0 (refactor #9) o `Curator.curate()`
+  retorna tupla de 3 (`tracks, queries_used, sources_used`). Cada invocação
+  via MCP explodia com `ValueError: too many values to unpack (expected 2)`.
+  Fix: desempacotar `tracks, queries, _sources`. Regressão latente por dois
+  releases — teste em `test_tools.py` mockava `return_value = ([], [])`, o
+  que reforçava o bug em vez de detectá-lo; teste agora usa tupla de 3.
+
 ## [0.13.0] — 2026-04-21
 
 ### Adicionado

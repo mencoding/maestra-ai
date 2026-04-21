@@ -45,7 +45,7 @@ async def test_set_context_chama_context_state_set():
 async def test_curate_passa_args_para_curator():
     from maestra_mcp.tools import call_tool
     mock_curator = MagicMock()
-    mock_curator.curate.return_value = ([], [])
+    mock_curator.curate.return_value = ([], [], [])
     mock_ctx = MagicMock()
     mock_ctx.show.return_value = {"context": "foco"}
     with patch("maestra_mcp.tools.build_deps",
