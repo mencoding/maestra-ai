@@ -205,21 +205,20 @@ def _clear_context(args):
 def _curate(args):
     deps = build_deps()
     ctx = deps["context_state"].show()
-    raw_context = (ctx or {}).get("context", "default")
+    raw_context = (ctx or {}).get("context")
     # Desempacota dict {"text": "...", "bpm": ...} antes de passar ao curator.
-    # ctx["context"] é o objeto completo retornado por ContextState.show(),
-    # não uma string — sem este fix o dict vaza como repr literal (bug #20-2).
-    if isinstance(raw_context, dict):
-        context_name = raw_context.get("text") or "default"
-    else:
-        context_name = raw_context or "default"
+    # Fallback para contexto vazio/None fica sob responsabilidade do curator
+    # (DEFAULT_CONTEXT = "foco"), evitando duplicação de source-of-truth.
+    context_text = (
+        raw_context.get("text") if isinstance(raw_context, dict) else raw_context
+    )
     tracks, queries, _sources = deps["curator"].curate(
-        context_name,
+        context_text,
         count=args.get("max_tracks", 10),
         max_per_artist=args.get("max_per_artist", 1),
     )
     return {
-        "context": context_name,
+        "context": context_text or "",
         "tracks": tracks,
         "queries_used": queries,
     }
