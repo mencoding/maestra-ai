@@ -57,6 +57,30 @@ async def test_curate_passa_args_para_curator():
 
 
 @pytest.mark.asyncio
+async def test_curate_desempacota_context_text_do_dict():
+    """Bug #20-2: _curate deve extrair text do dict context antes de chamar curator."""
+    from maestra_mcp.tools import call_tool
+    mock_curator = MagicMock()
+    mock_curator.curate.return_value = ([], [], [])
+    mock_ctx = MagicMock()
+    # Simula exatamente o shape retornado por context_state.show() em produção
+    mock_ctx.show.return_value = {
+        "context": {"text": "metal tribal ritual", "bpm": None},
+        "set_at": "2026-04-21T17:00:00",
+        "ttl_minutes": 120,
+    }
+    with patch("maestra_mcp.tools.build_deps",
+               return_value={"curator": mock_curator, "context_state": mock_ctx}):
+        await call_tool("curate", {"max_tracks": 5})
+    assert mock_curator.curate.called
+    # O primeiro argumento posicional deve ser a string extraída, não o dict
+    primeiro_arg = mock_curator.curate.call_args.args[0]
+    assert primeiro_arg == "metal tribal ritual", (
+        f"Esperado 'metal tribal ritual', recebido: {primeiro_arg!r}"
+    )
+
+
+@pytest.mark.asyncio
 async def test_maestra_error_vira_error_dict():
     from maestra_mcp.tools import call_tool
     from maestra_ai.core.errors import AuthError

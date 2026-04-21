@@ -408,9 +408,16 @@ class Curator:
         return " ".join(descriptors)
 
     def _normalize_context(self, context):
-        """Retorna contexto utilizavel quando mood veio vazio."""
+        """Retorna contexto utilizavel quando mood veio vazio.
+
+        Aceita string, dict com campo 'text' (shape de ContextState.show()) ou None.
+        Evita vazar repr de dict como query literal ao Spotify (bug #20-2).
+        """
         if context is None:
             return DEFAULT_CONTEXT
+        # Desempacota dict {"text": "...", "bpm": ...} sem serializar com str()
+        if isinstance(context, dict):
+            context = context.get("text", "") or ""
         context = str(context).strip()
         return context or DEFAULT_CONTEXT
 

@@ -455,3 +455,36 @@ class TestCurateIntegracaoV013:
         with caplog.at_level(logging.WARNING):
             curator.curate("rock evitar ambient", count=3)
         assert any("degrading to soft penalty" in r.message for r in caplog.records)
+
+
+class TestNormalizeContext:
+    """Testes para _normalize_context — bug #20-2."""
+
+    def test_normalize_context_aceita_dict_com_text(self, curator):
+        """Dict com campo 'text' deve retornar apenas o valor texto."""
+        resultado = curator._normalize_context({"text": "metal ritual", "bpm": None})
+        assert resultado == "metal ritual"
+
+    def test_normalize_context_aceita_string(self, curator):
+        """String direta deve passar sem alteração (regressão)."""
+        resultado = curator._normalize_context("metal ritual")
+        assert resultado == "metal ritual"
+
+    def test_normalize_context_aceita_none(self, curator):
+        """None deve retornar DEFAULT_CONTEXT (regressão)."""
+        from maestra_ai.core.curator import DEFAULT_CONTEXT
+        resultado = curator._normalize_context(None)
+        assert resultado == DEFAULT_CONTEXT
+
+    def test_normalize_context_dict_sem_text(self, curator):
+        """Dict sem campo 'text' deve retornar DEFAULT_CONTEXT."""
+        from maestra_ai.core.curator import DEFAULT_CONTEXT
+        resultado = curator._normalize_context({"bpm": None})
+        assert resultado == DEFAULT_CONTEXT
+
+    def test_normalize_context_nao_serializa_dict_como_query(self, curator):
+        """Garantir que dict com bpm nunca vira repr literal na query."""
+        resultado = curator._normalize_context({"text": "foo", "bpm": None})
+        assert "{" not in resultado
+        assert "'bpm'" not in resultado
+        assert "none" not in resultado.lower()
