@@ -398,6 +398,74 @@ class TestBuildInformedQuery:
         q = curator._build_informed_query(self._ctx(negative=("ambient",)))
         assert q is None
 
+    # --- Testes T3: DSL Spotify artist:"..." (#20-4) ---
+
+    def test_build_informed_query_um_artist_hint_usa_dsl_spotify(self, curator, monkeypatch):
+        """N=1 artist_hint → query usa DSL artist:"Nome"."""
+        monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: [])
+        q = curator._build_informed_query(self._ctx(artists_hint=("The HU",)))
+        assert q is not None
+        assert 'artist:"The HU"' in q
+
+    def test_build_informed_query_multiplos_artists_concat_com_or(self, curator, monkeypatch):
+        """N=3 artists_hint → query usa DSL com OR entre todos."""
+        monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: [])
+        q = curator._build_informed_query(
+            self._ctx(artists_hint=("The HU", "Wardruna", "Heilung"))
+        )
+        assert q is not None
+        assert 'artist:"The HU"' in q
+        assert 'artist:"Wardruna"' in q
+        assert 'artist:"Heilung"' in q
+        assert " OR " in q
+
+    def test_build_informed_query_inclui_positive_livre(self, curator, monkeypatch):
+        """artist_hint + positive → DSL artist + texto livre para positive."""
+        monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: [])
+        q = curator._build_informed_query(
+            self._ctx(artists_hint=("The HU",), positive=("metal",))
+        )
+        assert q is not None
+        assert 'artist:"The HU"' in q
+        assert "metal" in q
+
+    def test_build_informed_query_inclui_bpm_livre(self, curator, monkeypatch):
+        """artist_hint + bpm → DSL artist + qualificador bpm como texto livre."""
+        from maestra_ai.core.context_parser import BpmRange
+        monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: [])
+        q = curator._build_informed_query(
+            self._ctx(artists_hint=("The HU",), bpm=BpmRange(min=100, max=140))
+        )
+        assert q is not None
+        assert 'artist:"The HU"' in q
+        # mid = (100+140)//2 = 120
+        assert "120bpm" in q
+
+    def test_build_informed_query_sem_artist_hint_usa_top_taste_com_dsl(self, curator, monkeypatch):
+        """Sem artists_hint, top taste também usa DSL artist:"..."."""
+        monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: ["Heilung"])
+        q = curator._build_informed_query(self._ctx())
+        assert q is not None
+        assert 'artist:"Heilung"' in q
+
+    def test_build_informed_query_aspas_no_nome_artist(self, curator, monkeypatch):
+        """Aspas internas no nome do artista são removidas antes do wrap DSL."""
+        monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: [])
+        q = curator._build_informed_query(
+            self._ctx(artists_hint=('Foo "Bar" Baz',))
+        )
+        assert q is not None
+        # Aspas internas removidas → nome limpo entre as aspas externas da DSL
+        assert 'artist:"Foo Bar Baz"' in q
+        # Não deve ter aspas duplas dentro do valor da DSL
+        assert 'artist:"Foo "Bar" Baz"' not in q
+
+    def test_build_informed_query_sem_sinal_retorna_none(self, curator, monkeypatch):
+        """Regressão: sem artists_hint, sem taste e sem positive → None."""
+        monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: [])
+        q = curator._build_informed_query(self._ctx())
+        assert q is None
+
 
 class TestCurateIntegracaoV013:
     """Integração T11: curate() usa parsed + negative_filter + anti_tag_penalty."""

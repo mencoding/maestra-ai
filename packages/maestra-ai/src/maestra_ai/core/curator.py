@@ -56,24 +56,30 @@ class Curator:
     def _build_informed_query(self, parsed) -> str | None:
         """Query informada a partir de ParsedContext + taste.
 
-        Formato: "{artist_hint_ou_top_taste} {positive} {bpm_qualifier}".
+        Formato: "{dsl_artists} {positive} {bpm_qualifier}".
+        Artists são formatados com DSL Spotify: artist:"Nome" OR artist:"Outro".
         Skip top taste que aparecem em negative. Retorna None se nenhum sinal.
         """
         negative = set(parsed.negative) if parsed.negative else set()
 
-        # Parte 1: artista (artist_hint tem prioridade sobre top taste)
+        # Parte 1: artistas com DSL Spotify (artist_hint tem prioridade sobre top taste)
         artist_part: str | None = None
         if parsed.artists_hint:
-            artist_part = parsed.artists_hint[0]
+            # Todos os artistas do hint, com aspas internas removidas para query válida
+            artists = [a.replace('"', "") for a in parsed.artists_hint]
+            artist_part = " OR ".join(f'artist:"{a}"' for a in artists)
         else:
-            # Top preferred artist que não bata com negative
+            # Top preferred artists que não batam com negative — também usam DSL
             top = self.taste.get_preferred_artists() or []
-            for a in top[:5]:
-                if not any(n in a.lower() for n in negative):
-                    artist_part = a
-                    break
+            candidates = [
+                a for a in top[:5]
+                if not any(n in a.lower() for n in negative)
+            ]
+            if candidates:
+                artists = [a.replace('"', "") for a in candidates]
+                artist_part = " OR ".join(f'artist:"{a}"' for a in artists)
 
-        # Parte 2: positive (primeiro termo, se houver)
+        # Parte 2: positive (primeiro termo, se houver) — texto livre
         positive_part = parsed.positive[0] if parsed.positive else None
 
         # Parte 3: bpm qualifier — usa atributos do BpmRange (não dict)
