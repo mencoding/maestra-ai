@@ -97,12 +97,25 @@ class Curator:
     def curate(self, context, count=5, exclude_uris=None, exclude_artists=None, max_per_artist=None, enhance_candidates=True):
         """Gera lista de faixas para um contexto.
 
+        `context` aceita `str` ou `ParsedContext` (duck-typing via `hasattr`).
+        Quando `ParsedContext`, pulamos o parse (evita duplicar trabalho do caller).
+
         Retorna tupla (tracks, queries_used, sources_used).
         tracks: lista de dicts com track, artist, uri.
         queries_used: lista de queries efetivamente usadas.
         sources_used: lista de fontes externas ativas.
         """
-        context = self._normalize_context(context)
+        from maestra_ai.core.context_parser import parse as parse_context_text
+        from maestra_ai.core.scoring import anti_tag_penalty
+
+        # Normaliza: aceita `str` ou `ParsedContext` (duck-typing)
+        if hasattr(context, "text"):
+            parsed = context
+            context_text = parsed.text
+        else:
+            context_text = self._normalize_context(context)
+            parsed = parse_context_text(context_text, bpm=self._active_bpm_target())
+
         queries_used: list[str] = []
         candidates: list[dict] = []
         excluded = set(exclude_uris or [])
@@ -119,24 +132,21 @@ class Curator:
                 seen.add(r["uri"])
                 candidates.append(r)
 
-        # 1) Query informada — parseia contexto pra ParsedContext antes.
-        # Integração completa (negative filter, degraded) chega no T11.
-        from maestra_ai.core.context_parser import parse as parse_context_text
-        parsed = parse_context_text(context, bpm=self._active_bpm_target())
+        # 1) Query informada a partir do ParsedContext
         informed = self._build_informed_query(parsed)
         if informed:
             _search_and_collect(informed)
 
         # 2) Fallback SEMANTIC_MAP se abaixo do mínimo
         if len(candidates) < MIN_CANDIDATES:
-            for q in self._resolve_queries(context):
+            for q in self._resolve_queries(context_text):
                 if q in queries_used:
                     continue
                 _search_and_collect(q)
                 if len(candidates) >= MIN_CANDIDATES:
                     break
 
-        # v0.12.0: enrich candidates com metadata externa antes do re-rank.
+        # 3) v0.12.0: enrich candidates com metadata externa antes do re-rank.
         # Skip se usuário passou --no-enhance (enhance_candidates=False).
         if enhance_candidates and candidates:
             from maestra_ai.core.external import default_enhancer
@@ -157,12 +167,17 @@ class Curator:
                 except Exception as e:
                     logger.warning("Enhancement de candidatos falhou: %s", e)
 
-        # 3) Filtra rejeitadas pelo perfil de gosto (URI + context_score + artistas excluídos pelo caller)
+        # 4) Hard filter adaptativo (v0.13): remove candidatos com tag negada.
+        # Se o filtro deixar < MIN_CANDIDATES, mantém originais com degraded=True
+        # para o scoring aplicar penalty suave no re-rank.
+        candidates, degraded = self._apply_negative_filter(candidates, parsed)
+
+        # 5) Filtra rejeitadas pelo perfil de gosto (URI + context_score + artistas excluídos pelo caller)
         filtered = []
         for c in candidates:
             if self.taste.is_rejected(c["uri"]):
                 continue
-            if self.taste.context_score(c["uri"], context) < 0:
+            if self.taste.context_score(c["uri"], context_text) < 0:
                 continue
             if c["artist"] in excluded_artists:
                 continue
@@ -171,18 +186,25 @@ class Curator:
         # Filtra por artistas rejeitados no perfil (delegação ao TasteProfile)
         filtered = self.taste.filter_with_artist_info(filtered)
 
-        # 4) Re-rank por compose_score (taste + decade + tag + bpm ponderados)
+        # 6) Re-rank por compose_score (taste + decade + tag + bpm ponderados).
+        # Quando degraded=True, soma anti_tag_penalty para afastar candidatos com tag negada.
         from maestra_ai.core.config import load_and_migrate, load_curate_weights
         cfg = load_and_migrate()
         weights = load_curate_weights(cfg)
         has_lf = (cfg.get("external_sources") or {}).get("lastfm", {}).get("enabled", False)
+        negative_set = set(parsed.negative)
 
-        filtered.sort(
-            key=lambda c: self._compose_score_for(c, context, weights, has_lf),
-            reverse=True,
-        )
+        def _score(c):
+            base = self._compose_score_for(c, context_text, weights, has_lf)
+            if degraded and negative_set:
+                base += anti_tag_penalty(
+                    self._track_tags(c), negative_set, degraded=True,
+                )
+            return base
 
-        # 5) max_per_artist
+        filtered.sort(key=_score, reverse=True)
+
+        # 7) max_per_artist
         if max_per_artist:
             limited: list[dict] = []
             counts: dict[str, int] = {}

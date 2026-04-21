@@ -397,3 +397,38 @@ class TestBuildInformedQuery:
         )
         q = curator._build_informed_query(self._ctx(negative=("ambient",)))
         assert q is None
+
+
+class TestCurateIntegracaoV013:
+    """Integração T11: curate() usa parsed + negative_filter + anti_tag_penalty."""
+
+    def test_curate_usa_parsed_context_quando_informado(self, curator, mock_controller, monkeypatch):
+        """curate() continua devolvendo tupla (tracks, queries, sources)."""
+        result = curator.curate("foco", count=3)
+        assert len(result) == 3  # (tracks, queries, sources)
+
+    def test_curate_aplica_negative_filter_e_reporta_queries(self, curator, mock_controller, monkeypatch):
+        """Com contexto 'rock evitar ambient', tracks retornadas não devem ter tag 'ambient'."""
+        from maestra_ai.core.external import cache as cache_mod
+        def fake_get(uri):
+            # URIs com "1" simulam tracks com tag ambient; outras ficam com rock
+            has_ambient = "1" in uri
+            return {"musicbrainz": {"tags": ["ambient"] if has_ambient else ["rock"]}}
+        monkeypatch.setattr(cache_mod, "get_track", fake_get)
+
+        tracks, _queries, _sources = curator.curate("rock evitar ambient", count=5)
+        for t in tracks:
+            cached = fake_get(t["uri"])
+            assert "ambient" not in (cached.get("musicbrainz") or {}).get("tags", [])
+
+    def test_curate_degraded_log_warning(self, curator, mock_controller, monkeypatch, caplog):
+        """Quando hard filter esvaziaria (todos candidatos têm tag negada), loga warning."""
+        import logging
+        from maestra_ai.core.external import cache as cache_mod
+        # Todos os candidatos passam a ter tag ambient → filtro esvazia → degrada
+        monkeypatch.setattr(cache_mod, "get_track",
+                            lambda uri: {"musicbrainz": {"tags": ["ambient"]}})
+
+        with caplog.at_level(logging.WARNING):
+            curator.curate("rock evitar ambient", count=3)
+        assert any("degrading to soft penalty" in r.message for r in caplog.records)
