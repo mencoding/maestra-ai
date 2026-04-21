@@ -83,3 +83,40 @@ def test_show_ignora_ttl_nulo(tmp_path):
     state = ContextState(str(path))
 
     assert state.show()["context"]["text"] == "foco"
+
+
+class TestParsed:
+    def test_parsed_retorna_none_quando_sem_contexto(self, tmp_path):
+        state = ContextState(str(tmp_path / "ctx.json"))
+        assert state.parsed() is None
+
+    def test_parsed_retorna_parsed_context_apos_set(self, tmp_path):
+        from maestra_ai.core.context_parser import ParsedContext
+        state = ContextState(str(tmp_path / "ctx.json"))
+        state.set("metal tribal evitar ambient")
+        p = state.parsed()
+        assert isinstance(p, ParsedContext)
+        assert "ambient" in p.negative
+
+    def test_parsed_memoiza_entre_chamadas(self, tmp_path):
+        state = ContextState(str(tmp_path / "ctx.json"))
+        state.set("foco")
+        p1 = state.parsed()
+        p2 = state.parsed()
+        assert p1 is p2  # identidade preservada por memoização
+
+    def test_parsed_invalida_apos_novo_set(self, tmp_path):
+        state = ContextState(str(tmp_path / "ctx.json"))
+        state.set("foco")
+        p1 = state.parsed()
+        state.set("energia")
+        p2 = state.parsed()
+        assert p1 is not p2
+        assert p2.text == "energia"
+
+    def test_parsed_repass_bpm_do_context(self, tmp_path):
+        from maestra_ai.core.context_parser import BpmRange
+        state = ContextState(str(tmp_path / "ctx.json"))
+        state.set("foco", bpm={"min": 60, "max": 90})
+        p = state.parsed()
+        assert p.bpm == BpmRange(min=60, max=90)
