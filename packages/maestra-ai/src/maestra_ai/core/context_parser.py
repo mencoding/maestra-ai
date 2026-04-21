@@ -7,19 +7,15 @@ Issue #8, v0.13.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import re
+from dataclasses import dataclass
+
+
+NEGATIVE_MARKERS: tuple[str, ...] = ("evitar ", "sem ", "não ", "nao ")
 
 
 @dataclass(frozen=True)
 class ParsedContext:
-    """Estrutura derivada do texto cru do contexto.
-
-    - text: texto original preservado (sem normalização) para log/debug.
-    - positive: termos após marker positivo ("tipo X", "como Y").
-    - negative: termos após marker negativo ("evitar X", "sem Y").
-    - artists_hint: nomes próprios capitalizados após marker positivo.
-    - bpm: objeto {min, max} repassado do ContextState.
-    """
     text: str
     positive: tuple[str, ...] = ()
     negative: tuple[str, ...] = ()
@@ -27,9 +23,39 @@ class ParsedContext:
     bpm: dict | None = None
 
 
+def _split_clauses(text: str) -> list[str]:
+    """Quebra por vírgula, ponto, ponto-e-vírgula. Retorna fragmentos limpos."""
+    return [c.strip() for c in re.split(r"[,.;]", text) if c.strip()]
+
+
+def _extract_after_marker(clause: str, markers: tuple[str, ...]) -> str | None:
+    """Se clause começa com um marker, retorna o resto. Caso contrário, None."""
+    for marker in markers:
+        idx = clause.find(marker)
+        if idx >= 0:
+            return clause[idx + len(marker):].strip()
+    return None
+
+
 def parse(text: str, bpm: dict | None = None) -> ParsedContext:
     """Extrai intenção estruturada de texto livre.
 
     Puro, idempotente, determinístico. Nenhum I/O, nenhum logging.
     """
-    return ParsedContext(text=text or "", bpm=bpm)
+    if not text:
+        return ParsedContext(text="", bpm=bpm)
+
+    negative: list[str] = []
+    for clause in _split_clauses(text):
+        rest = _extract_after_marker(clause, NEGATIVE_MARKERS)
+        if rest:
+            # Pega o primeiro termo (primeira "palavra-chave" do rest)
+            first_token = rest.split()[0] if rest.split() else ""
+            if first_token:
+                negative.append(first_token)
+
+    return ParsedContext(
+        text=text,
+        negative=tuple(negative),
+        bpm=bpm,
+    )

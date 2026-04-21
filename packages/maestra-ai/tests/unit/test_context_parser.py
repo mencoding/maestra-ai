@@ -22,3 +22,31 @@ def test_parsed_context_e_frozen():
     p = ParsedContext(text="x")
     with pytest.raises(dataclasses.FrozenInstanceError):
         p.text = "mudou"  # type: ignore[misc]
+
+
+class TestNegativos:
+    def test_extrai_um_negativo_apos_evitar(self):
+        from maestra_ai.core.context_parser import parse
+        p = parse("metal evitar ambient")
+        assert "ambient" in p.negative
+
+    def test_extrai_um_negativo_apos_sem(self):
+        from maestra_ai.core.context_parser import parse
+        p = parse("rock sem ballads")
+        assert "ballads" in p.negative
+
+    def test_extrai_um_negativo_apos_nao(self):
+        from maestra_ai.core.context_parser import parse
+        p = parse("música não acústica")
+        assert "acústica" in p.negative
+
+    def test_extrai_multiplos_negativos_em_virgula(self):
+        from maestra_ai.core.context_parser import parse
+        p = parse("foco sem distração, evitar vocal")
+        assert "distração" in p.negative
+        assert "vocal" in p.negative
+
+    def test_nenhuma_negacao_retorna_tupla_vazia(self):
+        from maestra_ai.core.context_parser import parse
+        p = parse("metal tribal denso")
+        assert p.negative == ()
