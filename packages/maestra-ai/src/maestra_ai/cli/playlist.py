@@ -22,7 +22,7 @@ def cmd_playlist_list(args, controller, **_):
 def cmd_playlist_add(args, controller, taste, curator, context_state, **_):
     playlist_id = resolve_playlist_id()
     context, context_source = _curation_context(args, context_state)
-    results, queries_used = curator.curate(context, count=args.count)
+    results, queries_used, _sources = curator.curate(context, count=args.count)
     if not results:
         error("Não consegui encontrar faixas para esse contexto.", "NO_RESULTS")
     uris = [r["uri"] for r in results]
@@ -55,7 +55,7 @@ def cmd_playlist_top_up(args, controller, taste, curator, context_state, **_):
         }, args.human)
         return
 
-    results, queries_used = curator.curate(
+    results, queries_used, _sources = curator.curate(
         context,
         count=needed,
         exclude_uris=existing_uris,
