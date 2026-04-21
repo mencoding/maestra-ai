@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-04-20
+
+### Removido (BREAKING)
+- **GetSongBPM removido completamente.** O endpoint passou a ser inacessível
+  por Cloudflare challenge em 2026 (documentado em v0.10.3), e o serviço não
+  respondeu a investigação. Código, guia interativo, atribuição e referências
+  no README foram deletados. Configurações legacy com `getsongbpm.enabled=true`
+  são silenciosamente convertidas para `reccobeats.enabled=true` durante
+  `migrate_external_sources`; keyring entry de getsongbpm é removida
+  preventivamente.
+- `BpmData` TypedDict removido. `EnhancedTrack.bpm` renomeado para
+  `EnhancedTrack.reccobeats`. Callers que dependiam de `enhanced["bpm"]`
+  precisam atualizar para `enhanced["reccobeats"]`.
+
+### Adicionado
+- **Reccobeats como fonte de audio features** (nova
+  `core/external/reccobeats.py`, `ReccoBeatsSource`). API aberta sem key,
+  lookup por ISRC, 11 campos retornados: tempo, key, mode, loudness,
+  acousticness, danceability, energy, instrumentalness, liveness, speechiness,
+  valence. Ativa por padrão no opt-in do `maestra init`.
+- `AudioFeaturesData` TypedDict substitui `BpmData`.
+- Opt-in reformulado: default "MusicBrainz + Reccobeats" (zero friction,
+  nenhuma API key); "Padrão + Last.fm" como upgrade opcional.
+
+### Nota
+- Reccobeats fornece o mesmo shape de audio features que o endpoint Spotify
+  depreciado, com bridge via campo `href` (URL da track no Spotify) — ficou
+  um drop-in replacement para código legado que consumia audio features do
+  Spotify. Em termos funcionais, v0.11 é melhor do que v0.10 prometia com
+  GSB: 11 campos vs 3, sem API key, sem Cloudflare, batch por múltiplos IDs.
+
 ## [0.10.5] — 2026-04-20
 
 ### Corrigido

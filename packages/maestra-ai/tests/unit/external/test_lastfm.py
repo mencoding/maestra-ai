@@ -113,7 +113,7 @@ def test_default_enhancer_includes_lastfm_when_enabled(mocker):
         "external_sources": {
             "musicbrainz": {"enabled": True},
             "lastfm": {"enabled": True},
-            "getsongbpm": {"enabled": False},
+            "reccobeats": {"enabled": False},
         }
     }
     mocker.patch("maestra_ai.core.external.enhancer._load_cfg", return_value=cfg)
@@ -133,7 +133,7 @@ def test_default_enhancer_skips_lastfm_when_no_key(mocker):
         "external_sources": {
             "musicbrainz": {"enabled": True},
             "lastfm": {"enabled": True},
-            "getsongbpm": {"enabled": False},
+            "reccobeats": {"enabled": False},
         }
     }
     mocker.patch("maestra_ai.core.external.enhancer._load_cfg", return_value=cfg)

@@ -1,4 +1,4 @@
-"""Testes dos helpers keyring em core/config.py (v0.10.4).
+"""Testes dos helpers keyring em core/config.py (v0.10.4+).
 
 Cobre get_source_key, set_source_key, delete_source_key e o comportamento
 de migrate_external_sources com api_key plaintext.
@@ -26,22 +26,22 @@ def test_get_source_key_lastfm_returns_value(monkeypatch):
     assert result == "minha-api-key"
 
 
-def test_get_source_key_getsongbpm_returns_value(monkeypatch):
-    mock_kr = MagicMock()
-    mock_kr.get_password.return_value = "gsb-key"
-    monkeypatch.setattr(cfg_module, "keyring", mock_kr)
-
-    result = cfg_module.get_source_key("getsongbpm")
-
-    mock_kr.get_password.assert_called_once_with("maestra-ai", "getsongbpm-api-key")
-    assert result == "gsb-key"
-
-
 def test_get_source_key_unknown_source_returns_none(monkeypatch):
     mock_kr = MagicMock()
     monkeypatch.setattr(cfg_module, "keyring", mock_kr)
 
     result = cfg_module.get_source_key("unknown_source")
+
+    mock_kr.get_password.assert_not_called()
+    assert result is None
+
+
+def test_get_source_key_reccobeats_returns_none(monkeypatch):
+    """Reccobeats não usa keyring — sempre retorna None."""
+    mock_kr = MagicMock()
+    monkeypatch.setattr(cfg_module, "keyring", mock_kr)
+
+    result = cfg_module.get_source_key("reccobeats")
 
     mock_kr.get_password.assert_not_called()
     assert result is None
@@ -84,13 +84,13 @@ def test_set_source_key_lastfm(monkeypatch):
     mock_kr.set_password.assert_called_once_with("maestra-ai", "lastfm-api-key", "minha-key")
 
 
-def test_set_source_key_getsongbpm(monkeypatch):
+def test_set_source_key_reccobeats_raises_value_error(monkeypatch):
+    """Reccobeats não tem keyring — set_source_key levanta ValueError."""
     mock_kr = MagicMock()
     monkeypatch.setattr(cfg_module, "keyring", mock_kr)
 
-    cfg_module.set_source_key("getsongbpm", "gsb-key")
-
-    mock_kr.set_password.assert_called_once_with("maestra-ai", "getsongbpm-api-key", "gsb-key")
+    with pytest.raises(ValueError, match="source sem keyring"):
+        cfg_module.set_source_key("reccobeats", "key")
 
 
 def test_set_source_key_unknown_raises_value_error(monkeypatch):
@@ -160,48 +160,12 @@ def test_migrate_moves_lastfm_plaintext_to_keyring(monkeypatch):
         "external_sources": {
             "musicbrainz": {"enabled": True},
             "lastfm": {"enabled": True, "api_key": "plain-key"},
-            "getsongbpm": {"enabled": False},
         }
     }
     migrated = cfg_module.migrate_external_sources(cfg)
 
     mock_kr.set_password.assert_called_once_with("maestra-ai", "lastfm-api-key", "plain-key")
     assert "api_key" not in migrated["external_sources"]["lastfm"]
-
-
-def test_migrate_moves_getsongbpm_plaintext_to_keyring(monkeypatch):
-    mock_kr = MagicMock()
-    monkeypatch.setattr(cfg_module, "keyring", mock_kr)
-
-    cfg = {
-        "external_sources": {
-            "musicbrainz": {"enabled": False},
-            "lastfm": {"enabled": False},
-            "getsongbpm": {"enabled": True, "api_key": "gsb-plain"},
-        }
-    }
-    migrated = cfg_module.migrate_external_sources(cfg)
-
-    mock_kr.set_password.assert_called_once_with("maestra-ai", "getsongbpm-api-key", "gsb-plain")
-    assert "api_key" not in migrated["external_sources"]["getsongbpm"]
-
-
-def test_migrate_both_keys_plaintext(monkeypatch):
-    mock_kr = MagicMock()
-    monkeypatch.setattr(cfg_module, "keyring", mock_kr)
-
-    cfg = {
-        "external_sources": {
-            "musicbrainz": {"enabled": False},
-            "lastfm": {"enabled": True, "api_key": "lf-key"},
-            "getsongbpm": {"enabled": True, "api_key": "gsb-key"},
-        }
-    }
-    cfg_module.migrate_external_sources(cfg)
-
-    calls = {c.args[1]: c.args[2] for c in mock_kr.set_password.call_args_list}
-    assert calls["lastfm-api-key"] == "lf-key"
-    assert calls["getsongbpm-api-key"] == "gsb-key"
 
 
 def test_migrate_graceful_when_keyring_unavailable(monkeypatch):
@@ -212,7 +176,6 @@ def test_migrate_graceful_when_keyring_unavailable(monkeypatch):
         "external_sources": {
             "musicbrainz": {"enabled": False},
             "lastfm": {"enabled": True, "api_key": "stays-here"},
-            "getsongbpm": {"enabled": False},
         }
     }
     migrated = cfg_module.migrate_external_sources(cfg)
@@ -226,7 +189,6 @@ def test_migrate_idempotent_when_no_plaintext():
         "external_sources": {
             "musicbrainz": {"enabled": True},
             "lastfm": {"enabled": True},
-            "getsongbpm": {"enabled": False},
         }
     }
     with patch.object(cfg_module, "set_source_key") as mock_set:
@@ -234,3 +196,39 @@ def test_migrate_idempotent_when_no_plaintext():
 
     mock_set.assert_not_called()
     assert "api_key" not in migrated["external_sources"]["lastfm"]
+
+
+def test_migrate_getsongbpm_legacy_converted_to_reccobeats(monkeypatch):
+    """Config legado com getsongbpm.enabled=True é convertido para reccobeats.enabled=True."""
+    mock_kr = MagicMock()
+    monkeypatch.setattr(cfg_module, "keyring", mock_kr)
+
+    cfg = {
+        "external_sources": {
+            "musicbrainz": {"enabled": True},
+            "lastfm": {"enabled": False},
+            "getsongbpm": {"enabled": True},
+        }
+    }
+    migrated = cfg_module.migrate_external_sources(cfg)
+
+    assert "getsongbpm" not in migrated["external_sources"]
+    assert migrated["external_sources"]["reccobeats"]["enabled"] is True
+
+
+def test_migrate_getsongbpm_disabled_does_not_activate_reccobeats(monkeypatch):
+    """Config legado com getsongbpm.enabled=False não ativa reccobeats."""
+    mock_kr = MagicMock()
+    monkeypatch.setattr(cfg_module, "keyring", mock_kr)
+
+    cfg = {
+        "external_sources": {
+            "musicbrainz": {"enabled": True},
+            "lastfm": {"enabled": False},
+            "getsongbpm": {"enabled": False},
+        }
+    }
+    migrated = cfg_module.migrate_external_sources(cfg)
+
+    assert "getsongbpm" not in migrated["external_sources"]
+    assert migrated["external_sources"]["reccobeats"]["enabled"] is False

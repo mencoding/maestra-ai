@@ -21,7 +21,6 @@ logger = logging.getLogger(__name__)
 _KEYRING_SERVICE = "maestra-ai"
 _KEY_USERNAMES: dict[str, str] = {
     "lastfm": "lastfm-api-key",
-    "getsongbpm": "getsongbpm-api-key",
 }
 
 
@@ -100,7 +99,7 @@ def _default_external_sources() -> dict:
     return {
         "musicbrainz": {"enabled": False},
         "lastfm":      {"enabled": False},
-        "getsongbpm":  {"enabled": False},
+        "reccobeats":  {"enabled": False},
     }
 
 
@@ -129,20 +128,34 @@ def _migrate_plaintext_key(cfg_sources: dict, source: str) -> None:
 
 
 def migrate_external_sources(cfg: dict) -> dict:
-    """Migra config de fontes externas para o shape v0.10.4+.
+    """Migra config de fontes externas para o shape v0.11.0+.
 
     Operações realizadas (todas idempotentes):
     1. `external_sources_enabled: bool` flat → `external_sources: {...}` nested.
     2. `api_key` plaintext em nested → keyring (best-effort; fallback graceful).
-    3. Completa campos faltantes com defaults.
+    3. `getsongbpm` legado → convertido para `reccobeats` (interpretação gentil:
+       usuário queria audio features, Reccobeats é a versão superior sem key).
+       Entry getsongbpm é removida do dict; keyring entry é limpa preventivamente.
+    4. Completa campos faltantes com defaults.
 
     Muta `cfg` in-place e retorna o mesmo objeto.
     """
     if "external_sources" in cfg and isinstance(cfg["external_sources"], dict):
-        # Migrar api_keys em plaintext para keyring
-        for source in ("lastfm", "getsongbpm"):
-            if source in cfg["external_sources"]:
-                _migrate_plaintext_key(cfg["external_sources"], source)
+        # Migrar api_keys em plaintext para keyring (apenas lastfm persiste key)
+        if "lastfm" in cfg["external_sources"]:
+            _migrate_plaintext_key(cfg["external_sources"], "lastfm")
+
+        # Migração getsongbpm → reccobeats (v0.11.0 breaking change)
+        gsb_entry = cfg["external_sources"].pop("getsongbpm", None)
+        if gsb_entry is not None:
+            # Limpa keyring residual de getsongbpm silenciosamente
+            try:
+                _cleanup_gsb_keyring()
+            except Exception:  # noqa: BLE001
+                pass
+            # Se o usuário tinha GSB ativo, ativa reccobeats como substituto
+            if gsb_entry.get("enabled"):
+                cfg["external_sources"].setdefault("reccobeats", {})["enabled"] = True
 
         # Completar campos faltantes (sem tocar em api_key — gerenciada por _migrate_plaintext_key)
         defaults = _default_external_sources()
@@ -160,8 +173,19 @@ def migrate_external_sources(cfg: dict) -> dict:
     return cfg
 
 
+def _cleanup_gsb_keyring() -> None:
+    """Remove entry residual de getsongbpm do keyring (best-effort, silenciosa)."""
+    username = "getsongbpm-api-key"
+    if keyring is None:
+        return
+    try:
+        keyring.delete_password(_KEYRING_SERVICE, username)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def source_enabled(cfg: dict, source: str) -> bool:
-    """Retorna True se `source` em {musicbrainz, lastfm, getsongbpm} está habilitado.
+    """Retorna True se `source` em {musicbrainz, lastfm, reccobeats} está habilitado.
 
     Lê tanto shape nested quanto legacy flat (nesse caso, só `musicbrainz` pode ficar True).
     """
@@ -179,7 +203,7 @@ def source_enabled(cfg: dict, source: str) -> bool:
 
 def any_source_enabled(cfg: dict) -> bool:
     """True se qualquer fonte externa está habilitada."""
-    return any(source_enabled(cfg, s) for s in ("musicbrainz", "lastfm", "getsongbpm"))
+    return any(source_enabled(cfg, s) for s in ("musicbrainz", "lastfm", "reccobeats"))
 
 
 def load_and_migrate() -> dict:

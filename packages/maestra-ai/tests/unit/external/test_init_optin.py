@@ -1,16 +1,17 @@
-"""Testes do prompt opt-in de fontes externas no init (v0.10)."""
+"""Testes do prompt opt-in de fontes externas no init (v0.11)."""
 import json
 
 from maestra_ai.core.init import _prompt_external_sources_optin
 
 
-def test_prompt_returns_dict_for_mb_only(mocker):
+def test_prompt_returns_dict_for_default_mb_and_reccobeats(mocker):
     sel = mocker.patch("maestra_ai.core.init.questionary.select")
-    sel.return_value.ask.return_value = "Só MusicBrainz (não preciso mexer em mais nada agora)"
+    sel.return_value.ask.return_value = "Padrão (MusicBrainz + Reccobeats) — grátis, sem chave, recomendado"
     result = _prompt_external_sources_optin()
     assert result["musicbrainz"]["enabled"] is True
+    assert result["reccobeats"]["enabled"] is True
     assert result["lastfm"]["enabled"] is False
-    assert result["getsongbpm"]["enabled"] is False
+    assert "getsongbpm" not in result
 
 
 def test_prompt_returns_all_disabled_for_skip(mocker):
@@ -18,8 +19,9 @@ def test_prompt_returns_all_disabled_for_skip(mocker):
     sel.return_value.ask.return_value = "Pular tudo, configurar depois com 'maestra config external'"
     result = _prompt_external_sources_optin()
     assert result["musicbrainz"]["enabled"] is False
+    assert result["reccobeats"]["enabled"] is False
     assert result["lastfm"]["enabled"] is False
-    assert result["getsongbpm"]["enabled"] is False
+    assert "getsongbpm" not in result
 
 
 def test_prompt_returns_all_disabled_for_none(mocker):
@@ -28,8 +30,9 @@ def test_prompt_returns_all_disabled_for_none(mocker):
     sel.return_value.ask.return_value = None
     result = _prompt_external_sources_optin()
     assert result["musicbrainz"]["enabled"] is False
+    assert result["reccobeats"]["enabled"] is False
     assert result["lastfm"]["enabled"] is False
-    assert result["getsongbpm"]["enabled"] is False
+    assert "getsongbpm" not in result
 
 
 def test_state_c_offers_migration_when_external_flag_absent(monkeypatch, tmp_path):

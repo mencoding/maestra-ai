@@ -18,7 +18,7 @@ def _sample_track(uri: str):
         "artist_mbid": None,
         "musicbrainz": None,
         "lastfm": None,
-        "bpm": None,
+        "reccobeats": None,
         "sources": [],
         "enhanced_at": "2026-04-20T10:00:00-03:00",
         "match_method": "isrc",

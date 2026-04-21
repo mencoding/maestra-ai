@@ -1,6 +1,7 @@
 """CLI: config external set-key/clear-key/enable/disable por source.
 
-v0.10.4: API keys vivem no keyring. Testes mockam keyring.get_password /
+v0.11.0: getsongbpm removido; reccobeats adicionado (sem key).
+API keys vivem no keyring. Testes mockam keyring.get_password /
 set_password / delete_password para isolar de backend real.
 """
 from __future__ import annotations
@@ -27,7 +28,7 @@ def fake_cfg_path(tmp_path, monkeypatch):
             "external_sources": {
                 "musicbrainz": {"enabled": True},
                 "lastfm": {"enabled": False},
-                "getsongbpm": {"enabled": False},
+                "reccobeats": {"enabled": False},
             }
         }),
         encoding="utf-8",
@@ -42,7 +43,6 @@ def test_set_key_lastfm_writes_to_keyring(fake_cfg_path, capsys):
     from maestra_ai.cli import config as cli_cfg
 
     args = _make_args(source="lastfm", key="a" * 32)
-    # Patch no namespace do módulo cli.config (onde o nome foi importado)
     with patch("maestra_ai.cli.config.set_source_key") as mock_set:
         cli_cfg.cmd_config_external_set_key(args)
 
@@ -74,7 +74,7 @@ def test_clear_key_calls_delete_and_disables(fake_cfg_path):
             "external_sources": {
                 "musicbrainz": {"enabled": True},
                 "lastfm": {"enabled": True},
-                "getsongbpm": {"enabled": False},
+                "reccobeats": {"enabled": False},
             }
         }),
         encoding="utf-8",
@@ -115,6 +115,17 @@ def test_enable_with_key_in_keyring_succeeds(fake_cfg_path, capsys):
     assert data["external_sources"]["lastfm"]["enabled"] is True
 
 
+def test_enable_reccobeats_no_key_needed(fake_cfg_path, capsys):
+    """enable-source reccobeats ativa sem precisar de API key."""
+    from maestra_ai.cli import config as cli_cfg
+
+    args = _make_args(source="reccobeats")
+    cli_cfg.cmd_config_external_enable_source(args)
+
+    data = json.loads(fake_cfg_path.read_text())
+    assert data["external_sources"]["reccobeats"]["enabled"] is True
+
+
 def test_disable_lastfm_turns_off(fake_cfg_path):
     """disable-source marca enabled=False; keyring não é tocado."""
     fake_cfg_path.write_text(
@@ -122,7 +133,7 @@ def test_disable_lastfm_turns_off(fake_cfg_path):
             "external_sources": {
                 "musicbrainz": {"enabled": True},
                 "lastfm": {"enabled": True},
-                "getsongbpm": {"enabled": False},
+                "reccobeats": {"enabled": False},
             }
         }),
         encoding="utf-8",
@@ -133,3 +144,23 @@ def test_disable_lastfm_turns_off(fake_cfg_path):
     cli_cfg.cmd_config_external_disable_source(args)
     data = json.loads(fake_cfg_path.read_text())
     assert data["external_sources"]["lastfm"]["enabled"] is False
+
+
+def test_disable_reccobeats(fake_cfg_path):
+    """disable-source reccobeats marca enabled=False."""
+    fake_cfg_path.write_text(
+        json.dumps({
+            "external_sources": {
+                "musicbrainz": {"enabled": True},
+                "lastfm": {"enabled": False},
+                "reccobeats": {"enabled": True},
+            }
+        }),
+        encoding="utf-8",
+    )
+    from maestra_ai.cli import config as cli_cfg
+
+    args = _make_args(source="reccobeats")
+    cli_cfg.cmd_config_external_disable_source(args)
+    data = json.loads(fake_cfg_path.read_text())
+    assert data["external_sources"]["reccobeats"]["enabled"] is False

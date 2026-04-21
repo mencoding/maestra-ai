@@ -106,9 +106,8 @@ def cmd_config_external_status(args, **_):
                     "enabled": source_enabled(cfg, "lastfm"),
                     "has_key": get_source_key("lastfm") is not None,
                 },
-                "getsongbpm": {
-                    "enabled": source_enabled(cfg, "getsongbpm"),
-                    "has_key": get_source_key("getsongbpm") is not None,
+                "reccobeats": {
+                    "enabled": source_enabled(cfg, "reccobeats"),
                 },
             },
         },
@@ -134,7 +133,7 @@ def cmd_config_external_disable(args, **_):
 
 # --- Sources com chave de API ---
 
-_VALID_KEYED_SOURCES = ("lastfm", "getsongbpm")
+_VALID_KEYED_SOURCES = ("lastfm",)
 
 
 def _load_cfg() -> dict:
@@ -212,8 +211,8 @@ def cmd_config_external_disable_source(args, **_):
 
 def cmd_config_external_guide(args, **_):
     source = args.source
-    from maestra_ai.core.external.setup_guides import guide_getsongbpm, guide_lastfm
-    guides = {"lastfm": guide_lastfm, "getsongbpm": guide_getsongbpm}
+    from maestra_ai.core.external.setup_guides import guide_lastfm
+    guides = {"lastfm": guide_lastfm}
     if source not in guides:
         output({"error": f"source inválido: {source}"}, getattr(args, "human", False))
         return
@@ -270,23 +269,23 @@ def _register(subparsers: argparse._SubParsersAction) -> None:
     p.add_argument("--human", action="store_true")
     p.set_defaults(func=cmd_config_external_disable, skip_deps=True)
 
-    p = ext_sub.add_parser("set-key", help="Define API key de uma source (lastfm ou getsongbpm)")
-    p.add_argument("source", choices=["lastfm", "getsongbpm"])
+    p = ext_sub.add_parser("set-key", help="Define API key de uma source (lastfm)")
+    p.add_argument("source", choices=["lastfm"])
     p.add_argument("key")
     p.set_defaults(func=cmd_config_external_set_key, skip_deps=True)
 
     p = ext_sub.add_parser("clear-key", help="Remove API key e desativa a source")
-    p.add_argument("source", choices=["lastfm", "getsongbpm"])
+    p.add_argument("source", choices=["lastfm"])
     p.set_defaults(func=cmd_config_external_clear_key, skip_deps=True)
 
     p = ext_sub.add_parser("guide", help="Roda guia interativo de configuração")
-    p.add_argument("source", choices=["lastfm", "getsongbpm"])
+    p.add_argument("source", choices=["lastfm"])
     p.set_defaults(func=cmd_config_external_guide, skip_deps=True)
 
     p = ext_sub.add_parser("enable-source", help="Ativa uma source específica")
-    p.add_argument("source", choices=["musicbrainz", "lastfm", "getsongbpm"])
+    p.add_argument("source", choices=["musicbrainz", "lastfm", "reccobeats"])
     p.set_defaults(func=cmd_config_external_enable_source, skip_deps=True)
 
     p = ext_sub.add_parser("disable-source", help="Desativa uma source específica")
-    p.add_argument("source", choices=["musicbrainz", "lastfm", "getsongbpm"])
+    p.add_argument("source", choices=["musicbrainz", "lastfm", "reccobeats"])
     p.set_defaults(func=cmd_config_external_disable_source, skip_deps=True)

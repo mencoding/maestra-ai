@@ -19,7 +19,7 @@ from rich.prompt import Prompt
 
 from maestra_ai.core import storage
 from maestra_ai.core.config import migrate_external_sources, normalize_playlist_id, set_source_key
-from maestra_ai.core.external.setup_guides import guide_getsongbpm, guide_lastfm
+from maestra_ai.core.external.setup_guides import guide_lastfm
 from maestra_ai.core.init_types import InitReport, InitState
 
 logger = logging.getLogger(__name__)
@@ -165,45 +165,47 @@ def _ask_smart_exit(error_kind: str, hint: str) -> bool:
 
 
 def _prompt_external_sources_optin() -> dict:
-    """Prompt de opt-in v0.10 com 3 opções. Retorna shape de external_sources.
+    """Prompt de opt-in v0.11 com 3 opções. Retorna shape de external_sources.
 
-    - Só MusicBrainz: apenas MB ativado, sem chaves.
-    - Configurar: roda guide_lastfm + guide_getsongbpm; MB sempre ativo.
+    - Padrão (MB + Reccobeats): zero friction, sem chaves, recomendado.
+    - Padrão + Last.fm: idem + tags folksonômicas ricas via API key.
     - Pular: tudo desativado.
     """
-    choice_mb_only = "Só MusicBrainz (não preciso mexer em mais nada agora)"
-    choice_all = "Configurar Last.fm e/ou GetSongBPM agora (guias passo-a-passo)"
+    choice_default = "Padrão (MusicBrainz + Reccobeats) — grátis, sem chave, recomendado"
+    choice_with_lf = "Padrão + Last.fm (tags folksonômicas ricas, ~2 min para API key)"
     choice_skip = "Pular tudo, configurar depois com 'maestra config external'"
 
     _console.print()
     _console.print("[bold]━━━ Fontes externas de metadata ━━━[/bold]")
-    _console.print("O melhoramento usa fontes públicas para preencher gêneros, mood e BPM")
-    _console.print("das faixas. Isso melhora muito a qualidade da curadoria.")
+    _console.print("O melhoramento usa fontes públicas para preencher gêneros, mood e")
+    _console.print("audio features das faixas. Isso melhora muito a qualidade da curadoria.")
     _console.print()
     _console.print("Fontes:")
-    _console.print("  • MusicBrainz — gêneros e tags (grátis, sem chave).")
-    _console.print("  • Last.fm — tags ricas + artistas similares (grátis, ~2 min).")
-    _console.print("  • GetSongBPM — BPM e tonalidade (grátis, chave por e-mail).")
+    _console.print("  • MusicBrainz — gêneros e tags canônicos (grátis, sem chave).")
+    _console.print("  • Reccobeats — audio features completas: tempo, key, energy e mais")
+    _console.print("    (grátis, sem chave, sem cadastro).")
+    _console.print("  • Last.fm — tags folksonômicas ricas + artistas similares (grátis, ~2 min).")
     _console.print()
 
     choice = questionary.select(
         "O que deseja fazer?",
-        choices=[choice_mb_only, choice_all, choice_skip],
+        choices=[choice_default, choice_with_lf, choice_skip],
     ).ask()
 
     result = {
         "musicbrainz": {"enabled": False},
         "lastfm":      {"enabled": False},
-        "getsongbpm":  {"enabled": False},
+        "reccobeats":  {"enabled": False},
     }
 
     if choice == choice_skip or choice is None:
         return result
 
-    # Em ambos os casos restantes, MB vai ativado
+    # Padrão e "com LF" ambos ativam MB + Reccobeats
     result["musicbrainz"]["enabled"] = True
+    result["reccobeats"]["enabled"] = True
 
-    if choice == choice_all:
+    if choice == choice_with_lf:
         enabled, key = guide_lastfm()
         result["lastfm"]["enabled"] = enabled
         if enabled and key:
@@ -211,14 +213,6 @@ def _prompt_external_sources_optin() -> dict:
                 set_source_key("lastfm", key)
             except Exception:
                 logger.warning("Falha ao gravar API key de lastfm no keyring.")
-
-        enabled, key = guide_getsongbpm()
-        result["getsongbpm"]["enabled"] = enabled
-        if enabled and key:
-            try:
-                set_source_key("getsongbpm", key)
-            except Exception:
-                logger.warning("Falha ao gravar API key de getsongbpm no keyring.")
 
     return result
 
@@ -530,11 +524,11 @@ def _print_onboard_results(report: dict) -> None:
         if lf_with_tags:
             _console.print(f"  • {lf_with_tags} com tags descritivas.")
 
-    if "getsongbpm" in sources_used:
+    if "reccobeats" in sources_used:
         total = report.get("external_enhanced_count", 0)
-        gsb_matched = report.get("external_gsb_matched", 0)
-        _console.print("\n[bold]Melhoramento externo (GetSongBPM):[/bold]")
-        _console.print(f"  • {gsb_matched} de {total} faixas com BPM conhecido.")
+        rb_matched = report.get("external_rb_matched", 0)
+        _console.print("\n[bold]Melhoramento externo (Reccobeats):[/bold]")
+        _console.print(f"  • {rb_matched} de {total} faixas com audio features completas.")
 
     suggestions = report.get("context_suggestions") or report.get("suggestions") or []
     if suggestions:

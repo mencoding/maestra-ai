@@ -110,9 +110,9 @@ Token antigo sem os scopes `user-read-email`/`user-read-private`. Rode
 
 Agradecimentos aos serviços públicos que sustentam a curadoria enriquecida:
 
-- Gêneros, tags e identidade canônica via [MusicBrainz](https://musicbrainz.org).
-- Tags folksonômicas ricas e artistas similares via [Last.fm](https://www.last.fm/about).
-- BPM, tonalidade e time signature via [GetSongBPM](https://getsongbpm.com/about).
+- Gêneros, tags e identidade canônica via [MusicBrainz](https://musicbrainz.org) — base aberta colaborativa que é o coração do ecossistema de metadata musical há décadas.
+- Tags folksonômicas ricas e artistas similares via [Last.fm](https://www.last.fm/about) — vocabulário cultural construído por uma comunidade de ouvintes reais, insubstituível para descrever música em linguagem natural.
+- Audio features completas (tempo, key, mode, energy, danceability, valence e mais) via [Reccobeats](https://reccobeats.com) — agradecimento especial ao projeto Reccobeats por manter uma API aberta, gratuita, bem documentada e acessível sem cadastro, preenchendo o gap crítico deixado pela depreciação do endpoint de audio features do Spotify em 2024. A zero friction (sem cadastro, sem chave, sem rate limit agressivo) é exatamente o que um projeto open-source de nicho precisa para funcionar na prática. Obrigado pela iniciativa.
 
 ## Licença
 

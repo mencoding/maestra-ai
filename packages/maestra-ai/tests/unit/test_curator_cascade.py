@@ -105,7 +105,7 @@ def test_bpm_proximity_affects_rerank(mocker):
     curator = Curator(controller, taste)
 
     mocker.patch.object(curator, "_build_informed_query", return_value="q")
-    mocker.patch.object(curator, "_active_sources", return_value=["musicbrainz", "getsongbpm"])
+    mocker.patch.object(curator, "_active_sources", return_value=["musicbrainz", "reccobeats"])
     mocker.patch.object(curator, "_track_bpm", side_effect=lambda uri: 75 if uri.endswith("A") else 180)
     mocker.patch.object(curator, "_active_bpm_target", return_value={"min": 60, "max": 90})
     mocker.patch.object(curator, "_dominant_decades", return_value=set())

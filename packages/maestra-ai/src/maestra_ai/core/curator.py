@@ -58,7 +58,7 @@ class Curator:
         from maestra_ai.core.config import load_and_migrate
         cfg = load_and_migrate()
         ext = cfg.get("external_sources") or {}
-        return [s for s in ("musicbrainz", "lastfm", "getsongbpm") if (ext.get(s) or {}).get("enabled")]
+        return [s for s in ("musicbrainz", "lastfm", "reccobeats") if (ext.get(s) or {}).get("enabled")]
 
     def curate(self, context, count=5, exclude_uris=None, exclude_artists=None, max_per_artist=None):
         """Gera lista de faixas para um contexto.
@@ -167,15 +167,15 @@ class Curator:
         return {kw for kw in MOOD_TAG_KEYWORDS if kw in ctx_lower}
 
     def _track_bpm(self, uri: str) -> float | None:
-        """Retorna BPM cacheado para `uri` ou None."""
+        """Retorna tempo (BPM) cacheado via Reccobeats para `uri` ou None."""
         from maestra_ai.core.external import cache as cache_mod
         track = cache_mod.get_track(uri)
         if not track:
             return None
-        bpm_data = track.get("bpm")
-        if not bpm_data:
+        rb_data = track.get("reccobeats")
+        if not rb_data:
             return None
-        tempo = bpm_data.get("bpm")
+        tempo = rb_data.get("tempo")
         try:
             return float(tempo) if tempo else None
         except (ValueError, TypeError):

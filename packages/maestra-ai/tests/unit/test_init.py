@@ -330,7 +330,7 @@ class TestFlowB:
         monkeypatch.setattr(init, "_prompt_external_sources_optin", lambda: {
             "musicbrainz": {"enabled": False},
             "lastfm": {"enabled": False, "api_key": None},
-            "getsongbpm": {"enabled": False, "api_key": None},
+            "reccobeats": {"enabled": False},
         })
         monkeypatch.setattr(init.storage, "read_config", lambda: {})
         monkeypatch.setattr(init.storage, "write_config", lambda d: None)
@@ -382,7 +382,7 @@ class TestFlowB:
         monkeypatch.setattr(init, "_prompt_external_sources_optin", lambda: {
             "musicbrainz": {"enabled": False},
             "lastfm": {"enabled": False, "api_key": None},
-            "getsongbpm": {"enabled": False, "api_key": None},
+            "reccobeats": {"enabled": False},
         })
         monkeypatch.setattr(init.storage, "read_config", lambda: {})
         monkeypatch.setattr(init.storage, "write_config", lambda d: None)
@@ -420,7 +420,7 @@ class TestFlowB:
         monkeypatch.setattr(init, "_prompt_external_sources_optin", lambda: {
             "musicbrainz": {"enabled": False},
             "lastfm": {"enabled": False, "api_key": None},
-            "getsongbpm": {"enabled": False, "api_key": None},
+            "reccobeats": {"enabled": False},
         })
         monkeypatch.setattr(init.storage, "read_config", lambda: {})
         monkeypatch.setattr(init.storage, "write_config", lambda d: None)
@@ -458,7 +458,7 @@ class TestFlowB:
         monkeypatch.setattr(init, "_prompt_external_sources_optin", lambda: {
             "musicbrainz": {"enabled": False},
             "lastfm": {"enabled": False, "api_key": None},
-            "getsongbpm": {"enabled": False, "api_key": None},
+            "reccobeats": {"enabled": False},
         })
         monkeypatch.setattr(init.storage, "read_config", lambda: {})
         monkeypatch.setattr(init.storage, "write_config", lambda d: None)
@@ -489,7 +489,7 @@ class TestFlowB:
         monkeypatch.setattr(init, "_prompt_external_sources_optin", lambda: {
             "musicbrainz": {"enabled": False},
             "lastfm": {"enabled": False, "api_key": None},
-            "getsongbpm": {"enabled": False, "api_key": None},
+            "reccobeats": {"enabled": False},
         })
         monkeypatch.setattr(init.storage, "read_config", lambda: {})
         monkeypatch.setattr(init.storage, "write_config", lambda d: None)
@@ -537,7 +537,7 @@ class TestFlowB:
         monkeypatch.setattr(init, "_prompt_external_sources_optin", lambda: {
             "musicbrainz": {"enabled": False},
             "lastfm": {"enabled": False, "api_key": None},
-            "getsongbpm": {"enabled": False, "api_key": None},
+            "reccobeats": {"enabled": False},
         })
         monkeypatch.setattr(init.storage, "read_config", lambda: {})
         monkeypatch.setattr(init.storage, "write_config", lambda d: None)

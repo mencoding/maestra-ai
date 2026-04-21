@@ -24,10 +24,18 @@ class LastfmData(TypedDict):
     similar_artists: list[str]
 
 
-class BpmData(TypedDict):
-    bpm: float
-    key: str
-    time_signature: str
+class AudioFeaturesData(TypedDict):
+    tempo: float
+    key: int
+    mode: int
+    loudness: float
+    acousticness: float
+    danceability: float
+    energy: float
+    instrumentalness: float
+    liveness: float
+    speechiness: float
+    valence: float
 
 
 class EnhancedTrack(TypedDict):
@@ -36,7 +44,7 @@ class EnhancedTrack(TypedDict):
     artist_mbid: str | None
     musicbrainz: MusicBrainzData | None
     lastfm: LastfmData | None
-    bpm: BpmData | None
+    reccobeats: AudioFeaturesData | None
     sources: list[str]
     enhanced_at: str
     match_method: Literal["isrc", "name"]
@@ -45,7 +53,7 @@ class EnhancedTrack(TypedDict):
 class SourceResult(TypedDict, total=False):
     musicbrainz: MusicBrainzData
     lastfm: LastfmData
-    bpm: BpmData
+    reccobeats: AudioFeaturesData
     artist_mbid: str
     match_method: Literal["isrc", "name"]
 

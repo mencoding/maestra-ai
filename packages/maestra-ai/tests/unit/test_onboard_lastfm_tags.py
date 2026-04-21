@@ -12,7 +12,7 @@ def test_artists_tags_agrega_lastfm(mocker):
         "artist_mbid": None,
         "musicbrainz": {"mbid": "m", "genres": ["rock"], "tags": ["uplifting"]},
         "lastfm": {"top_tags": ["dreamy", "psychedelic"], "playcount": 1, "listeners": 1, "similar_artists": []},
-        "bpm": None,
+        "reccobeats": None,
         "sources": ["musicbrainz", "lastfm"],
         "enhanced_at": "2026-04-20T00:00:00",
         "match_method": "isrc",

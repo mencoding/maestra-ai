@@ -48,7 +48,7 @@ class Enhancer:
             "artist_mbid": None,
             "musicbrainz": None,
             "lastfm": None,
-            "bpm": None,
+            "reccobeats": None,
             "sources": [],
             "enhanced_at": _now_iso(),
             "match_method": "isrc",
@@ -102,8 +102,8 @@ def _apply_source_result(merged: dict, source_name: str, result: SourceResult) -
             merged["match_method"] = result["match_method"]
     if source_name == "lastfm" and "lastfm" in result:
         merged["lastfm"] = result["lastfm"]
-    if source_name == "getsongbpm" and "bpm" in result:
-        merged["bpm"] = result["bpm"]
+    if source_name == "reccobeats" and "reccobeats" in result:
+        merged["reccobeats"] = result["reccobeats"]
     merged["sources"].append(source_name)
 
 
@@ -116,13 +116,12 @@ def default_enhancer() -> Enhancer:
     """Monta enhancer com sources habilitadas conforme config.
 
     v0.10.4: API keys lidas via keyring (não mais via config.json plaintext).
-    Se enabled=True mas get_source_key retornar None, a source é pulada com
-    log de debug.
+    v0.11.0: Reccobeats substituiu GetSongBPM. Reccobeats não precisa de key.
     """
     from maestra_ai import __version__
-    from maestra_ai.core.external.getsongbpm import GetSongBpmSource
     from maestra_ai.core.external.lastfm import LastfmSource
     from maestra_ai.core.external.musicbrainz import MusicBrainzSource
+    from maestra_ai.core.external.reccobeats import ReccoBeatsSource
 
     cfg = _load_cfg()
     sources: list[EnhancementSource] = []
@@ -138,11 +137,7 @@ def default_enhancer() -> Enhancer:
         else:
             logger.debug("lastfm habilitado mas sem API key no keyring — pulando.")
 
-    if ext.get("getsongbpm", {}).get("enabled"):
-        gsb_key = get_source_key("getsongbpm")
-        if gsb_key:
-            sources.append(GetSongBpmSource(api_key=gsb_key))
-        else:
-            logger.debug("getsongbpm habilitado mas sem API key no keyring — pulando.")
+    if ext.get("reccobeats", {}).get("enabled"):
+        sources.append(ReccoBeatsSource())
 
     return Enhancer(sources=sources)
