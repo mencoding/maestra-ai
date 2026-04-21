@@ -420,7 +420,9 @@ def _director_status(args):
           "count": {"type": "integer", "minimum": 1, "maximum": 20, "default": 2},
       }, "additionalProperties": False})
 def _director_once(args):
-    return build_deps()["director"].run_once(count=args.get("count", 2))
+    # MusicDirector.run_once() assina add_count=, não count=. O schema externo
+    # mantém `count` por ergonomia do consumidor MCP; mapeamos aqui.
+    return build_deps()["director"].run_once(add_count=args.get("count", 2))
 
 
 # =========================================================================
