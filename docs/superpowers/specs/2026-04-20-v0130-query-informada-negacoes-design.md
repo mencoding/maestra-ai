@@ -65,7 +65,7 @@ Três unidades novas + duas modificadas. Todas isoladas e testáveis isoladament
 ### Unidades modificadas
 
 4. **`core/curator.py`**:
-   - `_build_informed_query()` passa a derivar query real via `ParsedContext + taste.conjunto_positivo`.
+   - `_build_informed_query()` passa a derivar query real via `ParsedContext + taste.get_preferred_artists()`.
    - `_track_tags()` passa a consumir `core/external/cache.py`, mergeando MB (autoritativo) + LF filtrado.
    - `curate()` ganha stage novo `_apply_negative_filter` entre `enhance_many` e `taste.is_rejected`, com fallback adaptativo.
 
@@ -152,7 +152,7 @@ def _track_tags(self, track: dict) -> set[str]:
 
 def _build_informed_query(self, parsed: ParsedContext) -> str | None:
     """Query informada: positive + artists_hint + top genre do
-    taste.conjunto_positivo + qualificador bpm. Pula top taste que
+    taste.get_preferred_artists() + qualificador bpm. Pula top taste que
     apareça em parsed.negative. Retorna None quando sem sinal."""
 
 def _apply_negative_filter(
@@ -267,8 +267,8 @@ return (tracks[:count], queries_used, sources_used)
 
 | Cenário | Comportamento |
 |---|---|
-| `len(filtered) >= MIN_CANDIDATES` | `filtered` usado. `degraded=False`. |
-| `len(filtered) < MIN_CANDIDATES` | Candidatos originais usados. `degraded=True`. Warning: `"hard filter on %s would leave %d candidates (< %d); degrading to soft penalty"`. `anti_tag_penalty` ativa. |
+| `len(filtered) >= MIN_CANDIDATES` (10) | `filtered` usado. `degraded=False`. Fronteira é `>=`: exatamente 10 candidatos sobrando ainda conta como sucesso do hard filter. |
+| `len(filtered) < MIN_CANDIDATES` (strict less) | Candidatos originais usados. `degraded=True`. Warning: `"hard filter on %s would leave %d candidates (< %d); degrading to soft penalty"`. `anti_tag_penalty` ativa. |
 | Todos com tag negativa | `filtered=[]`. Degraded path. Faixa com menor overlap sobe no re-rank. Não ideal mas melhor que fila vazia. |
 
 ### Memoização
