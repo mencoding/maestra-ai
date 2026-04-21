@@ -398,6 +398,99 @@ class TestBuildInformedQuery:
         q = curator._build_informed_query(self._ctx(negative=("ambient",)))
         assert q is None
 
+    # --- Testes T3: DSL Spotify artist:"..." (#20-4) ---
+
+    def test_build_informed_query_um_artist_hint_usa_dsl_spotify(self, curator, monkeypatch):
+        """N=1 artist_hint → query usa DSL artist:"Nome"."""
+        monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: [])
+        q = curator._build_informed_query(self._ctx(artists_hint=("The HU",)))
+        assert q is not None
+        assert 'artist:"The HU"' in q
+
+    def test_build_informed_query_multiplos_artists_concat_com_or(self, curator, monkeypatch):
+        """N=3 artists_hint → query usa DSL com OR entre todos."""
+        monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: [])
+        q = curator._build_informed_query(
+            self._ctx(artists_hint=("The HU", "Wardruna", "Heilung"))
+        )
+        assert q is not None
+        assert 'artist:"The HU"' in q
+        assert 'artist:"Wardruna"' in q
+        assert 'artist:"Heilung"' in q
+        assert " OR " in q
+
+    def test_build_informed_query_inclui_positive_livre(self, curator, monkeypatch):
+        """artist_hint + positive → DSL artist + texto livre para positive."""
+        monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: [])
+        q = curator._build_informed_query(
+            self._ctx(artists_hint=("The HU",), positive=("metal",))
+        )
+        assert q is not None
+        assert 'artist:"The HU"' in q
+        assert "metal" in q
+
+    def test_build_informed_query_inclui_bpm_livre(self, curator, monkeypatch):
+        """artist_hint + bpm → DSL artist + qualificador bpm como texto livre."""
+        from maestra_ai.core.context_parser import BpmRange
+        monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: [])
+        q = curator._build_informed_query(
+            self._ctx(artists_hint=("The HU",), bpm=BpmRange(min=100, max=140))
+        )
+        assert q is not None
+        assert 'artist:"The HU"' in q
+        # mid = (100+140)//2 = 120
+        assert "120bpm" in q
+
+    def test_build_informed_query_sem_artist_hint_usa_top_taste_com_dsl(self, curator, monkeypatch):
+        """Sem artists_hint, top taste também usa DSL artist:"..."."""
+        monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: ["Heilung"])
+        q = curator._build_informed_query(self._ctx())
+        assert q is not None
+        assert 'artist:"Heilung"' in q
+
+    def test_build_informed_query_top_taste_multiplos_candidatos_usa_or(self, curator, monkeypatch):
+        """Top taste com N>1 candidatos não-negados: todos entram na DSL via OR."""
+        monkeypatch.setattr(
+            curator.taste, "get_preferred_artists",
+            lambda: ["Heilung", "Wardruna", "The HU"],
+        )
+        q = curator._build_informed_query(self._ctx())
+        assert q is not None
+        assert 'artist:"Heilung"' in q
+        assert 'artist:"Wardruna"' in q
+        assert 'artist:"The HU"' in q
+        assert " OR " in q
+
+    def test_build_informed_query_top_taste_filtra_negados_e_mantem_resto(self, curator, monkeypatch):
+        """Top taste: artistas negados são filtrados; resto ainda entra via OR."""
+        monkeypatch.setattr(
+            curator.taste, "get_preferred_artists",
+            lambda: ["Heilung", "Wardruna", "The HU"],
+        )
+        q = curator._build_informed_query(self._ctx(negative=("heilung",)))
+        assert q is not None
+        assert 'artist:"Heilung"' not in q
+        assert 'artist:"Wardruna"' in q
+        assert 'artist:"The HU"' in q
+
+    def test_build_informed_query_aspas_no_nome_artist(self, curator, monkeypatch):
+        """Aspas internas no nome do artista são removidas antes do wrap DSL."""
+        monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: [])
+        q = curator._build_informed_query(
+            self._ctx(artists_hint=('Foo "Bar" Baz',))
+        )
+        assert q is not None
+        # Aspas internas removidas → nome limpo entre as aspas externas da DSL
+        assert 'artist:"Foo Bar Baz"' in q
+        # Não deve ter aspas duplas dentro do valor da DSL
+        assert 'artist:"Foo "Bar" Baz"' not in q
+
+    def test_build_informed_query_sem_sinal_retorna_none(self, curator, monkeypatch):
+        """Regressão: sem artists_hint, sem taste e sem positive → None."""
+        monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: [])
+        q = curator._build_informed_query(self._ctx())
+        assert q is None
+
 
 class TestCurateIntegracaoV013:
     """Integração T11: curate() usa parsed + negative_filter + anti_tag_penalty."""
@@ -455,3 +548,136 @@ class TestCurateIntegracaoV013:
         with caplog.at_level(logging.WARNING):
             curator.curate("rock evitar ambient", count=3)
         assert any("degrading to soft penalty" in r.message for r in caplog.records)
+
+
+class TestValidateArtistsMb:
+    """Testes para _validate_artists_mb e integração em _build_informed_query (T4)."""
+
+    def _ctx(self, **kwargs):
+        from maestra_ai.core.context_parser import ParsedContext
+        defaults = {"text": "", "positive": (), "negative": (), "artists_hint": (), "bpm": None}
+        defaults.update(kwargs)
+        return ParsedContext(**defaults)
+
+    def _make_curator_with_mb(self, mock_controller, taste, mb_mock):
+        """Cria Curator com atributo musicbrainz injetado (simulando source configurada)."""
+        c = Curator(mock_controller, taste)
+        c.musicbrainz = mb_mock
+        return c
+
+    def test_build_informed_query_valida_artists_via_mb(
+        self, mock_controller, taste, monkeypatch
+    ):
+        """MB valida 'The HU' (True) e rejeita 'FakeBand' (False).
+
+        Query resultante deve conter artist:"The HU" mas NÃO artist:"FakeBand".
+        """
+        mb_mock = MagicMock()
+        mb_mock.artist_exists.side_effect = lambda name: name == "The HU"
+
+        curator = self._make_curator_with_mb(mock_controller, taste, mb_mock)
+        monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: [])
+
+        parsed = self._ctx(artists_hint=("The HU", "FakeBand"))
+        q = curator._build_informed_query(parsed)
+
+        assert q is not None
+        assert 'artist:"The HU"' in q
+        assert "FakeBand" not in q
+
+    def test_build_informed_query_mb_ausente_mantem_artists(
+        self, mock_controller, taste, monkeypatch
+    ):
+        """Curator com musicbrainz=None → artists_hint passa direto sem validação."""
+        curator = Curator(mock_controller, taste)  # default musicbrainz=None
+        assert curator.musicbrainz is None
+        monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: [])
+
+        parsed = self._ctx(artists_hint=("FakeBand",))
+        q = curator._build_informed_query(parsed)
+
+        assert q is not None
+        assert 'artist:"FakeBand"' in q
+
+    def test_build_informed_query_todos_invalidados_cai_no_top_taste(
+        self, mock_controller, taste, monkeypatch
+    ):
+        """MB rejeita todos os artists_hint → cai no fallback de top taste.
+
+        Top taste tem 'Heilung' → query deve usar Heilung via DSL.
+        """
+        mb_mock = MagicMock()
+        mb_mock.artist_exists.return_value = False  # rejeita tudo
+
+        curator = self._make_curator_with_mb(mock_controller, taste, mb_mock)
+        monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: ["Heilung"])
+
+        parsed = self._ctx(artists_hint=("FakeBand1", "FakeBand2"))
+        q = curator._build_informed_query(parsed)
+
+        assert q is not None
+        assert "Heilung" in q
+        assert "FakeBand" not in q
+
+    def test_validate_artists_mb_usa_cache_em_memoria(
+        self, mock_controller, taste, monkeypatch
+    ):
+        """Cache em memória: mesmo nome chamado 2x deve invocar MB apenas 1x."""
+        mb_mock = MagicMock()
+        mb_mock.artist_exists.return_value = True
+
+        curator = self._make_curator_with_mb(mock_controller, taste, mb_mock)
+
+        # Chama 2x com o mesmo nome
+        result1 = curator._validate_artists_mb(["The HU"])
+        result2 = curator._validate_artists_mb(["The HU"])
+
+        assert result1 == ["The HU"]
+        assert result2 == ["The HU"]
+        # MB deve ter sido consultado apenas 1x (cache evita segundo lookup)
+        assert mb_mock.artist_exists.call_count == 1
+
+    def test_validate_artists_mb_lista_vazia_retorna_vazia(
+        self, mock_controller, taste
+    ):
+        """Lista vazia de entrada → retorna lista vazia sem chamar MB."""
+        mb_mock = MagicMock()
+        curator = self._make_curator_with_mb(mock_controller, taste, mb_mock)
+
+        result = curator._validate_artists_mb([])
+
+        assert result == []
+        mb_mock.artist_exists.assert_not_called()
+
+
+class TestNormalizeContext:
+    """Testes para _normalize_context — bug #20-2."""
+
+    def test_normalize_context_aceita_dict_com_text(self, curator):
+        """Dict com campo 'text' deve retornar apenas o valor texto."""
+        resultado = curator._normalize_context({"text": "metal ritual", "bpm": None})
+        assert resultado == "metal ritual"
+
+    def test_normalize_context_aceita_string(self, curator):
+        """String direta deve passar sem alteração (regressão)."""
+        resultado = curator._normalize_context("metal ritual")
+        assert resultado == "metal ritual"
+
+    def test_normalize_context_aceita_none(self, curator):
+        """None deve retornar DEFAULT_CONTEXT (regressão)."""
+        from maestra_ai.core.curator import DEFAULT_CONTEXT
+        resultado = curator._normalize_context(None)
+        assert resultado == DEFAULT_CONTEXT
+
+    def test_normalize_context_dict_sem_text(self, curator):
+        """Dict sem campo 'text' deve retornar DEFAULT_CONTEXT."""
+        from maestra_ai.core.curator import DEFAULT_CONTEXT
+        resultado = curator._normalize_context({"bpm": None})
+        assert resultado == DEFAULT_CONTEXT
+
+    def test_normalize_context_nao_serializa_dict_como_query(self, curator):
+        """Garantir que dict com bpm nunca vira repr literal na query."""
+        resultado = curator._normalize_context({"text": "foo", "bpm": None})
+        assert "{" not in resultado
+        assert "'bpm'" not in resultado
+        assert "none" not in resultado.lower()

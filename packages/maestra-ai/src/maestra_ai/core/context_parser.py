@@ -119,7 +119,10 @@ def parse(text: str, bpm: BpmRange | dict | None = None) -> ParsedContext:
     positive: list[str] = []
     artists_hint: list[str] = []
 
-    for clause in _split_clauses(text):
+    clauses = _split_clauses(text)
+    i = 0
+    while i < len(clauses):
+        clause = clauses[i]
         clause_norm = _normalize_for_match(clause)
 
         neg = _extract_after_marker_pair(clause, clause_norm, neg_markers_norm)
@@ -128,6 +131,7 @@ def parse(text: str, bpm: BpmRange | dict | None = None) -> ParsedContext:
             parts = rest_orig.split()
             if parts:
                 negative.append(parts[0].casefold())
+            i += 1
             continue
 
         pos = _extract_after_marker_pair(clause, clause_norm, pos_markers_norm)
@@ -140,6 +144,29 @@ def parse(text: str, bpm: BpmRange | dict | None = None) -> ParsedContext:
             # texto original. Capitalizado = artist, tratado em _extract_artists.
             if parts and parts[0] and parts[0][0].islower():
                 positive.append(parts[0].casefold())
+            i += 1
+            # Absorver clauses seguintes como continuação da lista de artists
+            # até encontrar: (a) clause com marker próprio, (b) clause sem
+            # capitalização inicial (descritor, não nome-próprio), (c) clause
+            # sem artists extraíveis, ou (d) fim da lista.
+            while i < len(clauses):
+                next_clause = clauses[i].strip()
+                next_norm = _normalize_for_match(next_clause)
+                # Para se a próxima clause tem marker próprio (positivo ou negativo)
+                if any(m in next_norm for m in (neg_markers_norm + pos_markers_norm)):
+                    break
+                # Para se não começa com letra maiúscula (descritor, não artista)
+                if not next_clause or not next_clause[0].isupper():
+                    break
+                # Para se não extrai artistas reconhecíveis
+                more_artists = _extract_artists(next_clause)
+                if not more_artists:
+                    break
+                artists_hint.extend(more_artists)
+                i += 1
+            continue
+
+        i += 1
 
     return ParsedContext(
         text=text,

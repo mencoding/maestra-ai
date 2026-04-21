@@ -189,7 +189,9 @@ def _build_deps(args: argparse.Namespace) -> dict:
     feedback_prompter = FeedbackPrompter(FEEDBACK_PROMPT_STATE_PATH)
     history_analyzer = HistoryAnalyzer(controller)
     flow_analyzer = FlowAnalyzer(taste)
-    curator = Curator(controller, taste)
+    from maestra_ai.core.external.enhancer import build_musicbrainz_source_if_enabled
+    mb_source = build_musicbrainz_source_if_enabled()
+    curator = Curator(controller, taste, musicbrainz=mb_source)
     # Subcomandos como auth, doctor, onboard podem rodar sem playlist_id.
     # Validação individual fica a cargo do caller que realmente precisa.
     try:

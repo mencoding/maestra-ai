@@ -158,3 +158,19 @@ def default_enhancer() -> Enhancer:
         sources.append(ReccoBeatsSource())
 
     return Enhancer(sources=sources)
+
+
+def build_musicbrainz_source_if_enabled():
+    """Retorna MusicBrainzSource quando habilitado via config, senão None.
+
+    Usado por callers que querem injetar MB no Curator para validação de
+    artist_hint (v0.14.0 / #20-1), sem depender do Enhancer completo.
+    """
+    from maestra_ai import __version__
+    from maestra_ai.core.external.musicbrainz import MusicBrainzSource
+
+    cfg = _load_cfg()
+    ext = cfg.get("external_sources") or {}
+    if ext.get("musicbrainz", {}).get("enabled"):
+        return MusicBrainzSource(app_version=__version__)
+    return None

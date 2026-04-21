@@ -157,6 +157,53 @@ class TestParsedContextHashable:
         assert p1.bpm == BpmRange(min=100, max=120)
 
 
+class TestMultiArtistAposMarker:
+    """Testes para o bug #20-3: parser absorve clauses subsequentes como
+    lista de artists após detectar marker positivo numa clause."""
+
+    def test_parse_captura_multiplos_artists_apos_tipo_com_virgulas(self):
+        """Input com lista de artistas separados por vírgula após 'tipo'
+        deve capturar todos os artistas, não apenas o primeiro."""
+        from maestra_ai.core.context_parser import parse
+        p = parse("tipo The HU, Wardruna, Nine Treasures")
+        assert p.artists_hint == ("The HU", "Wardruna", "Nine Treasures")
+
+    def test_parse_captura_multiplos_artists_com_negativo_depois(self):
+        """Lista de artistas deve ser interrompida ao encontrar clause
+        com marker negativo. Negativos posteriores devem ser capturados."""
+        from maestra_ai.core.context_parser import parse
+        p = parse("metal ritual, tipo The HU, Wardruna, evitar hip-hop")
+        assert p.artists_hint == ("The HU", "Wardruna")
+        assert p.negative == ("hip-hop",)
+
+    def test_parse_para_lista_em_clause_minuscula(self):
+        """Clause que começa com letra minúscula não é artista — deve
+        interromper a absorção da lista."""
+        from maestra_ai.core.context_parser import parse
+        p = parse("tipo The HU, Wardruna, percussão densa")
+        assert p.artists_hint == ("The HU", "Wardruna")
+
+    def test_parse_regressao_artist_unico(self):
+        """Comportamento pré-fix deve ser preservado: um único artista
+        após marker continua funcionando."""
+        from maestra_ai.core.context_parser import parse
+        p = parse("tipo The HU")
+        assert p.artists_hint == ("The HU",)
+
+    def test_parse_regressao_negativos_isolados(self):
+        """Negativos isolados separados por vírgula não devem ser
+        afetados pela lógica de absorção de multi-artist."""
+        from maestra_ai.core.context_parser import parse
+        p = parse("evitar hip-hop, evitar ambient")
+        assert p.negative == ("hip-hop", "ambient")
+
+    def test_parse_mantem_ordem_artists(self):
+        """Ordem de aparição dos artistas no texto deve ser preservada."""
+        from maestra_ai.core.context_parser import parse
+        p = parse("tipo Eluveitie, Wardruna, Nine Treasures")
+        assert p.artists_hint == ("Eluveitie", "Wardruna", "Nine Treasures")
+
+
 class TestNormalizacao:
     def test_nao_e_nao_sao_equivalentes(self):
         from maestra_ai.core.context_parser import parse

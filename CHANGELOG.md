@@ -7,6 +7,101 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] — 2026-04-21
+
+Release focada em aderência da curadoria ao contexto do usuário. Quatro bugs
+estruturais no pipeline de query-building foram catalogados empiricamente em
+três curadorias live (aderência 17–20%) e consolidados na issue #20:
+
+### Corrigido
+
+- **#20-2 (CRÍTICO) — `str(context_dict)` vazando como query ao Spotify.**
+  O MCP `_curate` passava o dict `ctx["context"]` (shape `{"text": ..., "bpm": ...}`)
+  ao `Curator.curate()`; em seguida `Curator._normalize_context` fazia
+  `str(context).strip()` sem checar tipo, gerando string literal de dict
+  (`"{'text': '...', 'bpm': none}"`). Essa string chegava ao fallback de
+  `_resolve_queries` e era enviada como `q=` ao Spotify, retornando `HTTP
+  400 Query exceeds maximum length of 250 characters`. Fix defense-in-depth
+  em duas camadas: `tools.py _curate` extrai `text` do dict antes de chamar
+  `curate()`; `Curator._normalize_context` também desempacota dict com campo
+  `text`. Fallback `"default"` redundante em `tools.py` removido — curator é
+  a única fonte de verdade para `DEFAULT_CONTEXT`.
+- **#20-3 — Parser extraía apenas 1 artist após marker `tipo`.**
+  `_split_clauses` fatia o texto por `,`, `.`, `;`. Entrada
+  `"tipo The HU, Wardruna, Nine Treasures"` virava 3 clauses; só a primeira
+  tinha marker, então `_extract_artists` só rodava nela. Os 5 artistas
+  subsequentes eram descartados silenciosamente. Fix em `context_parser.parse()`:
+  após detectar marker positivo, loop interno absorve clauses seguintes como
+  continuação da lista de artists, parando em (a) clause com marker próprio,
+  (b) clause não capitalizada, (c) clause sem artists extraíveis, (d) fim
+  do texto. Comportamento de negativos isolados preservado.
+- **#20-4 — Ausência de DSL Spotify `artist:"…"` causava prefix matching.**
+  `_build_informed_query` concatenava artist_hint como texto livre.
+  Query `"The HU"` retornava The Human League, The Hunter × 4, The Huntress,
+  The Hustle, The Hub, The Hum, The Hunger, e tracks do soundtrack de Hunger
+  Games. Fix: quando `parsed.artists_hint` (ou top taste filtrado por negative)
+  tem N > 0 artistas, montar query com `artist:"X" OR artist:"Y" OR ...`.
+  Positive e bpm seguem concatenados como texto livre. Aspas internas em nomes
+  de artista removidas antes do wrap. Helper `_fmt_artist_dsl` extraído e
+  reusado nos dois caminhos (artist_hint + fallback taste).
+- **#20-1 — Artist_hint sem validação causava polysemy lexical.**
+  `"Heilung"` (banda nórdica) colidia lexicalmente com tracks em alemão que
+  têm "Heilung" (cura) no título — Spotify retornava therapeutic music
+  alemã. Fix: camada de validação via MusicBrainz em `Curator._validate_artists_mb`,
+  chamada antes do `_fmt_artist_dsl`. Aceita artistas com score ≥ 85 no
+  `search_artists` da MB; rejeita o resto. Cache em memória por instância
+  evita lookups repetidos. Fallback gracioso: MB `None` (source não
+  configurada) → skip validação; exception → aceita (não penalizar por
+  instabilidade de rede). Wiring em `cli/__init__.py` e `mcp/deps.py` via
+  novo helper `build_musicbrainz_source_if_enabled()` em
+  `core/external/enhancer.py`.
+
+### Adicionado
+
+- `MusicBrainzSource.artist_exists(name) -> bool` — validação de existência
+  de artista com score-threshold parametrizado pela constante
+  `_MB_ARTIST_SCORE_THRESHOLD = 85`. Fallback gracioso em exception/timeout.
+- Parâmetro opcional `musicbrainz` em `Curator.__init__` (atributo
+  declarado, tipo `MusicBrainzSource | None`). Injetado automaticamente
+  pelos dois pontos de construção (CLI e MCP deps) quando
+  `external_sources.musicbrainz.enabled` for `True`.
+- `Curator._fmt_artist_dsl(names)` — formata lista de artists como DSL
+  Spotify (`artist:"X" OR artist:"Y"`), com remoção de aspas internas.
+- `Curator._validate_artists_mb(names)` — filtra lista via MB com cache
+  em memória por instância. Retorna lista intacta se MB não configurado.
+- `core/external/enhancer.build_musicbrainz_source_if_enabled()` — helper
+  que instancia `MusicBrainzSource` quando habilitado na config, senão
+  retorna `None`.
+
+### Diagnóstico empírico
+
+Três curadorias live em 2026-04-21 (contexto "metal tribal ritual com
+momentum operacional", referências The HU, Wardruna, Heilung) mostraram:
+
+| Curadoria | Query enviada | Aderência ao contexto |
+|---|---|---|
+| 15:58 | `"The HU Heilung"` | 1/6 = 17% |
+| 16:50 | `"The HU Heilung"` | 2/10 = 20% |
+| 17:20 | `"The HU"` (após reformulação) | 2/20 = 10% |
+
+A reformulação do contexto piorou o recall — evidência empírica de que a
+raiz era estrutural no pipeline, não no input. Validação pós-merge deve
+repetir o teste e verificar aderência > 70% (critério do spec).
+
+### Dependências
+
+- `musicbrainzngs` — agora também consumido em `artist_exists` via
+  `search_artists`. Rate limit de 1 req/s preservado pela config já
+  estabelecida em `MusicBrainzSource.__init__`.
+
+### Follow-ups conhecidos (issues abertas)
+
+- **#21** (`playlist TTL-aware`) — alinhar duração da playlist à janela do
+  TTL de contexto. Desbloqueado pela v0.14.0 (antes não fazia sentido com
+  curadoria a 10–20% de aderência).
+- Limitação pré-existente em `_extract_artists`: regex `[A-Z][A-Za-z]*` não
+  cobre diacríticos (Skáld trunca para `Sk`). Fora do escopo desta release.
+
 ## [maestra-mcp 0.9.1] — 2026-04-21
 
 ### Corrigido
