@@ -50,3 +50,43 @@ class TestNegativos:
         from maestra_ai.core.context_parser import parse
         p = parse("metal tribal denso")
         assert p.negative == ()
+
+
+class TestPositivos:
+    def test_extrai_termo_apos_tipo(self):
+        from maestra_ai.core.context_parser import parse
+        p = parse("tipo lo-fi")
+        assert "lo-fi" in p.positive
+
+    def test_extrai_termo_apos_como(self):
+        from maestra_ai.core.context_parser import parse
+        p = parse("algo como jazz")
+        assert "jazz" in p.positive
+
+    def test_extrai_termo_apos_parecido_com(self):
+        from maestra_ai.core.context_parser import parse
+        p = parse("parecido com bossa")
+        assert "bossa" in p.positive
+
+    def test_positivo_e_negativo_coexistem(self):
+        from maestra_ai.core.context_parser import parse
+        p = parse("tipo rock, sem ballads")
+        assert "rock" in p.positive
+        assert "ballads" in p.negative
+
+
+class TestArtistsHint:
+    def test_captura_nome_proprio_apos_marker_positivo(self):
+        from maestra_ai.core.context_parser import parse
+        p = parse("tipo The HU")
+        assert "The HU" in p.artists_hint
+
+    def test_captura_multi_palavra_capitalizada(self):
+        from maestra_ai.core.context_parser import parse
+        p = parse("como Dance With The Dead")
+        assert "Dance With The Dead" in p.artists_hint
+
+    def test_palavra_minuscula_nao_vira_artist(self):
+        from maestra_ai.core.context_parser import parse
+        p = parse("tipo rock")
+        assert p.artists_hint == ()
