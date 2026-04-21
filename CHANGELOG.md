@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] — 2026-04-21
+
+### Adicionado
+- **Parser unificado de contexto** (`context_parser.py`) com `ParsedContext`
+  frozen + hashable — campos `text`, `positive`, `negative`, `artists_hint`,
+  `bpm`. Markers positivos (`tipo`, `como`, `parecido com`, `mais`) e negativos
+  (`evitar`, `sem`, `não`, `nao`) parseados per-cláusula com normalização NFKC
+  + casefold. Artistas capitalizados capturados via regex em `artists_hint`
+  sem vazar pra `positive`.
+- **`BpmRange`** frozen dataclass (`min`, `max`, ambos `int | None`) substitui
+  `dict` no campo `bpm` do `ParsedContext` para preservar hashability. Aceita
+  ingress via dict `{min, max}` através de `BpmRange.from_any()`.
+- **`ContextState.parsed()`** memoizado por `(text, bpm)` com invalidação
+  automática em `set()`, `clear()` e `clear_bpm()`. Identidade preservada
+  entre chamadas idempotentes.
+- **`core/external/tag_filter.py`** — `filter_lastfm_tags()` remove meta-tags
+  (décadas, países, avaliativos), normaliza case e corta `top_n` por
+  popularidade. Base pra `_track_tags` real.
+- **`Curator._track_tags()`** real — consome cache external mergeando MB
+  (canônico) + LF (filtrado via `tag_filter`). Encerra stub de v0.10.0-alpha.1.
+  Desbloqueia `tag_similarity` no scoring composto.
+- **`Curator._build_informed_query(parsed)`** real — deriva query de
+  `ParsedContext` cruzado com `taste.get_preferred_artists()`, pulando top
+  taste que batem com `parsed.negative`. BPM target vira qualificador
+  (ex: `110bpm`).
+- **`Curator._apply_negative_filter`** — hard filter adaptativo: remove
+  candidatos com tag negada; se resultado < `MIN_CANDIDATES`, preserva
+  originais com `degraded=True` e log warning.
+- **`scoring.anti_tag_penalty`** — penalty proporcional ao overlap com tags
+  negadas, capped em 3, ativa só em modo degraded (`W_ANTI_TAG=0.4` inicial).
+
+### Alterado
+- **`Curator.curate()`** agora aceita `str` ou `ParsedContext` como contexto
+  (duck-typing via `hasattr(context, "text")`). Fluxo interno: parse → query
+  informada → fallback SEMANTIC_MAP → `enhance_many` → `_apply_negative_filter`
+  → re-rank com `anti_tag_penalty` quando degraded.
+
+### Corrigido
+- **Issue #8**: curadoria respeita negações ("evitar X", "sem Y") e usa tags
+  reais do cache external no scoring composto.
+
+### Relacionado
+- Issue #13 continua aberta para melhorias futuras: parser EN, threshold de
+  count em LF, cascade de ampliação da query informada, telemetria pra
+  calibrar weights. Também: regex de `_extract_artists` só pega `[A-Z]`
+  ASCII (gap em "José", "Ólafur"); shape `list[str]` de `lastfm.top_tags`
+  diverge do esperado pelo `filter_lastfm_tags` (wrap adapter em
+  `_track_tags` como solução de curto prazo).
+
 ## [0.12.0] — 2026-04-20
 
 ### Adicionado

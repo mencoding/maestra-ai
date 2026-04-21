@@ -4,7 +4,7 @@
 **Issue principal:** [#8](https://github.com/mencoding/maestra-ai/issues/8)
 **Issue de backlog:** [#13](https://github.com/mencoding/maestra-ai/issues/13) (itens rejeitados por YAGNI imediato)
 **Autor:** Léo + Claude (brainstorm síncrono)
-**Status:** approved — aguardando writing-plans
+**Status:** approved | **Implementado:** 2026-04-21 (branch `feat/issue-8-v0130-query-informada-negacoes`, commits `6fbca0e..0265af2`, suite 891 passed)
 
 ---
 
@@ -55,8 +55,9 @@ Três unidades novas + duas modificadas. Todas isoladas e testáveis isoladament
    - Constantes centralizadas: `POSITIVE_MARKERS`, `NEGATIVE_MARKERS`, `META_TAGS`.
 
 2. **`ParsedContext`** — dataclass frozen, definida em `context_parser.py`.
-   - Campos: `text: str`, `positive: tuple[str, ...]`, `negative: tuple[str, ...]`, `artists_hint: tuple[str, ...]`, `bpm: dict | None`.
+   - Campos: `text: str`, `positive: tuple[str, ...]`, `negative: tuple[str, ...]`, `artists_hint: tuple[str, ...]`, `bpm: BpmRange | None`.
    - Frozen → hashable, seguro pra cache.
+   - **Nota (T4.5):** campo `bpm` é `BpmRange` (não `dict`) para garantir hashability. Ver seção "Divergências implementadas vs spec original".
 
 3. **`core/external/tag_filter.py`** — helper puro.
    - `filter_lastfm_tags(raw: list[dict], *, top_n: int = 10) -> set[str]`.
@@ -101,17 +102,32 @@ META_TAGS = frozenset({
     "music", "cool", "nice",
 })
 
+# T4.5: BpmRange é frozen dataclass (em vez de dict) para garantir hashability
+# do ParsedContext. parse() ainda aceita dict via BpmRange.from_any().
+@dataclass(frozen=True)
+class BpmRange:
+    min: int | None = None
+    max: int | None = None
+
+    @classmethod
+    def from_any(cls, value: "BpmRange | dict | None") -> "BpmRange | None":
+        """Aceita BpmRange, dict com keys min/max, ou None. Normaliza para BpmRange."""
+        ...
+
 @dataclass(frozen=True)
 class ParsedContext:
     text: str
     positive: tuple[str, ...] = ()
     negative: tuple[str, ...] = ()
     artists_hint: tuple[str, ...] = ()
-    bpm: dict | None = None
+    bpm: BpmRange | None = None  # T4.5: era dict | None; agora BpmRange para hashability
 
-def parse(text: str, bpm: dict | None = None) -> ParsedContext:
+def parse(text: str, bpm: "BpmRange | dict | None" = None) -> ParsedContext:
     """Extrai intenção estruturada de texto livre. Puro, idempotente,
-    determinístico. Nenhum I/O, nenhum logging."""
+    determinístico. Nenhum I/O, nenhum logging.
+
+    `bpm` aceita dict {min, max}, BpmRange ou None (ergonomia para callers
+    que passam o dict do disco); normalizado para BpmRange internamente."""
 ```
 
 **Regras de parsing:**
@@ -364,6 +380,43 @@ Cada camada: teste primeiro, red confirmado, fix, green. Se camada N não for te
 2. Implementação em branch `feat/issue-8-query-informada-negacoes` baseada em `main` pós-merge das PRs #11, #12.
 3. Release `v0.13.0` (semver minor — novo comportamento visível, sem breaking change).
 4. CHANGELOG entry referenciando #8 como fechado e #13 como aberto pra v0.14+.
+
+## Divergências implementadas vs spec original
+
+Detectadas durante execução (commit T4.5 `4676df6`). Docs atualizados em 2026-04-21.
+
+### 1. `BpmRange` dataclass (substitui `dict`)
+
+Spec original definiu `bpm: dict | None` em `ParsedContext`. Durante implementação,
+identificou-se que `dict` quebra hashability de frozen dataclasses (o dict é mutável e
+não é hashável). Fix: novo `BpmRange(frozen=True, min: int | None, max: int | None)` com
+classmethod `from_any()` que aceita `BpmRange | dict | None`. Callers que passam dict do
+disco (ex: `ContextState.parsed()`) continuam funcionando sem mudança na camada de
+persistência.
+
+Impacto: `_build_informed_query` usa `parsed.bpm.min` / `parsed.bpm.max` (atributo),
+não `parsed.bpm.get("min")` / `parsed.bpm.get("max")` (dict API).
+
+### 2. Artist não vaza para `positive` (fix de parse)
+
+Spec original não especificou o comportamento de `_extract_after_marker` quando o rest
+começa com letra maiúscula. Na prática, `parse("tipo The HU")` colocava `"the"` em
+`positive` (o primeiro token do rest normalizado, casefold). Fix: `_extract_after_marker`
+foi refatorado para `_extract_after_marker_pair`, que devolve `(rest_norm, rest_orig)`.
+A decisão positive vs artists usa o case ORIGINAL do primeiro token: só cai em `positive`
+se começar com minúsculo no texto cru. Resultado: `"tipo The HU"` → `artists_hint=("The HU",)`,
+`positive=()` (correto).
+
+### 3. Shape real de `lastfm.top_tags` no cache (list[str])
+
+Spec assumiu que `lastfm.top_tags` no cache externo seria `list[dict]` com keys `name` e
+`count` (shape da API Last.fm). O cache real (`external_cache.json` v2) armazena `list[str]`
+(nomes apenas, sem count), pois `LastfmSource._artist_top_tags` flattena antes de gravar.
+Fix em `_track_tags`: wrappa strings no shape `[{"name": s, "count": 0}]` antes de passar
+para `filter_lastfm_tags`. O corte `top_n` por count vira no-op, mas o filtro de meta-tags
+(décadas, países, avaliativos) continua funcionando. Documentado no docstring do método.
+
+---
 
 ## Referências
 

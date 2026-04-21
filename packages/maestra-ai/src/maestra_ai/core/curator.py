@@ -1,5 +1,13 @@
 """Curator — traduz contexto livre em buscas e retorna faixas filtradas."""
 
+import logging
+
+# Import de módulo (não de símbolo) para permitir monkeypatch em testes de
+# `_track_tags` sem exigir patch do caminho `maestra_ai.core.external.cache`.
+from maestra_ai.core.external import cache as cache_mod
+
+logger = logging.getLogger(__name__)
+
 # Tabela semântica: palavras-chave → queries de busca
 SEMANTIC_MAP = {
     "foco": ["lo-fi instrumental", "ambient study", "minimal piano", "post-rock instrumental"],
@@ -45,14 +53,40 @@ class Curator:
         self.controller = controller
         self.taste = taste
 
-    def _build_informed_query(self, context: str) -> str | None:
-        """Monta query "{tag_dominante} {mood} {decade}" a partir de tags do perfil.
+    def _build_informed_query(self, parsed) -> str | None:
+        """Query informada a partir de ParsedContext + taste.
 
-        v0.10.0-alpha.1: stub mínimo (retorna None). Cascade cai direto no
-        SEMANTIC_MAP. A derivação real via conjunto_positivo virá quando
-        houver uso suficiente para calibrar.
+        Formato: "{artist_hint_ou_top_taste} {positive} {bpm_qualifier}".
+        Skip top taste que aparecem em negative. Retorna None se nenhum sinal.
         """
-        return None
+        negative = set(parsed.negative) if parsed.negative else set()
+
+        # Parte 1: artista (artist_hint tem prioridade sobre top taste)
+        artist_part: str | None = None
+        if parsed.artists_hint:
+            artist_part = parsed.artists_hint[0]
+        else:
+            # Top preferred artist que não bata com negative
+            top = self.taste.get_preferred_artists() or []
+            for a in top[:5]:
+                if not any(n in a.lower() for n in negative):
+                    artist_part = a
+                    break
+
+        # Parte 2: positive (primeiro termo, se houver)
+        positive_part = parsed.positive[0] if parsed.positive else None
+
+        # Parte 3: bpm qualifier — usa atributos do BpmRange (não dict)
+        bpm_part = None
+        if parsed.bpm is not None and parsed.bpm.min is not None and parsed.bpm.max is not None:
+            mid = (parsed.bpm.min + parsed.bpm.max) // 2
+            bpm_part = f"{mid}bpm"
+
+        # Se nenhuma parte produziu sinal, retorna None
+        parts = [p for p in (artist_part, positive_part, bpm_part) if p]
+        if not parts:
+            return None
+        return " ".join(parts)
 
     def _active_sources(self) -> list[str]:
         from maestra_ai.core.config import load_and_migrate
@@ -63,12 +97,25 @@ class Curator:
     def curate(self, context, count=5, exclude_uris=None, exclude_artists=None, max_per_artist=None, enhance_candidates=True):
         """Gera lista de faixas para um contexto.
 
+        `context` aceita `str` ou `ParsedContext` (duck-typing via `hasattr`).
+        Quando `ParsedContext`, pulamos o parse (evita duplicar trabalho do caller).
+
         Retorna tupla (tracks, queries_used, sources_used).
         tracks: lista de dicts com track, artist, uri.
         queries_used: lista de queries efetivamente usadas.
         sources_used: lista de fontes externas ativas.
         """
-        context = self._normalize_context(context)
+        from maestra_ai.core.context_parser import parse as parse_context_text
+        from maestra_ai.core.scoring import anti_tag_penalty
+
+        # Normaliza: aceita `str` ou `ParsedContext` (duck-typing)
+        if hasattr(context, "text"):
+            parsed = context
+            context_text = parsed.text
+        else:
+            context_text = self._normalize_context(context)
+            parsed = parse_context_text(context_text, bpm=self._active_bpm_target())
+
         queries_used: list[str] = []
         candidates: list[dict] = []
         excluded = set(exclude_uris or [])
@@ -85,25 +132,23 @@ class Curator:
                 seen.add(r["uri"])
                 candidates.append(r)
 
-        # 1) Query informada
-        informed = self._build_informed_query(context)
+        # 1) Query informada a partir do ParsedContext
+        informed = self._build_informed_query(parsed)
         if informed:
             _search_and_collect(informed)
 
         # 2) Fallback SEMANTIC_MAP se abaixo do mínimo
         if len(candidates) < MIN_CANDIDATES:
-            for q in self._resolve_queries(context):
+            for q in self._resolve_queries(context_text):
                 if q in queries_used:
                     continue
                 _search_and_collect(q)
                 if len(candidates) >= MIN_CANDIDATES:
                     break
 
-        # v0.12.0: enrich candidates com metadata externa antes do re-rank.
+        # 3) v0.12.0: enrich candidates com metadata externa antes do re-rank.
         # Skip se usuário passou --no-enhance (enhance_candidates=False).
         if enhance_candidates and candidates:
-            import logging
-            logger = logging.getLogger(__name__)
             from maestra_ai.core.external import default_enhancer
             from maestra_ai.core.external.types import TrackInfo
 
@@ -122,12 +167,17 @@ class Curator:
                 except Exception as e:
                     logger.warning("Enhancement de candidatos falhou: %s", e)
 
-        # 3) Filtra rejeitadas pelo perfil de gosto (URI + context_score + artistas excluídos pelo caller)
+        # 4) Hard filter adaptativo (v0.13): remove candidatos com tag negada.
+        # Se o filtro deixar < MIN_CANDIDATES, mantém originais com degraded=True
+        # para o scoring aplicar penalty suave no re-rank.
+        candidates, degraded = self._apply_negative_filter(candidates, parsed)
+
+        # 5) Filtra rejeitadas pelo perfil de gosto (URI + context_score + artistas excluídos pelo caller)
         filtered = []
         for c in candidates:
             if self.taste.is_rejected(c["uri"]):
                 continue
-            if self.taste.context_score(c["uri"], context) < 0:
+            if self.taste.context_score(c["uri"], context_text) < 0:
                 continue
             if c["artist"] in excluded_artists:
                 continue
@@ -136,18 +186,25 @@ class Curator:
         # Filtra por artistas rejeitados no perfil (delegação ao TasteProfile)
         filtered = self.taste.filter_with_artist_info(filtered)
 
-        # 4) Re-rank por compose_score (taste + decade + tag + bpm ponderados)
+        # 6) Re-rank por compose_score (taste + decade + tag + bpm ponderados).
+        # Quando degraded=True, soma anti_tag_penalty para afastar candidatos com tag negada.
         from maestra_ai.core.config import load_and_migrate, load_curate_weights
         cfg = load_and_migrate()
         weights = load_curate_weights(cfg)
         has_lf = (cfg.get("external_sources") or {}).get("lastfm", {}).get("enabled", False)
+        negative_set = set(parsed.negative)
 
-        filtered.sort(
-            key=lambda c: self._compose_score_for(c, context, weights, has_lf),
-            reverse=True,
-        )
+        def _score(c):
+            base = self._compose_score_for(c, context_text, weights, has_lf)
+            if degraded and negative_set:
+                base += anti_tag_penalty(
+                    self._track_tags(c), negative_set, degraded=True,
+                )
+            return base
 
-        # 5) max_per_artist
+        filtered.sort(key=_score, reverse=True)
+
+        # 7) max_per_artist
         if max_per_artist:
             limited: list[dict] = []
             counts: dict[str, int] = {}
@@ -175,13 +232,71 @@ class Curator:
         return set()
 
     def _track_tags(self, track: dict) -> set[str]:
-        """Tags do artista via cache external (MB + LF se presente).
+        """Tags do artista/track via cache external.
 
-        v0.10.0-alpha.1: simplificado — retorna vazio (contribui 0 no score
-        via tag_similarity). Integração rica com enhancement cache virá
-        quando houver demanda de calibração real.
+        Merge MB (canônico) + LF (filtrado via tag_filter). Retorna set vazio
+        quando o cache não tem entrada pro URI ou nenhuma source populou.
+
+        Nota sobre a shape real do cache (external_cache.json v2):
+        - `musicbrainz.tags` é `list[str]` — tags canônicas entram direto.
+        - `lastfm.top_tags` é `list[str]` (nomes só, sem count), pois o
+          `LastfmSource` flattena via `_artist_top_tags`. Wrappamos em
+          `[{"name": s, "count": 0}]` para reaproveitar `filter_lastfm_tags`
+          (remoção de meta-tags). O corte top_n por count vira no-op, mas o
+          filtro de ruído (décadas, avaliativos, países) continua valendo.
         """
-        return set()
+        from maestra_ai.core.external.tag_filter import filter_lastfm_tags
+
+        uri = track.get("uri") or ""
+        if not uri:
+            return set()
+        cached = cache_mod.get_track(uri)
+        if not cached:
+            return set()
+
+        tags: set[str] = set()
+
+        # MusicBrainz: tags já canônicas, union direto (lowercased).
+        mb = cached.get("musicbrainz") or {}
+        mb_tags = mb.get("tags") or []
+        tags.update(t.lower() for t in mb_tags if t)
+
+        # Last.fm: wrap strings no shape esperado pelo filtro; garante dedup/filtro.
+        lf = cached.get("lastfm") or {}
+        lf_raw = lf.get("top_tags") or []
+        lf_wrapped = [{"name": t, "count": 0} for t in lf_raw if t]
+        tags.update(filter_lastfm_tags(lf_wrapped))
+
+        return tags
+
+    def _apply_negative_filter(
+        self,
+        candidates: list[dict],
+        parsed,  # ParsedContext — tipagem leve pra evitar import circular
+    ) -> tuple[list[dict], bool]:
+        """Hard filter removendo candidatos com tag em parsed.negative.
+
+        Se len(filtered) < MIN_CANDIDATES, retorna originais com degraded=True.
+        Caller usa degraded pra ativar anti_tag_penalty no scoring.
+        """
+        if not parsed.negative:
+            return candidates, False
+
+        negative_set = set(parsed.negative)
+        filtered = [
+            c for c in candidates
+            if not (self._track_tags(c) & negative_set)
+        ]
+
+        if len(filtered) >= MIN_CANDIDATES:
+            return filtered, False
+
+        logger.warning(
+            "hard filter on %s would leave %d candidates (< %d); "
+            "degrading to soft penalty",
+            sorted(negative_set), len(filtered), MIN_CANDIDATES,
+        )
+        return candidates, True
 
     def _context_tags(self, context: str) -> set[str]:
         """Tags do contexto derivadas de MOOD_TAG_KEYWORDS."""

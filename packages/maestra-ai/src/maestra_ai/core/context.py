@@ -7,6 +7,7 @@ import json
 import os
 from datetime import datetime, timedelta
 
+from maestra_ai.core.context_parser import BpmRange, ParsedContext, parse as _parse_context
 from maestra_ai.core.storage import atomic_write_json
 
 _BPM_MIN = 30
@@ -47,6 +48,7 @@ class ContextState:
         self.path = path
 
     def set(self, text: str, bpm: dict | None = None, ttl_minutes: int = 120):
+        self._parsed_cache = None
         current = self._read_raw()
         previous = _normalize_context_field((current or {}).get("context"))
 
@@ -73,6 +75,7 @@ class ContextState:
         return self.set(previous["text"], bpm=bpm)
 
     def clear_bpm(self):
+        self._parsed_cache = None
         current = self._read_raw() or {}
         previous = _normalize_context_field(current.get("context"))
         if not previous["text"]:
@@ -102,9 +105,31 @@ class ContextState:
         return data
 
     def clear(self):
+        self._parsed_cache = None
         if os.path.exists(self.path):
             os.remove(self.path)
         return {"status": "cleared"}
+
+    def parsed(self) -> ParsedContext | None:
+        """Retorna ParsedContext do estado atual, memoizado por (text, bpm).
+
+        None se não há contexto ativo (show() retorna None, ou TTL expirou).
+        Identidade preservada entre chamadas idempotentes.
+        """
+        data = self.show()
+        if not data:
+            return None
+        ctx = data.get("context") or {}
+        text = ctx.get("text") or ""
+        bpm_raw = ctx.get("bpm")
+        bpm = BpmRange.from_any(bpm_raw)
+
+        cache = getattr(self, "_parsed_cache", None)
+        if cache is not None and cache[0] == text and cache[1].bpm == bpm:
+            return cache[1]
+        parsed = _parse_context(text, bpm=bpm)
+        self._parsed_cache = (text, parsed)
+        return parsed
 
     def _read_raw(self) -> dict | None:
         if not os.path.exists(self.path):

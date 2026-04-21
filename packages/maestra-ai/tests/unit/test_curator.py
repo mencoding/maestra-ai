@@ -234,3 +234,223 @@ class TestCuratorPrune:
         assert result["removed"] >= 1
         controller.playlist_remove.assert_called_once()
         assert result["snapshot_id"]  # id não-vazio
+
+
+class TestTrackTags:
+    """`_track_tags` consome cache external (MB canônico + LF filtrado)."""
+
+    def test_track_sem_entrada_no_cache_retorna_vazio(self, curator, monkeypatch):
+        # Sem entrada no cache → get_track retorna None → set() vazio.
+        from maestra_ai.core import curator as curator_mod
+        monkeypatch.setattr(curator_mod.cache_mod, "get_track", lambda uri: None)
+        track = {"uri": "spotify:track:nao_cacheado", "artist": "X"}
+        assert curator._track_tags(track) == set()
+
+    def test_track_com_tags_mb_retorna_as_tags(self, curator, monkeypatch):
+        # MB traz tags canônicas; entram direto (lowercased).
+        from maestra_ai.core import curator as curator_mod
+        monkeypatch.setattr(curator_mod.cache_mod, "get_track", lambda uri: {
+            "musicbrainz": {"tags": ["folk metal", "viking metal"]},
+        })
+        track = {"uri": "spotify:track:x", "artist": "A"}
+        tags = curator._track_tags(track)
+        assert "folk metal" in tags
+        assert "viking metal" in tags
+
+    def test_track_com_tags_lf_filtradas(self, curator, monkeypatch):
+        # Cache real: lastfm.top_tags é list[str]. Meta-tags (década) são descartadas.
+        from maestra_ai.core import curator as curator_mod
+        monkeypatch.setattr(curator_mod.cache_mod, "get_track", lambda uri: {
+            "lastfm": {"top_tags": ["2010s", "shoegaze"]},
+        })
+        track = {"uri": "spotify:track:x", "artist": "A"}
+        tags = curator._track_tags(track)
+        assert "shoegaze" in tags
+        assert "2010s" not in tags
+
+    def test_merge_mb_e_lf(self, curator, monkeypatch):
+        # Merge MB (canônico) + LF (filtrado); duplicatas dedupadas pelo set.
+        from maestra_ai.core import curator as curator_mod
+        monkeypatch.setattr(curator_mod.cache_mod, "get_track", lambda uri: {
+            "musicbrainz": {"tags": ["folk metal"]},
+            "lastfm": {"top_tags": ["viking"]},
+        })
+        track = {"uri": "spotify:track:x", "artist": "A"}
+        tags = curator._track_tags(track)
+        assert "folk metal" in tags
+        assert "viking" in tags
+
+    def test_uri_ausente_retorna_vazio(self, curator, monkeypatch):
+        # Track sem uri: evita passar string vazia adiante; retorna set() imediatamente.
+        from maestra_ai.core import curator as curator_mod
+        monkeypatch.setattr(curator_mod.cache_mod, "get_track", lambda uri: None)
+        assert curator._track_tags({"artist": "A"}) == set()
+
+
+class TestApplyNegativeFilter:
+    def _ctx(self, neg):
+        from maestra_ai.core.context_parser import ParsedContext
+        return ParsedContext(text="dummy", negative=tuple(neg))
+
+    def test_sem_negacoes_no_op(self, curator):
+        candidates = [{"uri": f"spotify:track:{i}", "artist": "A"} for i in range(15)]
+        result, degraded = curator._apply_negative_filter(candidates, self._ctx([]))
+        assert result == candidates
+        assert degraded is False
+
+    def test_hard_filter_quando_acima_de_min_candidates(self, curator, monkeypatch):
+        from maestra_ai.core.external import cache as cache_mod
+        def fake_get(uri):
+            # URI "spotify:track:1" tem ambient; restantes têm rock.
+            # Usa comparação exata para evitar match em "spotify:track:11", etc.
+            return {"musicbrainz": {"tags": ["ambient"]}} if uri == "spotify:track:1" else {"musicbrainz": {"tags": ["rock"]}}
+        monkeypatch.setattr(cache_mod, "get_track", fake_get)
+
+        candidates = [{"uri": f"spotify:track:{i}", "artist": "A"} for i in range(20)]
+        # Apenas candidate ...1 tem ambient; outros têm rock. 1 remove → 19 sobram > 10
+        result, degraded = curator._apply_negative_filter(candidates, self._ctx(["ambient"]))
+        assert len(result) == 19
+        assert degraded is False
+
+    def test_degrada_quando_filtro_esvazia_abaixo_de_min(self, curator, monkeypatch):
+        from maestra_ai.core.external import cache as cache_mod
+        # Todos os candidatos têm "ambient"
+        monkeypatch.setattr(cache_mod, "get_track", lambda uri: {"musicbrainz": {"tags": ["ambient"]}})
+
+        candidates = [{"uri": f"spotify:track:{i}", "artist": "A"} for i in range(12)]
+        result, degraded = curator._apply_negative_filter(candidates, self._ctx(["ambient"]))
+        assert result == candidates  # originais preservados
+        assert degraded is True
+
+    def test_fronteira_exatamente_min_candidates_e_sucesso(self, curator, monkeypatch):
+        from maestra_ai.core.external import cache as cache_mod
+        def fake_get(uri):
+            # candidates 0..9 sem ambient; 10..14 com ambient
+            idx = int(uri.split(":")[-1])
+            return {"musicbrainz": {"tags": ["rock"] if idx < 10 else ["ambient"]}}
+        monkeypatch.setattr(cache_mod, "get_track", fake_get)
+
+        candidates = [{"uri": f"spotify:track:{i}", "artist": "A"} for i in range(15)]
+        # Após filter: 10 sobram (exatamente MIN_CANDIDATES=10)
+        result, degraded = curator._apply_negative_filter(candidates, self._ctx(["ambient"]))
+        assert len(result) == 10
+        assert degraded is False  # >= MIN_CANDIDATES aceita
+
+
+class TestBuildInformedQuery:
+    def _ctx(self, **kwargs):
+        from maestra_ai.core.context_parser import ParsedContext
+        defaults = {"text": "", "positive": (), "negative": (), "artists_hint": (), "bpm": None}
+        defaults.update(kwargs)
+        return ParsedContext(**defaults)
+
+    def test_vazio_retorna_none(self, curator, monkeypatch):
+        monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: [])
+        assert curator._build_informed_query(self._ctx()) is None
+
+    def test_so_positivo_gera_query(self, curator, monkeypatch):
+        monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: [])
+        q = curator._build_informed_query(self._ctx(positive=("metal",)))
+        assert q is not None
+        assert "metal" in q
+
+    def test_positivo_e_artist_hint_combinam(self, curator, monkeypatch):
+        monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: [])
+        q = curator._build_informed_query(self._ctx(
+            positive=("metal",), artists_hint=("Gojira",)
+        ))
+        assert "Gojira" in q
+        assert "metal" in q
+
+    def test_bpm_adiciona_qualificador(self, curator, monkeypatch):
+        from maestra_ai.core.context_parser import BpmRange
+        monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: [])
+        q = curator._build_informed_query(self._ctx(
+            positive=("metal",), bpm=BpmRange(min=100, max=120)
+        ))
+        assert q is not None
+        assert "metal" in q
+        # Qualificador de bpm é adicionado — formato "110bpm" (média)
+        assert "110" in q or "bpm" in q.lower()
+
+    def test_so_taste_sem_positive_usa_top_artista(self, curator, monkeypatch):
+        monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: ["Heilung"])
+        q = curator._build_informed_query(self._ctx())
+        assert q is not None
+        assert "Heilung" in q
+
+    def test_top_taste_negado_pula_pro_proximo(self, curator, monkeypatch):
+        monkeypatch.setattr(
+            curator.taste, "get_preferred_artists",
+            lambda: ["Ambient Band", "Heilung"]
+        )
+        q = curator._build_informed_query(self._ctx(negative=("ambient",)))
+        # "Ambient Band" tem "ambient" case-insensitive → pula
+        assert q is not None
+        assert "Heilung" in q
+        assert "Ambient" not in q
+
+    def test_todos_os_top_taste_negados_e_sem_positive_retorna_none(self, curator, monkeypatch):
+        monkeypatch.setattr(
+            curator.taste, "get_preferred_artists",
+            lambda: ["Ambient One", "Ambient Two", "Ambient Three"]
+        )
+        q = curator._build_informed_query(self._ctx(negative=("ambient",)))
+        assert q is None
+
+
+class TestCurateIntegracaoV013:
+    """Integração T11: curate() usa parsed + negative_filter + anti_tag_penalty."""
+
+    def test_curate_usa_parsed_context_quando_informado(self, curator, mock_controller, monkeypatch):
+        """curate() continua devolvendo tupla (tracks, queries, sources)."""
+        result = curator.curate("foco", count=3)
+        assert len(result) == 3  # (tracks, queries, sources)
+
+    def test_curate_aplica_negative_filter_e_reporta_queries(self, curator, mock_controller, monkeypatch):
+        """Com contexto 'rock evitar ambient', tracks retornadas não devem ter tag 'ambient'.
+
+        Usa URIs distinguíveis (ambient_N vs rock_N) para garantir que o filtro
+        negativo seja realmente exercitado — e não passe de forma trivial.
+        """
+        from maestra_ai.core.external import cache as cache_mod
+
+        # 3 candidatos ambient + 12 rock = 15 total; após filtro: 12 rock (>= MIN_CANDIDATES=10).
+        # Ambient URIs vêm PRIMEIRO na lista para garantir que, sem o filtro, eles
+        # apareceriam no top-5 retornado (teste falha com filtro quebrado).
+        ambient_uris = [f"spotify:track:ambient_{i}" for i in range(3)]
+        rock_uris = [f"spotify:track:rock_{i}" for i in range(12)]
+        all_uris = ambient_uris + rock_uris  # ambient primeiro → ranking favorece ambient sem filtro
+
+        mock_controller.search.return_value = [
+            {"uri": u, "track": "t", "artist": "A", "album": "Album"} for u in all_uris
+        ]
+
+        def fake_get(uri):
+            tags = ["ambient"] if "ambient" in uri else ["rock"]
+            return {"musicbrainz": {"tags": tags}}
+
+        monkeypatch.setattr(cache_mod, "get_track", fake_get)
+
+        tracks, _queries, _sources = curator.curate("rock evitar ambient", count=5)
+
+        returned_uris = {t["uri"] for t in tracks}
+        # Nenhuma track com tag ambient deve ter passado pelo filtro
+        assert not any("ambient" in u for u in returned_uris), (
+            f"Negative filter deveria ter removido ambient tracks; retornou: {returned_uris}"
+        )
+        # Deve ter retornado ao menos uma track rock
+        assert len(tracks) > 0
+        assert all("rock" in u for u in returned_uris)
+
+    def test_curate_degraded_log_warning(self, curator, mock_controller, monkeypatch, caplog):
+        """Quando hard filter esvaziaria (todos candidatos têm tag negada), loga warning."""
+        import logging
+        from maestra_ai.core.external import cache as cache_mod
+        # Todos os candidatos passam a ter tag ambient → filtro esvazia → degrada
+        monkeypatch.setattr(cache_mod, "get_track",
+                            lambda uri: {"musicbrainz": {"tags": ["ambient"]}})
+
+        with caplog.at_level(logging.WARNING):
+            curator.curate("rock evitar ambient", count=3)
+        assert any("degrading to soft penalty" in r.message for r in caplog.records)

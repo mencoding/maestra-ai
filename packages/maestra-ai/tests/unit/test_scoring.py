@@ -123,3 +123,32 @@ def test_compose_score_taste_negative_pulls_down():
     w = {"taste": 0.4, "tag": 0.3, "decade": 0.2, "bpm": 0.1}
     score = compose_score(weights=w, taste=-1.0, tag=0.0, decade=0.0, bpm=0.0)
     assert score == pytest.approx(-0.4)
+
+
+# ------- anti_tag_penalty -------
+
+class TestAntiTagPenalty:
+    def test_sem_overlap_retorna_zero(self):
+        from maestra_ai.core.scoring import anti_tag_penalty
+        assert anti_tag_penalty({"rock"}, {"ambient"}, degraded=True) == 0.0
+
+    def test_com_overlap_retorna_negativo(self):
+        from maestra_ai.core.scoring import anti_tag_penalty
+        p = anti_tag_penalty({"rock", "ambient"}, {"ambient"}, degraded=True)
+        assert p < 0
+
+    def test_degraded_false_sempre_zero(self):
+        from maestra_ai.core.scoring import anti_tag_penalty
+        assert anti_tag_penalty({"ambient"}, {"ambient"}, degraded=False) == 0.0
+
+    def test_multiplos_overlaps_penalizam_mais_ate_limite(self):
+        from maestra_ai.core.scoring import anti_tag_penalty
+        p1 = anti_tag_penalty({"a"}, {"a"}, degraded=True)
+        p2 = anti_tag_penalty({"a", "b"}, {"a", "b"}, degraded=True)
+        p5 = anti_tag_penalty({"a", "b", "c", "d", "e"}, {"a", "b", "c", "d", "e"}, degraded=True)
+        assert p2 < p1  # mais negativo
+        assert p5 <= p2  # não pior que 3 (limite em 3 pela spec)
+
+    def test_negative_tags_vazio_retorna_zero(self):
+        from maestra_ai.core.scoring import anti_tag_penalty
+        assert anti_tag_penalty({"rock"}, set(), degraded=True) == 0.0

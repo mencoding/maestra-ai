@@ -1,9 +1,16 @@
 """Componentes e composição do score de curadoria v0.10.
 
 Componentes puros (tag_similarity, decade_match, bpm_proximity) +
-effective_weights (degradação graciosa quando sinal falta) + compose_score.
+effective_weights (degradação graciosa quando sinal falta) + compose_score +
+anti_tag_penalty (penalidade para tags negadas em modo degraded).
 """
 from __future__ import annotations
+
+# ---------------------------------------------------------------------------
+# Pesos de penalidade
+# ---------------------------------------------------------------------------
+
+W_ANTI_TAG: float = 0.4  # calibrar após primeira semana de uso (issue #13)
 
 
 def tag_similarity(tags_a: set[str], tags_b: set[str]) -> float:
@@ -93,3 +100,27 @@ def compose_score(
         + weights["decade"] * decade
         + weights["bpm"]    * bpm
     )
+
+
+def anti_tag_penalty(
+    track_tags: set[str],
+    negative_tags: set[str],
+    *,
+    degraded: bool,
+) -> float:
+    """Penalty negativa para candidatos com tag negada, ativa só em modo degraded.
+
+    Retorna 0.0 quando:
+    - degraded=False (hard filter já tratou, não penalizar duas vezes).
+    - Sem overlap entre track_tags e negative_tags.
+
+    Escala: proporcional ao overlap, limitado em 3 tags pra evitar crescimento
+    descontrolado. Fórmula: -W_ANTI_TAG * min(overlap_count, 3) / 3.
+    """
+    if not degraded or not negative_tags:
+        return 0.0
+    overlap = len(track_tags & negative_tags)
+    if overlap == 0:
+        return 0.0
+    capped = min(overlap, 3)
+    return -W_ANTI_TAG * (capped / 3)

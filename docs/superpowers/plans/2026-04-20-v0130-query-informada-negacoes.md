@@ -515,6 +515,35 @@ e \"nao\" idem. Texto original é preservado em ParsedContext.text."
 
 ---
 
+## Task 4.5: Fix BpmRange + artist leak (correção inline pós-review)
+
+> **Nota:** Esta task não estava no plano original. Foi executada inline após cumulative
+> quality review das Tasks 1–4. Commit: `4676df6`.
+
+**Problema 1 — hashability:** `bpm: dict | None` em `ParsedContext(frozen=True)` quebra
+hashability (dict é mutável e não hashável). Qualquer tentativa de usar o `ParsedContext`
+como chave de cache falharia.
+
+**Fix:** Novo `BpmRange` frozen dataclass com campos `min: int | None`, `max: int | None`
+e classmethod `from_any(BpmRange | dict | None) -> BpmRange | None`. Campo `ParsedContext.bpm`
+passa a ser `BpmRange | None`. `parse()` aceita dict para ergonomia dos callers existentes
+(converte via `from_any`). Camada de persistência em disco inalterada.
+
+**Problema 2 — artist leak:** `parse("tipo The HU")` colocava `"the"` (casefold do primeiro
+token) em `positive`. O matching usava o texto normalizado para decidir positive vs artist.
+
+**Fix:** `_extract_after_marker` refatorado para `_extract_after_marker_pair`, que devolve
+`(rest_norm, rest_original)`. A decisão positive-vs-artist usa o case ORIGINAL do primeiro
+token — só vai para `positive` se começar minúsculo no texto cru.
+
+**Arquivos alterados:**
+- `packages/maestra-ai/src/maestra_ai/core/context_parser.py`
+- `packages/maestra-ai/tests/unit/test_context_parser.py` (64 linhas de testes adicionados)
+
+- [x] **Executado** — ver commit `4676df6`
+
+---
+
 ## Task 5: Scaffold e implementação de `tag_filter.py`
 
 **Files:**
@@ -711,10 +740,11 @@ class TestParsed:
 
     def test_parsed_repass_bpm_do_context(self, tmp_path):
         from maestra_ai.core.context import ContextState
+        from maestra_ai.core.context_parser import BpmRange  # T4.5: bpm é BpmRange, não dict
         state = ContextState(tmp_path / "ctx.json")
         state.set("foco", bpm={"min": 60, "max": 90})
         p = state.parsed()
-        assert p.bpm == {"min": 60, "max": 90}
+        assert p.bpm == BpmRange(min=60, max=90)
 ```
 
 - [ ] **Step 3: Rodar e confirmar falhas**
@@ -1156,9 +1186,10 @@ class TestBuildInformedQuery:
         assert "metal" in q
 
     def test_bpm_adiciona_qualificador(self, curator, monkeypatch):
+        from maestra_ai.core.context_parser import BpmRange  # T4.5: bpm é BpmRange, não dict
         monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: [])
         q = curator._build_informed_query(self._ctx(
-            positive=("metal",), bpm={"min": 100, "max": 120}
+            positive=("metal",), bpm=BpmRange(min=100, max=120)
         ))
         assert q is not None
         assert "metal" in q
@@ -1224,9 +1255,10 @@ def _build_informed_query(self, parsed) -> str | None:
     positive_part = parsed.positive[0] if parsed.positive else None
 
     # Parte 3: bpm qualifier
+    # T4.5: parsed.bpm é BpmRange (não dict) — acesso via atributo, não .get()
     bpm_part = None
-    if parsed.bpm and parsed.bpm.get("min") and parsed.bpm.get("max"):
-        mid = (parsed.bpm["min"] + parsed.bpm["max"]) // 2
+    if parsed.bpm is not None and parsed.bpm.min is not None and parsed.bpm.max is not None:
+        mid = (parsed.bpm.min + parsed.bpm.max) // 2
         bpm_part = f"{mid}bpm"
 
     # Se nenhuma parte produziu sinal, retorna None
@@ -1690,3 +1722,16 @@ git commit -m "docs: v0.13 do maestra-ai em memória e índice"
 - [ ] MCP instructions atualizadas (Task 14) — remove aviso do bug fixado.
 
 **Próximo passo após aprovação**: criar branch `feat/issue-8-v0130-query-informada-negacoes` a partir do `main` atualizado (pós-merge de #11, #12, #15, #16) e iniciar execução.
+
+---
+
+## Execução
+
+**Executado em:** 2026-04-21
+**Branch:** `feat/issue-8-v0130-query-informada-negacoes`
+**Commits:** `6fbca0e..0265af2`
+**Suite:** 891 passed, 0 failed
+**Issue #8:** fechada
+
+Divergências em relação ao plano original estão documentadas na Task 4.5 acima e na seção
+"Divergências implementadas vs spec original" do spec MD correspondente.
