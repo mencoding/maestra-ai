@@ -408,18 +408,40 @@ class TestCurateIntegracaoV013:
         assert len(result) == 3  # (tracks, queries, sources)
 
     def test_curate_aplica_negative_filter_e_reporta_queries(self, curator, mock_controller, monkeypatch):
-        """Com contexto 'rock evitar ambient', tracks retornadas não devem ter tag 'ambient'."""
+        """Com contexto 'rock evitar ambient', tracks retornadas não devem ter tag 'ambient'.
+
+        Usa URIs distinguíveis (ambient_N vs rock_N) para garantir que o filtro
+        negativo seja realmente exercitado — e não passe de forma trivial.
+        """
         from maestra_ai.core.external import cache as cache_mod
+
+        # 3 candidatos ambient + 12 rock = 15 total; após filtro: 12 rock (>= MIN_CANDIDATES=10).
+        # Ambient URIs vêm PRIMEIRO na lista para garantir que, sem o filtro, eles
+        # apareceriam no top-5 retornado (teste falha com filtro quebrado).
+        ambient_uris = [f"spotify:track:ambient_{i}" for i in range(3)]
+        rock_uris = [f"spotify:track:rock_{i}" for i in range(12)]
+        all_uris = ambient_uris + rock_uris  # ambient primeiro → ranking favorece ambient sem filtro
+
+        mock_controller.search.return_value = [
+            {"uri": u, "track": "t", "artist": "A", "album": "Album"} for u in all_uris
+        ]
+
         def fake_get(uri):
-            # URIs com "1" simulam tracks com tag ambient; outras ficam com rock
-            has_ambient = "1" in uri
-            return {"musicbrainz": {"tags": ["ambient"] if has_ambient else ["rock"]}}
+            tags = ["ambient"] if "ambient" in uri else ["rock"]
+            return {"musicbrainz": {"tags": tags}}
+
         monkeypatch.setattr(cache_mod, "get_track", fake_get)
 
         tracks, _queries, _sources = curator.curate("rock evitar ambient", count=5)
-        for t in tracks:
-            cached = fake_get(t["uri"])
-            assert "ambient" not in (cached.get("musicbrainz") or {}).get("tags", [])
+
+        returned_uris = {t["uri"] for t in tracks}
+        # Nenhuma track com tag ambient deve ter passado pelo filtro
+        assert not any("ambient" in u for u in returned_uris), (
+            f"Negative filter deveria ter removido ambient tracks; retornou: {returned_uris}"
+        )
+        # Deve ter retornado ao menos uma track rock
+        assert len(tracks) > 0
+        assert all("rock" in u for u in returned_uris)
 
     def test_curate_degraded_log_warning(self, curator, mock_controller, monkeypatch, caplog):
         """Quando hard filter esvaziaria (todos candidatos têm tag negada), loga warning."""
