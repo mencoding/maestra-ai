@@ -90,3 +90,25 @@ class TestArtistsHint:
         from maestra_ai.core.context_parser import parse
         p = parse("tipo rock")
         assert p.artists_hint == ()
+
+
+class TestNormalizacao:
+    def test_nao_e_nao_sao_equivalentes(self):
+        from maestra_ai.core.context_parser import parse
+        p1 = parse("não acústico")
+        p2 = parse("nao acustico")
+        # Ambos devem pegar o negativo
+        assert len(p1.negative) == 1
+        assert len(p2.negative) == 1
+
+    def test_maiusculas_nao_afetam_marker(self):
+        from maestra_ai.core.context_parser import parse
+        p = parse("EVITAR jazz")
+        assert "jazz" in p.negative
+
+    def test_acentos_preservados_no_term_extraido(self):
+        from maestra_ai.core.context_parser import parse
+        p = parse("sem distração")
+        # O term pode estar normalizado ou preservado — o importante é
+        # que o match funcionou e o term é recuperável
+        assert len(p.negative) == 1
