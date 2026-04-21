@@ -283,6 +283,61 @@ def test_playlist_tracks_filtra_track_none(monkeypatch):
     assert tracks[0]["track"] == "OK"
 
 
+def test_search_track_propaga_isrc(monkeypatch):
+    """v0.12.0 — Issue #5: search() deve incluir 'isrc' no dict de cada track.
+
+    Campo vem de external_ids.isrc do payload Spotify. Quando ausente, isrc=None.
+    """
+    import maestra_ai.core.client as client_mod
+
+    monkeypatch.setattr(client_mod, "_get_bucket", lambda: MagicMock(
+        wait_and_acquire=lambda timeout=10.0: True,
+    ))
+    monkeypatch.setattr(client_mod, "_get_breaker", lambda: MagicMock(
+        allow=lambda: True, record_success=lambda: None,
+    ))
+
+    sp = MagicMock()
+    sp.search.return_value = {
+        "tracks": {
+            "items": [
+                {
+                    "name": "Track Com ISRC",
+                    "artists": [{"name": "Artista A"}],
+                    "album": {"name": "Album A"},
+                    "uri": "spotify:track:withisrc",
+                    "external_ids": {"isrc": "USRC10100001"},
+                },
+                {
+                    "name": "Track Sem ISRC",
+                    "artists": [{"name": "Artista B"}],
+                    "album": {"name": "Album B"},
+                    "uri": "spotify:track:noisrc",
+                    "external_ids": {},
+                },
+                {
+                    "name": "Track Sem external_ids",
+                    "artists": [{"name": "Artista C"}],
+                    "album": {"name": "Album C"},
+                    "uri": "spotify:track:noexternal",
+                    # campo ausente completamente
+                },
+            ],
+        },
+    }
+
+    controller = SpotifyController(sp=sp)
+    results = controller.search("test query", type="track", limit=3)
+
+    assert len(results) == 3
+    # Track com ISRC: campo presente e correto
+    assert results[0]["isrc"] == "USRC10100001"
+    # Track com external_ids vazio: isrc deve ser None
+    assert results[1]["isrc"] is None
+    # Track sem external_ids: isrc deve ser None (sem KeyError)
+    assert results[2]["isrc"] is None
+
+
 class TestBucketCache:
     """M4 v0.6.2: rate limiter singletons são cacheados por db_path,
     não por global mutável. Permite testes com tmp_path distintos

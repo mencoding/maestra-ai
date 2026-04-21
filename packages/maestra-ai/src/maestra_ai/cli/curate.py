@@ -41,7 +41,11 @@ def cmd_curate(args, curator, context_state, **_):
     from maestra_ai.core.external.attribution import render_attribution
 
     context, _ = _curation_context(args, context_state)
-    results, _, sources_used = curator.curate(context, count=args.count)
+    results, _, sources_used = curator.curate(
+        context,
+        count=args.count,
+        enhance_candidates=not args.no_enhance,
+    )
     if not results:
         error("Sem resultados para esse contexto.", "NO_RESULTS")
     output(results, args.human)
@@ -61,4 +65,9 @@ def _register(subparsers: argparse._SubParsersAction) -> None:
     p.add_argument("context", nargs="?", default=None, help="Contexto")
     p.add_argument("--count", type=int, default=5)
     p.add_argument("--human", action="store_true", help="Saída legível para humanos")
+    p.add_argument(
+        "--no-enhance",
+        action="store_true",
+        help="Pula enhancement de candidatos novos (mais rápido, sem BPM/tag_similarity)",
+    )
     p.set_defaults(func=cmd_curate)

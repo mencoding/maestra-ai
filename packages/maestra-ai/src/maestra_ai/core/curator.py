@@ -60,7 +60,7 @@ class Curator:
         ext = cfg.get("external_sources") or {}
         return [s for s in ("musicbrainz", "lastfm", "reccobeats") if (ext.get(s) or {}).get("enabled")]
 
-    def curate(self, context, count=5, exclude_uris=None, exclude_artists=None, max_per_artist=None):
+    def curate(self, context, count=5, exclude_uris=None, exclude_artists=None, max_per_artist=None, enhance_candidates=True):
         """Gera lista de faixas para um contexto.
 
         Retorna tupla (tracks, queries_used, sources_used).
@@ -98,6 +98,29 @@ class Curator:
                 _search_and_collect(q)
                 if len(candidates) >= MIN_CANDIDATES:
                     break
+
+        # v0.12.0: enrich candidates com metadata externa antes do re-rank.
+        # Skip se usuário passou --no-enhance (enhance_candidates=False).
+        if enhance_candidates and candidates:
+            import logging
+            logger = logging.getLogger(__name__)
+            from maestra_ai.core.external import default_enhancer
+            from maestra_ai.core.external.types import TrackInfo
+
+            enhancer = default_enhancer()
+            if enhancer._sources:  # Só se há pelo menos 1 source ativa
+                track_infos: list[TrackInfo] = []
+                for c in candidates:
+                    track_infos.append({
+                        "uri": c["uri"],
+                        "name": c.get("track", c.get("name", "Unknown")),
+                        "artists": [c["artist"]],
+                        "isrc": c.get("isrc"),
+                    })
+                try:
+                    enhancer.enhance_many(track_infos)
+                except Exception as e:
+                    logger.warning("Enhancement de candidatos falhou: %s", e)
 
         # 3) Filtra rejeitadas pelo perfil de gosto (URI + context_score + artistas excluídos pelo caller)
         filtered = []

@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-04-20
+
+### Adicionado
+- **`Curator.curate` faz enhancement de candidatos novos** antes do
+  re-rank (Issue #5). Candidatos trazidos pelo `controller.search()`
+  agora são consultados nas fontes externas ativas (MB, Last.fm,
+  Reccobeats) via `enhancer.enhance_many`, populando cache.
+  `_track_bpm`, `_track_tags` e `_dominant_decades` do re-rank passam
+  a ter dados reais para candidatos novos — `bpm_proximity`,
+  `tag_similarity` e `decade_match` contribuem efetivamente ao score
+  composto (v0.10.0-alpha.1).
+- **`controller.search()` propaga `isrc`** no dict de resultado.
+  Campo já vinha do Spotify (via `external_ids.isrc`) mas era
+  descartado no wrapper. Desbloqueia lookup por ISRC em Reccobeats
+  e MusicBrainz.
+- **Flag `maestra curate --no-enhance`** desliga enhancement de
+  candidatos para quem prefere latência mínima (ordem-de-grandeza
+  comparável com v0.11.x).
+
+### Impacto de performance
+- Primeiro `curate` em um contexto novo: +5-15s (rate-limited calls
+  a Reccobeats / Last.fm). Execuções subsequentes: cache hit, custo
+  zero. `--no-enhance` preserva o comportamento rápido anterior.
+- Cache enriquecido incrementalmente a cada `curate`, acumulando
+  cobertura ao longo do uso.
+
+### Fechado
+- Issue #5 (v0.12: propagar ISRC + enhance candidatos novos).
+
 ## [0.11.2] — 2026-04-20
 
 ### Corrigido

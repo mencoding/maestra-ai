@@ -299,6 +299,9 @@ class SpotifyController:
                     "artist": artists[0].get("name", "Unknown") if artists else "Unknown",
                     "album": (t.get("album") or {}).get("name", ""),
                     "uri": t.get("uri", ""),
+                    # v0.12.0: ISRC do Spotify (external_ids.isrc) propagado para
+                    # habilitar lookup por ISRC em Reccobeats e MusicBrainz.
+                    "isrc": (t.get("external_ids") or {}).get("isrc"),
                 })
             return out
         if type == "artist":
