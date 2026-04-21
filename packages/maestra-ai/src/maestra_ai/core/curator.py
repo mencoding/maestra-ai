@@ -53,14 +53,40 @@ class Curator:
         self.controller = controller
         self.taste = taste
 
-    def _build_informed_query(self, context: str) -> str | None:
-        """Monta query "{tag_dominante} {mood} {decade}" a partir de tags do perfil.
+    def _build_informed_query(self, parsed) -> str | None:
+        """Query informada a partir de ParsedContext + taste.
 
-        v0.10.0-alpha.1: stub mínimo (retorna None). Cascade cai direto no
-        SEMANTIC_MAP. A derivação real via conjunto_positivo virá quando
-        houver uso suficiente para calibrar.
+        Formato: "{artist_hint_ou_top_taste} {positive} {bpm_qualifier}".
+        Skip top taste que aparecem em negative. Retorna None se nenhum sinal.
         """
-        return None
+        negative = set(parsed.negative) if parsed.negative else set()
+
+        # Parte 1: artista (artist_hint tem prioridade sobre top taste)
+        artist_part: str | None = None
+        if parsed.artists_hint:
+            artist_part = parsed.artists_hint[0]
+        else:
+            # Top preferred artist que não bata com negative
+            top = self.taste.get_preferred_artists() or []
+            for a in top[:5]:
+                if not any(n in a.lower() for n in negative):
+                    artist_part = a
+                    break
+
+        # Parte 2: positive (primeiro termo, se houver)
+        positive_part = parsed.positive[0] if parsed.positive else None
+
+        # Parte 3: bpm qualifier — usa atributos do BpmRange (não dict)
+        bpm_part = None
+        if parsed.bpm is not None and parsed.bpm.min is not None and parsed.bpm.max is not None:
+            mid = (parsed.bpm.min + parsed.bpm.max) // 2
+            bpm_part = f"{mid}bpm"
+
+        # Se nenhuma parte produziu sinal, retorna None
+        parts = [p for p in (artist_part, positive_part, bpm_part) if p]
+        if not parts:
+            return None
+        return " ".join(parts)
 
     def _active_sources(self) -> list[str]:
         from maestra_ai.core.config import load_and_migrate
@@ -93,8 +119,11 @@ class Curator:
                 seen.add(r["uri"])
                 candidates.append(r)
 
-        # 1) Query informada
-        informed = self._build_informed_query(context)
+        # 1) Query informada — parseia contexto pra ParsedContext antes.
+        # Integração completa (negative filter, degraded) chega no T11.
+        from maestra_ai.core.context_parser import parse as parse_context_text
+        parsed = parse_context_text(context, bpm=self._active_bpm_target())
+        informed = self._build_informed_query(parsed)
         if informed:
             _search_and_collect(informed)
 

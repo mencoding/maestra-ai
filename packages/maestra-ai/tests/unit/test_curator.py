@@ -335,3 +335,65 @@ class TestApplyNegativeFilter:
         result, degraded = curator._apply_negative_filter(candidates, self._ctx(["ambient"]))
         assert len(result) == 10
         assert degraded is False  # >= MIN_CANDIDATES aceita
+
+
+class TestBuildInformedQuery:
+    def _ctx(self, **kwargs):
+        from maestra_ai.core.context_parser import ParsedContext
+        defaults = {"text": "", "positive": (), "negative": (), "artists_hint": (), "bpm": None}
+        defaults.update(kwargs)
+        return ParsedContext(**defaults)
+
+    def test_vazio_retorna_none(self, curator, monkeypatch):
+        monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: [])
+        assert curator._build_informed_query(self._ctx()) is None
+
+    def test_so_positivo_gera_query(self, curator, monkeypatch):
+        monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: [])
+        q = curator._build_informed_query(self._ctx(positive=("metal",)))
+        assert q is not None
+        assert "metal" in q
+
+    def test_positivo_e_artist_hint_combinam(self, curator, monkeypatch):
+        monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: [])
+        q = curator._build_informed_query(self._ctx(
+            positive=("metal",), artists_hint=("Gojira",)
+        ))
+        assert "Gojira" in q
+        assert "metal" in q
+
+    def test_bpm_adiciona_qualificador(self, curator, monkeypatch):
+        from maestra_ai.core.context_parser import BpmRange
+        monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: [])
+        q = curator._build_informed_query(self._ctx(
+            positive=("metal",), bpm=BpmRange(min=100, max=120)
+        ))
+        assert q is not None
+        assert "metal" in q
+        # Qualificador de bpm é adicionado — formato "110bpm" (média)
+        assert "110" in q or "bpm" in q.lower()
+
+    def test_so_taste_sem_positive_usa_top_artista(self, curator, monkeypatch):
+        monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: ["Heilung"])
+        q = curator._build_informed_query(self._ctx())
+        assert q is not None
+        assert "Heilung" in q
+
+    def test_top_taste_negado_pula_pro_proximo(self, curator, monkeypatch):
+        monkeypatch.setattr(
+            curator.taste, "get_preferred_artists",
+            lambda: ["Ambient Band", "Heilung"]
+        )
+        q = curator._build_informed_query(self._ctx(negative=("ambient",)))
+        # "Ambient Band" tem "ambient" case-insensitive → pula
+        assert q is not None
+        assert "Heilung" in q
+        assert "Ambient" not in q
+
+    def test_todos_os_top_taste_negados_e_sem_positive_retorna_none(self, curator, monkeypatch):
+        monkeypatch.setattr(
+            curator.taste, "get_preferred_artists",
+            lambda: ["Ambient One", "Ambient Two", "Ambient Three"]
+        )
+        q = curator._build_informed_query(self._ctx(negative=("ambient",)))
+        assert q is None
