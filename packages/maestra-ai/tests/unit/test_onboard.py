@@ -1927,3 +1927,36 @@ class TestFallbackByFamily:
                             "para caminhada matinal"}
 
 
+
+
+class TestSituationDedup:
+    """v0.11.2: dedup de sugestões compara 'situação' (parte após 'para'),
+    não a string completa. Evita que 'para garagem' e 'clássico para
+    garagem' apareçam em sugestões adjacentes."""
+
+    def test_situation_of_basic(self):
+        from maestra_ai.core.onboard import _situation_of
+        assert _situation_of("clássico para garagem") == "garagem"
+        assert _situation_of("para garagem") == "garagem"
+        assert _situation_of("para foco profundo") == "foco profundo"
+        assert _situation_of("clássico para foco profundo") == "foco profundo"
+        assert _situation_of("energético para deslocamento") == "deslocamento"
+        assert _situation_of("melancólico") == "melancólico"
+        assert _situation_of("para") == "para"  # degenerate: só 'para', sem situação
+
+    def test_select_mood_rock_skips_garagem_when_used(self):
+        """Se 'para garagem' já foi usado (via metal), 'rock' deve escolher
+        'energético para deslocamento' em vez de 'clássico para garagem'."""
+        from maestra_ai.core.onboard import _select_mood
+        used = {"para garagem"}
+        mood = _select_mood(
+            "rock", seed="rock-test",
+            artists_tags=None,
+            genre_to_top_artist_ids={},
+            used_contexts=used,
+        )
+        # "rock" tem 2 templates curados:
+        # ["energético para deslocamento", "clássico para garagem"]
+        # O segundo compartilha situação "garagem" com used. Deve pular.
+        from maestra_ai.core.onboard import _situation_of
+        assert _situation_of(mood) != "garagem", f"mood escolhido ({mood!r}) compartilha situação com 'para garagem' já usada"

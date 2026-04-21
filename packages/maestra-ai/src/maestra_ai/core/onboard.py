@@ -498,6 +498,34 @@ def _matched_moods_from_tags(tags: list[str]) -> list[str]:
     return matched
 
 
+def _situation_of(mood: str) -> str:
+    """Extrai a 'situação' do mood — parte após o último 'para'.
+
+    v0.11.2: dedup por situação evita colisões como "para garagem" e
+    "clássico para garagem" aparecerem em sugestões adjacentes (o usuário
+    percebe ambos como 'garagem' e marca o relatório como ruidoso).
+
+    Exemplos:
+      'clássico para garagem'    → 'garagem'
+      'para garagem'             → 'garagem'
+      'energético para deslocamento' → 'deslocamento'
+      'para foco profundo'       → 'foco profundo'
+      'melancólico'              → 'melancólico' (sem 'para')
+    """
+    marker = " para "
+    idx = mood.rfind(marker)
+    if idx != -1:
+        return mood[idx + len(marker):].strip()
+    if mood.startswith("para "):
+        return mood[5:].strip()
+    return mood.strip()
+
+
+def _used_situations(used_contexts: set[str]) -> set[str]:
+    """Derivado somente-leitura: conjunto de situações já usadas."""
+    return {_situation_of(c) for c in used_contexts}
+
+
 def _resolve_context_for_mood(
     mood: str,
     *,
@@ -512,10 +540,9 @@ def _resolve_context_for_mood(
          e houver override para esse par.
       2. `_MOOD_CONTEXT[mood]` — default.
 
-    Dentro da lista escolhida, tenta primeiro uma opção NÃO em
-    `used_contexts`. Se todos já foram usados, retorna None (para que o
-    chamador tente outro mood). Se a lista escolhida não tem contextos,
-    retorna None.
+    Dentro da lista escolhida, tenta primeiro uma opção cuja *situação*
+    ainda não foi usada (v0.11.2). Se todas já foram usadas, retorna
+    None (para que o chamador tente outro mood).
     """
     contexts: list[str] = []
     if family is not None:
@@ -525,11 +552,11 @@ def _resolve_context_for_mood(
     if not contexts:
         return None
 
-    # Tenta escolher em ordem determinística (pelo hash) mas pulando repetidos.
+    used_situations = _used_situations(used_contexts)
     start = hash(seed + mood) % len(contexts)
     for offset in range(len(contexts)):
         candidate = contexts[(start + offset) % len(contexts)]
-        if candidate not in used_contexts:
+        if _situation_of(candidate) not in used_situations:
             return candidate
     return None
 
@@ -577,12 +604,13 @@ def _select_mood(
 
     # 1. Mapa curado por gênero
     if genre.lower() in _GENRE_MOOD_TEMPLATES:
-        # Dentro do mapa, também respeita used_contexts.
+        # Dentro do mapa, também respeita used_contexts (por situação — v0.11.2).
         curated = _GENRE_MOOD_TEMPLATES[genre.lower()]
+        used_situations = _used_situations(used_contexts)
         start = hash(seed) % len(curated)
         for offset in range(len(curated)):
             candidate = curated[(start + offset) % len(curated)]
-            if candidate not in used_contexts:
+            if _situation_of(candidate) not in used_situations:
                 return candidate
         # Todos os curados usados → primeira opção mesmo assim.
         return curated[start]
@@ -614,6 +642,7 @@ def _select_mood(
 
     # 3a. Fallback específico por família (v0.9.0-alpha.5). Preferido
     # sobre o fallback global porque mantém coerência com o gênero.
+    used_situations = _used_situations(used_contexts)
     if family is not None:
         family_fallbacks = _FALLBACK_MOODS_BY_FAMILY.get(family, [])
         if family_fallbacks:
@@ -622,16 +651,16 @@ def _select_mood(
                 candidate = family_fallbacks[
                     (start_fam + offset) % len(family_fallbacks)
                 ]
-                if candidate not in used_contexts:
+                if _situation_of(candidate) not in used_situations:
                     return candidate
             # Todos usados — ainda melhor repetir família do que cair em
             # fallback global genérico, mas prefere variar em último caso.
 
-    # 3b. Fallback genérico, evitando repetição se possível.
+    # 3b. Fallback genérico, evitando repetição por situação (v0.11.2).
     start_f = hash(seed) % len(_FALLBACK_MOODS)
     for offset in range(len(_FALLBACK_MOODS)):
         candidate = _FALLBACK_MOODS[(start_f + offset) % len(_FALLBACK_MOODS)]
-        if candidate not in used_contexts:
+        if _situation_of(candidate) not in used_situations:
             return candidate
     return _FALLBACK_MOODS[start_f]
 

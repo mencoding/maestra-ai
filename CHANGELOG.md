@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.2] — 2026-04-20
+
+### Corrigido
+- **Dedup de sugestões agora compara 'situação'** (parte após último
+  'para'), não a string completa. Antes, `"para garagem"` e
+  `"clássico para garagem"` eram considerados distintos e apareciam em
+  sugestões adjacentes, gerando ruído percebido como duplicata pelo
+  usuário. Novo helper `_situation_of(mood) → str` e `_used_situations`
+  normalizam o conjunto de contextos já usados. Aplicado em todos os
+  caminhos de `_select_mood` (curated, family fallback, global fallback)
+  e em `_resolve_context_for_mood`.
+
+### Adicionado
+- `TestSituationDedup` em `test_onboard.py` com 2 testes:
+  `test_situation_of_basic` (casos de extração) e
+  `test_select_mood_rock_skips_garagem_when_used` (regressão do bug real).
+
 ## [0.11.1] — 2026-04-20
 
 ### Corrigido
