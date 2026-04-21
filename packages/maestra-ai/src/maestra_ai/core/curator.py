@@ -52,6 +52,10 @@ class Curator:
     def __init__(self, controller, taste):
         self.controller = controller
         self.taste = taste
+        # Cache em memória para evitar lookups repetidos ao MusicBrainz na mesma sessão.
+        # Chave: nome do artista (string original). Valor: bool (existe ou não).
+        # Invalidado apenas por reinício da instância — persistência fica como otimização futura.
+        self._mb_artist_cache: dict[str, bool] = {}
 
     @staticmethod
     def _fmt_artist_dsl(names: list[str]) -> str:
@@ -61,6 +65,26 @@ class Curator:
         """
         clean = [a.replace('"', "") for a in names]
         return " OR ".join(f'artist:"{a}"' for a in clean)
+
+    def _validate_artists_mb(self, names: list[str]) -> list[str]:
+        """Filtra lista de artistas mantendo apenas os reconhecidos pelo MusicBrainz.
+
+        Usa self.musicbrainz.artist_exists (score >= 85). Cache em memória evita
+        lookups repetidos para o mesmo nome dentro da mesma instância do Curator.
+
+        Se self.musicbrainz não estiver disponível, retorna a lista intacta
+        (não bloqueia quando a source não está configurada).
+        """
+        mb = getattr(self, "musicbrainz", None)
+        if mb is None:
+            return names
+        validated: list[str] = []
+        for name in names:
+            if name not in self._mb_artist_cache:
+                self._mb_artist_cache[name] = mb.artist_exists(name)
+            if self._mb_artist_cache[name]:
+                validated.append(name)
+        return validated
 
     def _build_informed_query(self, parsed) -> str | None:
         """Query informada a partir de ParsedContext + taste.
@@ -72,10 +96,15 @@ class Curator:
         negative = set(parsed.negative) if parsed.negative else set()
 
         # Parte 1: artistas com DSL Spotify (artist_hint tem prioridade sobre top taste)
+        # T4: valida artist_hint via MusicBrainz antes de usar (score >= 85).
+        # Se MB não configurado ou falhar, _validate_artists_mb retorna lista intacta.
         artist_part: str | None = None
         if parsed.artists_hint:
-            artist_part = self._fmt_artist_dsl(list(parsed.artists_hint))
-        else:
+            validated_hints = self._validate_artists_mb(list(parsed.artists_hint))
+            if validated_hints:
+                artist_part = self._fmt_artist_dsl(validated_hints)
+            # Se validated_hints vazio, cai no fallback de top taste (bloco else abaixo)
+        if not artist_part:
             top = self.taste.get_preferred_artists() or []
             candidates = [
                 a for a in top[:5]

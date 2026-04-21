@@ -550,6 +550,107 @@ class TestCurateIntegracaoV013:
         assert any("degrading to soft penalty" in r.message for r in caplog.records)
 
 
+class TestValidateArtistsMb:
+    """Testes para _validate_artists_mb e integração em _build_informed_query (T4)."""
+
+    def _ctx(self, **kwargs):
+        from maestra_ai.core.context_parser import ParsedContext
+        defaults = {"text": "", "positive": (), "negative": (), "artists_hint": (), "bpm": None}
+        defaults.update(kwargs)
+        return ParsedContext(**defaults)
+
+    def _make_curator_with_mb(self, mock_controller, taste, mb_mock):
+        """Cria Curator com atributo musicbrainz injetado (simulando source configurada)."""
+        c = Curator(mock_controller, taste)
+        c.musicbrainz = mb_mock
+        return c
+
+    def test_build_informed_query_valida_artists_via_mb(
+        self, mock_controller, taste, monkeypatch
+    ):
+        """MB valida 'The HU' (True) e rejeita 'FakeBand' (False).
+
+        Query resultante deve conter artist:"The HU" mas NÃO artist:"FakeBand".
+        """
+        mb_mock = MagicMock()
+        mb_mock.artist_exists.side_effect = lambda name: name == "The HU"
+
+        curator = self._make_curator_with_mb(mock_controller, taste, mb_mock)
+        monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: [])
+
+        parsed = self._ctx(artists_hint=("The HU", "FakeBand"))
+        q = curator._build_informed_query(parsed)
+
+        assert q is not None
+        assert 'artist:"The HU"' in q
+        assert "FakeBand" not in q
+
+    def test_build_informed_query_mb_ausente_mantem_artists(
+        self, mock_controller, taste, monkeypatch
+    ):
+        """Curator sem atributo musicbrainz → artists_hint passa direto sem validação."""
+        curator = Curator(mock_controller, taste)
+        # Garante que não há atributo musicbrainz (regressão: sem source)
+        assert not hasattr(curator, "musicbrainz")
+        monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: [])
+
+        parsed = self._ctx(artists_hint=("FakeBand",))
+        q = curator._build_informed_query(parsed)
+
+        assert q is not None
+        assert 'artist:"FakeBand"' in q
+
+    def test_build_informed_query_todos_invalidados_cai_no_top_taste(
+        self, mock_controller, taste, monkeypatch
+    ):
+        """MB rejeita todos os artists_hint → cai no fallback de top taste.
+
+        Top taste tem 'Heilung' → query deve usar Heilung via DSL.
+        """
+        mb_mock = MagicMock()
+        mb_mock.artist_exists.return_value = False  # rejeita tudo
+
+        curator = self._make_curator_with_mb(mock_controller, taste, mb_mock)
+        monkeypatch.setattr(curator.taste, "get_preferred_artists", lambda: ["Heilung"])
+
+        parsed = self._ctx(artists_hint=("FakeBand1", "FakeBand2"))
+        q = curator._build_informed_query(parsed)
+
+        assert q is not None
+        assert "Heilung" in q
+        assert "FakeBand" not in q
+
+    def test_validate_artists_mb_usa_cache_em_memoria(
+        self, mock_controller, taste, monkeypatch
+    ):
+        """Cache em memória: mesmo nome chamado 2x deve invocar MB apenas 1x."""
+        mb_mock = MagicMock()
+        mb_mock.artist_exists.return_value = True
+
+        curator = self._make_curator_with_mb(mock_controller, taste, mb_mock)
+
+        # Chama 2x com o mesmo nome
+        result1 = curator._validate_artists_mb(["The HU"])
+        result2 = curator._validate_artists_mb(["The HU"])
+
+        assert result1 == ["The HU"]
+        assert result2 == ["The HU"]
+        # MB deve ter sido consultado apenas 1x (cache evita segundo lookup)
+        assert mb_mock.artist_exists.call_count == 1
+
+    def test_validate_artists_mb_lista_vazia_retorna_vazia(
+        self, mock_controller, taste
+    ):
+        """Lista vazia de entrada → retorna lista vazia sem chamar MB."""
+        mb_mock = MagicMock()
+        curator = self._make_curator_with_mb(mock_controller, taste, mb_mock)
+
+        result = curator._validate_artists_mb([])
+
+        assert result == []
+        mb_mock.artist_exists.assert_not_called()
+
+
 class TestNormalizeContext:
     """Testes para _normalize_context — bug #20-2."""
 
