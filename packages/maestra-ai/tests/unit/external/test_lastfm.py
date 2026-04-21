@@ -74,6 +74,26 @@ def test_artist_tags_cached_across_calls(mock_network):
     assert mock_network.get_artist.call_count == 1
 
 
+def test_artist_tags_empty_result_not_cached(mock_network):
+    """v0.11.1: listas vazias não são cacheadas — permite retry."""
+    track = MagicMock()
+    track.get_playcount.return_value = 100
+    track.get_listener_count.return_value = 100
+    mock_network.get_track.return_value = track
+    artist = MagicMock()
+    # Primeira chamada falha (lista vazia); segunda retorna tags.
+    artist.get_top_tags.side_effect = [[], [MagicMock(item=MagicMock(get_name=lambda: "rock"))]]
+    mock_network.get_artist.return_value = artist
+
+    source = LastfmSource(api_key="key")
+    source._lookup({"uri": "u1", "name": "A", "artists": ["Same Artist"], "isrc": None})
+    result2 = source._lookup({"uri": "u2", "name": "B", "artists": ["Same Artist"], "isrc": None})
+
+    # Artist deve ter sido consultado 2x (primeira vazia não cacheou)
+    assert mock_network.get_artist.call_count == 2
+    assert result2["lastfm"]["top_tags"] == ["rock"]
+
+
 def test_get_similar_artists_returns_names(mock_network):
     artist = MagicMock()
     similar_entries = [

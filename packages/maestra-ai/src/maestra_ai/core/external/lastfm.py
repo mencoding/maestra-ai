@@ -88,6 +88,11 @@ class LastfmSource:
 
         Artistas repetem entre tracks da biblioteca; cachear aqui evita
         chamadas redundantes à API (rate limit 5 req/s aplicado mesmo assim).
+
+        v0.11.1: não cacheia listas vazias — permite retry em calls
+        futuras do mesmo artista se a primeira falhou (timeout, rate limit
+        transitório, etc). Antes, uma falha condenava todas as outras
+        tracks do mesmo artista a `top_tags: []` na sessão inteira.
         """
         if artist_name in self._artist_tags_cache:
             return self._artist_tags_cache[artist_name]
@@ -98,7 +103,9 @@ class LastfmSource:
         except Exception as exc:  # noqa: BLE001
             logger.debug("lastfm artist tags failed for %s: %s", artist_name, exc)
             tags = []
-        self._artist_tags_cache[artist_name] = tags
+        # Só cacheia se tem resultado — listas vazias permanecem re-tentáveis.
+        if tags:
+            self._artist_tags_cache[artist_name] = tags
         return tags
 
     def get_similar_artists(self, artist_name: str, *, limit: int = 10) -> list[str]:

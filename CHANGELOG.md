@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.1] — 2026-04-20
+
+### Corrigido
+- **`Enhancer.enhance_track` invalida cache por source ausente.** Cache
+  de v0.10.x (só MB+LF) era retornado intacto em v0.11.0, mesmo com
+  Reccobeats ativo e queryable — resultado: 0/100 matched com RB em
+  bibliotecas pré-existentes. `enhance_track` agora compara
+  `cached.sources` com `active_sources`; se há diferença (source
+  configurada mas ausente no cache), consulta **apenas** as faltantes e
+  faz merge. Preserva dados já cacheados. Dispara re-fetch incremental
+  sem limpeza manual.
+- **`LastfmSource._artist_top_tags` não cacheia listas vazias.** Antes,
+  uma falha transitória (rate limit, timeout) em `get_top_tags` cacheava
+  `[]` em memória — todas as tracks posteriores do mesmo artista viam
+  `top_tags: []` na sessão inteira. Explica os 99/101 com tags vazias
+  em relatórios reais. Agora só cacheia resultados não-vazios, permitindo
+  retry natural em chamadas subsequentes.
+
+### Adicionado
+- `test_enhance_track_fills_missing_source_in_cache` — valida cache
+  invalidation por source em `test_enhancer.py`.
+- `test_artist_tags_empty_result_not_cached` — valida retry em
+  `test_lastfm.py`.
+
 ## [0.11.0] — 2026-04-20
 
 ### Removido (BREAKING)

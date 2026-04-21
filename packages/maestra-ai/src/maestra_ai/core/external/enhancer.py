@@ -37,26 +37,42 @@ class Enhancer:
         return [s.name for s in self._sources if s.is_configured()]
 
     def enhance_track(self, track: TrackInfo) -> EnhancedTrack:
+        """Consulta sources ativas e merge no cache.
+
+        v0.11.1: cache invalidation por source. Se há entry cacheada mas
+        alguma source ATIVA não foi consultada anteriormente (ausente em
+        `cached.sources`), consulta só essa faltante e faz merge. Isso
+        permite que sources novas (como Reccobeats em v0.11) sejam
+        preenchidas em caches pré-existentes sem limpeza manual.
+        """
         uri = track["uri"]
         cached = cache_mod.get_track(uri)
-        if cached is not None:
+        active = [s for s in self._sources if s.is_configured()]
+        active_names = {s.name for s in active}
+        cached_names = set(cached.get("sources", []) or []) if cached else set()
+        missing_names = active_names - cached_names
+
+        if cached is not None and not missing_names:
             return cached
 
-        merged: dict = {
-            "uri": uri,
-            "isrc": track.get("isrc"),
-            "artist_mbid": None,
-            "musicbrainz": None,
-            "lastfm": None,
-            "reccobeats": None,
-            "sources": [],
-            "enhanced_at": _now_iso(),
-            "match_method": "isrc",
-        }
+        if cached is not None:
+            merged: dict = dict(cached)
+            sources_to_query = [s for s in active if s.name in missing_names]
+        else:
+            merged = {
+                "uri": uri,
+                "isrc": track.get("isrc"),
+                "artist_mbid": None,
+                "musicbrainz": None,
+                "lastfm": None,
+                "reccobeats": None,
+                "sources": [],
+                "enhanced_at": _now_iso(),
+                "match_method": "isrc",
+            }
+            sources_to_query = active
 
-        for source in self._sources:
-            if not source.is_configured():
-                continue
+        for source in sources_to_query:
             try:
                 result = source.enhance_track(track)
             except Exception as e:
@@ -68,6 +84,7 @@ class Enhancer:
                 continue
             _apply_source_result(merged, source.name, result)
 
+        merged["enhanced_at"] = _now_iso()
         enhanced = cast(EnhancedTrack, merged)
         cache_mod.put_track(enhanced)
         return enhanced
